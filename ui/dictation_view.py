@@ -154,11 +154,15 @@ class DictationView(ctk.CTkFrame):
         # Contenedor Desplazable de Tarjetas Clínicas con Scrollbar de Agencia Fina y Hover Reactivo
         self.cards_scroll = ctk.CTkScrollableFrame(
             col_right, fg_color="transparent",
-            scrollbar_size=4,
             scrollbar_fg_color="transparent",
             scrollbar_button_color=t.get("border", "#1E2A40"),
             scrollbar_button_hover_color=t.get("aqua", "#00F5D4")
         )
+        try:
+            if hasattr(self.cards_scroll, "_scrollbar"):
+                self.cards_scroll._scrollbar.configure(width=6)
+        except Exception:
+            pass
         self.cards_scroll.pack(fill="both", expand=True, padx=12, pady=(0, 64))
 
         # Caja de salida oculta de respaldo para compatibilidad interna

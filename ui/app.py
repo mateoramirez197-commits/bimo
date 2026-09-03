@@ -478,8 +478,8 @@ class BimoApp(ctk.CTk):
         self._dock_rely_colapsado = 0.988
         self._dock_expandido = True
 
-        self.dock_shadow.place(relx=0.5, rely=self._dock_rely_expandido + 0.003, anchor="s", relwidth=0.88, height=60)
-        self.dock_frame.place(relx=0.5, rely=self._dock_rely_expandido, anchor="s", relwidth=0.88, height=58)
+        self.dock_shadow.place(relx=0.5, rely=self._dock_rely_expandido + 0.003, anchor="s", relwidth=0.88)
+        self.dock_frame.place(relx=0.5, rely=self._dock_rely_expandido, anchor="s", relwidth=0.88)
         self.dock_frame.lift()
 
         dock_inner = ctk.CTkFrame(self.dock_frame, fg_color="transparent")
