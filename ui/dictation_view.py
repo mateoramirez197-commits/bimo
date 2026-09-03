@@ -151,9 +151,15 @@ class DictationView(ctk.CTkFrame):
         self.progress_bar = ctk.CTkProgressBar(self.progress_frame, mode="indeterminate", height=6, fg_color=t["bg_dark"], progress_color=t["aqua"])
         self.progress_bar.pack(fill="x", padx=10)
 
-        # Contenedor Desplazable de Tarjetas Clínicas Visuales (Cards)
-        self.cards_scroll = ctk.CTkScrollableFrame(col_right, fg_color="transparent")
-        self.cards_scroll.pack(fill="both", expand=True, padx=12, pady=(0, 14))
+        # Contenedor Desplazable de Tarjetas Clínicas con Scrollbar de Agencia Fina y Hover Reactivo
+        self.cards_scroll = ctk.CTkScrollableFrame(
+            col_right, fg_color="transparent",
+            scrollbar_size=4,
+            scrollbar_fg_color="transparent",
+            scrollbar_button_color=t.get("border", "#1E2A40"),
+            scrollbar_button_hover_color=t.get("aqua", "#00F5D4")
+        )
+        self.cards_scroll.pack(fill="both", expand=True, padx=12, pady=(0, 64))
 
         # Caja de salida oculta de respaldo para compatibilidad interna
         self.caja_salida = ctk.CTkTextbox(col_right, font=("Segoe UI", 11))

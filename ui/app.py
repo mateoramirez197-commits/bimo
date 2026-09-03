@@ -21,6 +21,38 @@ from config import (
 )
 from audio_feedback import sonar_confirmacion_exito
 
+def ease_out_cubic(t: float) -> float:
+    """Función de aceleración/desaceleración suave (Cubic Easing Out)."""
+    return 1.0 - pow(1.0 - t, 3)
+
+def animar_propiedad(widget, update_fn, start_val, end_val, duration_ms=220, on_complete=None):
+    """Ejecuta una animación fluida a ~60 FPS (16ms por tick) con Easing Out."""
+    total_ticks = max(1, int(duration_ms / 16))
+    tick_actual = 0
+
+    def _frame():
+        nonlocal tick_actual
+        tick_actual += 1
+        t_val = tick_actual / total_ticks
+        factor = ease_out_cubic(t_val)
+        valor_actual = start_val + (end_val - start_val) * factor
+        try:
+            update_fn(valor_actual)
+        except Exception:
+            return
+
+        if tick_actual < total_ticks:
+            widget.after(16, _frame)
+        else:
+            try:
+                update_fn(end_val)
+            except Exception:
+                pass
+            if on_complete:
+                on_complete()
+
+    _frame()
+
 class BimoApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -387,77 +419,22 @@ class BimoApp(ctk.CTk):
 
         self.container.configure(fg_color="transparent")
 
-        # Marco exterior del Sidebar Flotante Separado con borde redondeado estilo Encarta Soft 3D
-        sidebar_outer = ctk.CTkFrame(self.container, fg_color=t["sidebar"], width=265, corner_radius=26, border_width=1, border_color=t["border"])
-        sidebar_outer.pack(side="left", fill="y", padx=(14, 10), pady=12)
-        sidebar_outer.pack_propagate(False)
-
-        self.sidebar = ctk.CTkFrame(sidebar_outer, fg_color="transparent")
-        self.sidebar.pack(fill="both", expand=True, padx=8, pady=8)
-
-        # Logotipo Vanguardista Superior Izquierdo BIMO
-        logo_box = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        logo_box.pack(pady=(16, 2))
-        BimoLogo(logo_box, font_size=32).pack()
-
-        ctk.CTkLabel(self.sidebar, text="CLINICAL PLATFORM", font=("Segoe UI", 10, "bold"), text_color=t["text_muted"]).pack(pady=(0, 14))
-
-        # Tarjeta de Usuario Conectado con esquinas suaves
-        user_card = ctk.CTkFrame(self.sidebar, fg_color=t["card_dark"], corner_radius=18, border_width=1, border_color=t["border"])
-        user_card.pack(fill="x", padx=4, pady=(0, 16))
-        
-        nombre_u = self.usuario_actual.get("nombre", "Usuario")
-        rol_u = self.usuario_actual.get("rol", "medico").upper()
-        rol_color = t["aqua"] if rol_u == "MEDICO" else t["azul_acero"]
-
-        ctk.CTkLabel(user_card, text=nombre_u, font=("Segoe UI", 12, "bold"), text_color=t["text_primary"]).pack(anchor="w", padx=14, pady=(10, 2))
-        ctk.CTkLabel(user_card, text=f"● Rol: {rol_u}", font=("Segoe UI", 10, "bold"), text_color=rol_color).pack(anchor="w", padx=14, pady=(0, 10))
-
-        # Botones de Navegación del Sidebar tipo PÍLDORA (pill-shaped) con hover neón vibrante
-        self.nav_buttons = {}
-        items_menu = [
-            ("dictation", "🎙️   Dictado Clínico"),
-            ("patients", "👥   Pacientes & Archivo"),
-            ("agenda", "📅   Agenda de Citas"),
-            ("mobile", "📱   App Smartphone"),
-            ("settings", "⚙️   Configuración"),
-        ]
-
-        for key, text in items_menu:
-            btn = ctk.CTkButton(
-                self.sidebar, text=text, height=46, font=("Segoe UI", 12, "bold"),
-                anchor="w", fg_color="transparent", text_color=t["text_muted"],
-                hover_color=t.get("card_hover", "#1A253C"), corner_radius=23,
-                border_width=0,
-                command=lambda k=key: self._cambiar_vista(k)
-            )
-            btn.pack(fill="x", padx=4, pady=3)
-            self.nav_buttons[key] = btn
-
-        # Botón para activar/abrir el Widget Flotante en el Escritorio
-        btn_floating = ctk.CTkButton(
-            self.sidebar, text="📌   Widget en Escritorio", height=42, font=("Segoe UI", 11, "bold"),
-            anchor="w", fg_color=t["card_dark"], text_color=t["aqua"], hover_color=t.get("card_hover", "#1A253C"),
-            corner_radius=21, border_width=1, border_color=t["border"],
-            command=self._toggle_floating_widget
+        # ---------------------------------------------------------------------
+        # PILAR 3: TARJETAS NEUMÓRFICAS SIMULADAS (SOFT 3D)
+        # Capa 1: Sombra Profunda Simulada (Offset de 2px X, 3px Y, corner_radius=25)
+        # ---------------------------------------------------------------------
+        self.canvas_shadow = ctk.CTkFrame(
+            self.container, fg_color="#030509", corner_radius=25, border_width=0
         )
-        btn_floating.pack(fill="x", padx=4, pady=(14, 3))
+        self.canvas_shadow.place(relx=0.016, rely=0.018, relwidth=0.968, relheight=0.964)
 
-        # Botón Cerrar Sesión
-        btn_logout = ctk.CTkButton(
-            self.sidebar, text="🚪   Cerrar Sesión", height=42, font=("Segoe UI", 11, "bold"),
-            anchor="w", fg_color="transparent", text_color=t["fucsia"],
-            hover_color="#fee2e2" if t["mode"] == "light" else "#331018",
-            corner_radius=21,
-            command=self._logout
+        # Capa 2: Superficie Frontal Principal (corner_radius=25 uniforme)
+        self.main_content = ctk.CTkFrame(
+            self.container, fg_color=t["card_dark"], corner_radius=25, border_width=1, border_color=t["border"]
         )
-        btn_logout.pack(side="bottom", fill="x", padx=4, pady=16)
+        self.main_content.place(relx=0.014, rely=0.015, relwidth=0.968, relheight=0.964)
 
-        # Área de Contenido Central: CTkFrame MASIVO con corner_radius=30 ("Aplicación dentro de la aplicación")
-        self.main_content = ctk.CTkFrame(self.container, fg_color=t["card_dark"], corner_radius=30, border_width=1, border_color=t["border"])
-        self.main_content.pack(side="right", fill="both", expand=True, padx=(0, 14), pady=12)
-
-        # Instanciar vistas
+        # Instanciar vistas clínicas dentro del lienzo principal
         self.views = {
             "dictation": DictationView(self.main_content),
             "patients": PatientsView(self.main_content),
@@ -466,7 +443,12 @@ class BimoApp(ctk.CTk):
             "settings": SettingsView(self.main_content),
         }
 
-        # Watermark sutil casi invisible en la esquina inferior derecha: "Software by Masword"
+        # ---------------------------------------------------------------------
+        # PILAR 1: MENÚ INTERACTIVO DINÁMICO (DOCK FLOTANTE SUPERPUESTO CON .place())
+        # ---------------------------------------------------------------------
+        self._crear_dock_flotante(t)
+
+        # Watermark sutil de autoría
         color_wm = "#cbd5e1" if t["mode"] == "light" else "#151d2f"
         self.lbl_watermark = ctk.CTkLabel(
             self.container, text="Software by Masword",
@@ -477,13 +459,130 @@ class BimoApp(ctk.CTk):
         # Conectar servidor móvil en segundo plano al callback de DictationView
         iniciar_servidor_movil(callback_audio=self.views["dictation"].procesar_audio_externo)
 
-        # Iniciar en vista previa o dictado
+        # Iniciar en vista de dictado
         self._cambiar_vista(getattr(self, "vista_actual", "dictation"))
 
+    def _crear_dock_flotante(self, t):
+        """Crea el Dock Flotante Neumórfico interactivo posicionado dinámicamente con .place()."""
+        # Sombra proyectada del Dock (Offset 2px)
+        self.dock_shadow = ctk.CTkFrame(
+            self.container, fg_color="#020306", corner_radius=26, border_width=0, height=62
+        )
+        # Marco Principal del Dock Flotante
+        self.dock_frame = ctk.CTkFrame(
+            self.container, fg_color=t["sidebar"], corner_radius=25,
+            border_width=1, border_color=t.get("aqua", "#00F5D4"), height=58
+        )
+
+        self._dock_rely_expandido = 0.94
+        self._dock_rely_colapsado = 0.988
+        self._dock_expandido = True
+
+        self.dock_shadow.place(relx=0.5, rely=self._dock_rely_expandido + 0.003, anchor="s", relwidth=0.88, height=60)
+        self.dock_frame.place(relx=0.5, rely=self._dock_rely_expandido, anchor="s", relwidth=0.88, height=58)
+        self.dock_frame.lift()
+
+        dock_inner = ctk.CTkFrame(self.dock_frame, fg_color="transparent")
+        dock_inner.pack(fill="both", expand=True, padx=12, pady=5)
+
+        # Badge Doctor / Branding BIMO Pro (Izquierda)
+        badge_doc = ctk.CTkFrame(dock_inner, fg_color=t["card_dark"], corner_radius=16, border_width=1, border_color=t["border"])
+        badge_doc.pack(side="left", padx=(0, 8))
+
+        nombre_u = self.usuario_actual.get("nombre", "Dr. Titular")
+        ctk.CTkLabel(
+            badge_doc, text=f"⚡ BIMO PRO  |  👨‍⚕️ {nombre_u}",
+            font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]
+        ).pack(side="left", padx=12, pady=5)
+
+        # Botones Píldora de Navegación del Dock
+        self.nav_buttons = {}
+        items_menu = [
+            ("dictation", "🎙️ Dictado"),
+            ("patients", "👥 Pacientes"),
+            ("agenda", "📅 Agenda"),
+            ("mobile", "📱 Smartphone"),
+            ("settings", "⚙️ Ajustes"),
+        ]
+
+        nav_container = ctk.CTkFrame(dock_inner, fg_color="transparent")
+        nav_container.pack(side="left", fill="x", expand=True, padx=4)
+
+        for key, text in items_menu:
+            btn = ctk.CTkButton(
+                nav_container, text=text, height=40, font=("Segoe UI", 11, "bold"),
+                anchor="center", fg_color="transparent", text_color=t["text_muted"],
+                hover_color=t.get("card_hover", "#1A253C"), corner_radius=20,
+                border_width=0, command=lambda k=key: self._cambiar_vista(k)
+            )
+            btn.pack(side="left", padx=3, expand=True)
+            self.nav_buttons[key] = btn
+
+        # Separador vertical fino
+        sep = ctk.CTkFrame(dock_inner, width=1, height=26, fg_color=t.get("border", "#1E2A40"))
+        sep.pack(side="left", padx=6)
+
+        # Botón Acceso Rápido Widget Flotante de Escritorio
+        btn_floating = ctk.CTkButton(
+            dock_inner, text="📌 Widget", width=84, height=38, font=("Segoe UI", 10, "bold"),
+            fg_color=t["card_dark"], text_color=t["aqua"], hover_color=t.get("card_hover", "#1A253C"),
+            corner_radius=19, border_width=1, border_color=t["border"], command=self._toggle_floating_widget
+        )
+        btn_floating.pack(side="left", padx=(0, 4))
+
+        # Botón Cerrar Sesión
+        btn_logout = ctk.CTkButton(
+            dock_inner, text="🚪", width=40, height=38, font=("Segoe UI", 12, "bold"),
+            fg_color="transparent", text_color=t["fucsia"],
+            hover_color="#fee2e2" if t["mode"] == "light" else "#331018",
+            corner_radius=19, command=self._logout
+        )
+        btn_logout.pack(side="left", padx=(0, 4))
+
+        # Botón Minimizar / Expandir Dock con Easing
+        self.btn_toggle_dock = ctk.CTkButton(
+            dock_inner, text="⌄", width=34, height=38, font=("Segoe UI", 13, "bold"),
+            fg_color=t["card_dark"], text_color=t["text_muted"], hover_color=t.get("card_hover", "#1A253C"),
+            corner_radius=17, border_width=1, border_color=t["border"], command=self._toggle_minimizar_dock
+        )
+        self.btn_toggle_dock.pack(side="right")
+
+    def _toggle_minimizar_dock(self):
+        """Minimiza o expande el Dock Flotante aplicando interpolación Easing Out a 60 FPS."""
+        if self._dock_expandido:
+            self._dock_expandido = False
+            self.btn_toggle_dock.configure(text="⌃")
+            animar_propiedad(
+                self.dock_frame,
+                update_fn=lambda val: (
+                    self.dock_frame.place_configure(rely=val),
+                    self.dock_shadow.place_configure(rely=val + 0.003)
+                ),
+                start_val=self._dock_rely_expandido,
+                end_val=self._dock_rely_colapsado,
+                duration_ms=220
+            )
+        else:
+            self._dock_expandido = True
+            self.btn_toggle_dock.configure(text="⌄")
+            animar_propiedad(
+                self.dock_frame,
+                update_fn=lambda val: (
+                    self.dock_frame.place_configure(rely=val),
+                    self.dock_shadow.place_configure(rely=val + 0.003)
+                ),
+                start_val=self._dock_rely_colapsado,
+                end_val=self._dock_rely_expandido,
+                duration_ms=220
+            )
+
+    # -------------------------------------------------------------------------
+    # PILAR 2: ANIMACIONES CON FUNCIONES DE EASING OUT A 60 FPS
+    # -------------------------------------------------------------------------
     def _cambiar_vista(self, key_vista):
         self.vista_actual = key_vista
         for v in self.views.values():
-            v.pack_forget()
+            v.place_forget()
 
         from config import obtener_tema_activo_dict
         t = obtener_tema_activo_dict()
@@ -496,27 +595,26 @@ class BimoApp(ctk.CTk):
             else:
                 btn.configure(fg_color="transparent", text_color=t["text_muted"], border_width=0)
 
-        # Transición suave estilo Encarta: Micro-animación fluida multifotograma con .after()
         target_view = self.views[key_vista]
-        target_view.pack(fill="both", expand=True, pady=(20, 0))
+        # Colocar la vista ocupando todo el lienzo central
+        target_view.place(relx=0.0, rely=0.03, relwidth=1.0, relheight=1.0)
 
-        def _anim_step2():
-            if getattr(self, "vista_actual", None) == key_vista:
-                target_view.pack_configure(pady=(10, 0))
-                self.after(14, _anim_step3)
+        # Animación con Easing Out a 60 FPS (~16ms por tick): se desliza suavemente hacia la posición final
+        animar_propiedad(
+            target_view,
+            update_fn=lambda val: target_view.place_configure(rely=val),
+            start_val=0.03,
+            end_val=0.0,
+            duration_ms=200
+        )
 
-        def _anim_step3():
-            if getattr(self, "vista_actual", None) == key_vista:
-                target_view.pack_configure(pady=(3, 0))
-                self.after(14, _anim_step_final)
+        # Asegurar elevación z-index del Dock Flotante sobre la vista entrante
+        if hasattr(self, "dock_shadow") and self.dock_shadow.winfo_exists():
+            self.dock_shadow.lift()
+        if hasattr(self, "dock_frame") and self.dock_frame.winfo_exists():
+            self.dock_frame.lift()
 
-        def _anim_step_final():
-            if getattr(self, "vista_actual", None) == key_vista:
-                target_view.pack_configure(pady=0)
-
-        self.after(14, _anim_step2)
-
-        # Sincronización en caliente: Refrescar automáticamente la base de datos al cambiar de pestaña
+        # Sincronización en caliente
         if key_vista == "patients" and hasattr(self.views["patients"], "_cargar_pacientes"):
             try:
                 self.views["patients"]._cargar_pacientes()
@@ -548,7 +646,7 @@ class BimoApp(ctk.CTk):
         aplicar_tema_config(nuevo_tema)
         t = obtener_tema_activo_dict()
         self.configure(fg_color=t["bg_dark"])
-        self.container.configure(fg_color=t["bg_dark"], border_color=t["border"], corner_radius=t["corner_radius"])
+        self.container.configure(fg_color="transparent")
         
         vista_previa = getattr(self, "vista_actual", "dictation")
         self._construir_dashboard()
