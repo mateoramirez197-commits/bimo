@@ -420,7 +420,16 @@ class BimoApp(ctk.CTk):
         guardar_ultimo_usuario_recordado(usuario)
         self._construir_dashboard()
         # Generar automáticamente el widget en el escritorio al iniciar
+        
         self.after(500, self._toggle_floating_widget)
+        
+        def force_zoomed():
+            try:
+                self.state("zoomed")
+            except:
+                pass
+        self.after(600, force_zoomed)
+
 
     def _construir_dashboard(self):
         # Detener listeners previos si existen antes de reconstruir
@@ -450,7 +459,7 @@ class BimoApp(ctk.CTk):
         self.main_app_card.place(relx=0.01, rely=0.01, relwidth=0.98, relheight=0.98)
 
         self.main_content = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("card_inner", "#F8FAFC"), corner_radius=t.get("corner_radius", 16), border_width=0
+            self.main_app_card, fg_color=t.get("card_inner", "transparent"), corner_radius=t.get("corner_radius", 16), border_width=0
         )
         self.main_content.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
 
@@ -458,7 +467,7 @@ class BimoApp(ctk.CTk):
                                 # REGLA 2: MAC DOCK INFERIOR (Floating Navigation)
         # ---------------------------------------------------------------------
         self.mac_dock = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("card_dark", "#FFFFFF"), width=440, height=60, corner_radius=t.get("corner_radius", 16), border_width=1, border_color=t["border"]
+            self.main_app_card, fg_color=t["sidebar"], width=440, height=60, corner_radius=t.get("corner_radius", 16), border_width=1, border_color=t["border"]
         )
         self.mac_dock.place(relx=0.5, rely=0.97, anchor="s")
         self.mac_dock.pack_propagate(False)
@@ -550,7 +559,7 @@ class BimoApp(ctk.CTk):
         loader_frame = ctk.CTkFrame(self.main_content, fg_color="transparent")
         loader_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        shimmer_color = t.get("border", "#E2E8F0")
+        shimmer_color = t.get("card_hover", t.get("border", "#E2E8F0"))
         shimmer = ctk.CTkFrame(loader_frame, fg_color=shimmer_color, corner_radius=20, height=120)
         shimmer.pack(fill="x", pady=(0, 20))
         shimmer2 = ctk.CTkFrame(loader_frame, fg_color=shimmer_color, corner_radius=20)

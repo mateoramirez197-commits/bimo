@@ -58,7 +58,7 @@ class DictationView(ctk.CTkFrame):
         t = self.theme
 
         # Header Superior Pulido con Esquinas Redondeadas Soft 3D
-        top_bar = ctk.CTkFrame(self, fg_color=t.get("card_inner", "#1C2942"), height=74, corner_radius=22, border_width=1, border_color=t["border"])
+        top_bar = ctk.CTkFrame(self, fg_color=t.get("card_inner", "transparent"), height=74, corner_radius=22, border_width=1, border_color=t["border"])
         top_bar.pack(fill="x", padx=20, pady=(16, 16))
         top_bar.pack_propagate(False)
 
@@ -92,7 +92,7 @@ class DictationView(ctk.CTkFrame):
         # ----------------------------------------------------
         # Panel Izquierdo: Controles, Botón y Widget de Agenda
         # ----------------------------------------------------
-        col_left = ctk.CTkFrame(main_grid, fg_color=t.get("card_inner", "#1C2942"), corner_radius=24, width=400, border_width=1, border_color=t["border"])
+        col_left = ctk.CTkFrame(main_grid, fg_color=t.get("card_inner", "transparent"), corner_radius=24, width=400, border_width=1, border_color=t["border"])
         col_left.pack(side="left", fill="y", padx=(0, 14))
         col_left.pack_propagate(False)
 
@@ -141,7 +141,7 @@ class DictationView(ctk.CTkFrame):
         # ----------------------------------------------------
         # Panel Derecho: Salida Médica Elegante en Tarjetas Visuales (Cards)
         # ----------------------------------------------------
-        col_right = ctk.CTkFrame(main_grid, fg_color=t.get("card_inner", "#1C2942"), corner_radius=24, border_width=1, border_color=t["border"])
+        col_right = ctk.CTkFrame(main_grid, fg_color=t.get("card_inner", "transparent"), corner_radius=24, border_width=1, border_color=t["border"])
         col_right.pack(side="right", fill="both", expand=True)
 
         header_r = ctk.CTkFrame(col_right, fg_color="transparent")
