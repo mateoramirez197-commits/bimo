@@ -35,7 +35,7 @@ class VentanaCorreccionExpediente(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             top, text="✏️ CORRECCIÓN RÁPIDA DE EXPEDIENTE",
-            font=("Segoe UI", 14, "bold"), text_color=t["aqua"]
+            font=("Segoe UI", 11, "bold"), text_color=t["aqua"]
         ).pack(side="left", padx=16)
 
         scroll = ctk.CTkScrollableFrame(self, fg_color=t["card_dark"], corner_radius=12, border_width=1, border_color=t["border"])
@@ -104,7 +104,7 @@ class VentanaCorreccionExpediente(ctk.CTkToplevel):
 
         btn_guardar = ctk.CTkButton(
             bot, text="💾 Guardar y Regenerar PDF Definitivo", height=38,
-            font=("Segoe UI", 12, "bold"), fg_color=t["aqua"], hover_color=t["azul_acero"],
+            font=("Segoe UI", 11, "bold"), fg_color=t["aqua"], hover_color=t["azul_acero"],
             text_color="#ffffff", corner_radius=8, command=self._ejecutar_guardado
         )
         btn_guardar.pack(side="right", padx=16)

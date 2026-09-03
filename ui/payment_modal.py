@@ -56,7 +56,7 @@ class VentanaPagosModal(ctk.CTkToplevel):
 
         top_r = ctk.CTkFrame(head_frame, fg_color="transparent")
         top_r.pack(fill="x", padx=14, pady=(10, 2))
-        ctk.CTkLabel(top_r, text="💳 CONTROL DE PAGOS Y HONORARIOS", font=("Segoe UI", 13, "bold"), text_color=t.get("aqua", "#06b6d4")).pack(side="left")
+        ctk.CTkLabel(top_r, text="💳 CONTROL DE PAGOS Y HONORARIOS", font=("Segoe UI", 11, "bold"), text_color=t.get("aqua", "#06b6d4")).pack(side="left")
 
         sub_txt = f"Paciente: {self.nom_paciente}   |   C.I.: {self.doc_paciente}"
         ctk.CTkLabel(head_frame, text=sub_txt, font=("Segoe UI", 10), text_color=t.get("text_muted", "#94a3b8")).pack(anchor="w", padx=14, pady=(0, 8))
@@ -130,7 +130,7 @@ class VentanaPagosModal(ctk.CTkToplevel):
             btn_bar,
             text="💾 Guardar y Actualizar PDF",
             height=40,
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 11, "bold"),
             fg_color=t.get("aqua", "#06b6d4"),
             hover_color=t.get("azul_acero", "#1e3a8a"),
             text_color="#ffffff",

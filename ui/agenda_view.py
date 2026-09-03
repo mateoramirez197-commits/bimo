@@ -26,14 +26,14 @@ class AgendaView(ctk.CTkFrame):
         top_bar.pack(fill="x", padx=16, pady=(12, 10))
         top_bar.pack_propagate(False)
 
-        ctk.CTkLabel(top_bar, text="📅 Agenda Médica & Google Calendar", font=("Segoe UI", 16, "bold"), text_color=t["text_primary"]).pack(side="left", padx=16)
+        ctk.CTkLabel(top_bar, text="📅 Agenda Médica & Google Calendar", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]).pack(side="left", padx=16)
 
         btn_refresh = ctk.CTkButton(
             top_bar, text="🔄 Actualizar", width=110, height=36, font=("Segoe UI", 11, "bold"),
             fg_color="#334155", hover_color="#475569", corner_radius=t["corner_btn"], command=self._cargar_citas
         )
         btn_refresh.pack(side="right", padx=(6, 16))
-        bind_hover_microscale(btn_refresh, normal_h=36, hover_h=42)
+        bind_hover_microscale(btn_refresh)
 
         # Contenedor dividido en lista y formulario
         content = ctk.CTkFrame(self, fg_color="transparent")
@@ -48,7 +48,7 @@ class AgendaView(ctk.CTkFrame):
         form_panel.pack(side="right", fill="both")
         form_panel.pack_propagate(False)
 
-        ctk.CTkLabel(form_panel, text="PROGRAMAR NUEVA CITA", font=("Segoe UI", 13, "bold"), text_color=t["text_primary"]).pack(pady=(16, 10), padx=20, anchor="w")
+        ctk.CTkLabel(form_panel, text="PROGRAMAR NUEVA CITA", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]).pack(pady=(16, 10), padx=20, anchor="w")
 
         # Cédula Prioritaria
         ctk.CTkLabel(form_panel, text="🆔 Cédula de Identidad (Prioritaria)", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=20, pady=(2, 2))
@@ -84,12 +84,12 @@ class AgendaView(ctk.CTkFrame):
         self.lbl_mensaje.pack(pady=(0, 6))
 
         btn_agendar = ctk.CTkButton(
-            form_panel, text="🗓️ Agendar y Sincronizar", height=42, font=("Segoe UI", 13, "bold"),
+            form_panel, text="🗓️ Agendar y Sincronizar", height=42, font=("Segoe UI", 11, "bold"),
             fg_color=t["azul_acero"], hover_color=t["azul_pastel"], corner_radius=t["corner_btn"],
             command=self._guardar_cita
         )
         btn_agendar.pack(fill="x", padx=20, pady=(0, 14))
-        bind_hover_microscale(btn_agendar, normal_h=42, hover_h=48)
+        bind_hover_microscale(btn_agendar)
 
     def _on_cedula_change(self, event=None):
         ced = self.entry_cedula.get().strip().replace(" ", "")
@@ -153,7 +153,7 @@ class AgendaView(ctk.CTkFrame):
             left_box = ctk.CTkFrame(card, fg_color="transparent")
             left_box.pack(side="left", fill="both", expand=True, padx=14, pady=8)
 
-            ctk.CTkLabel(left_box, text=f"{paciente}  [{estado_badge}]", font=("Segoe UI", 12, "bold"), text_color=badge_col, anchor="w").pack(fill="x")
+            ctk.CTkLabel(left_box, text=f"{paciente}  [{estado_badge}]", font=("Segoe UI", 11, "bold"), text_color=badge_col, anchor="w").pack(fill="x")
             txt_detalles = f"🗓️ {f_str}  |  📞 {tel or 'Sin teléfono'}\n• Tratamiento: {desc}"
             ctk.CTkLabel(left_box, text=txt_detalles, font=("Segoe UI", 10), text_color=text_col, justify="left", anchor="w").pack(fill="x", pady=(2, 0))
 

@@ -31,19 +31,19 @@ class LoginView(ctk.CTkFrame):
         logo_box.pack(pady=(35, 4))
         BimoLogo(logo_box, font_size=38).pack()
 
-        ctk.CTkLabel(card, text="ACTIVACIÓN INICIAL POR HARDWARE", font=("Segoe UI", 12, "bold"), text_color=t["aqua"]).pack(pady=(0, 16))
+        ctk.CTkLabel(card, text="ACTIVACIÓN INICIAL POR HARDWARE", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=(0, 16))
         
         info_txt = "Bienvenido a BIMO. Para habilitar tu licencia permanente y vincular tu agenda, por favor ingresa tu correo profesional. Esta instalación quedará firmada criptográficamente para esta PC."
         ctk.CTkLabel(card, text=info_txt, font=("Segoe UI", 11), text_color=t["text_muted"], wraplength=380, justify="center").pack(pady=(0, 24))
 
         # Campo para que el usuario coloque su correo real
         ctk.CTkLabel(card, text="Correo Electrónico del Doctor", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"], anchor="w").pack(fill="x", padx=40, pady=(0, 4))
-        self.entry_activacion_email = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="ejemplo@doctor.com", font=("Segoe UI", 13), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
+        self.entry_activacion_email = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="ejemplo@doctor.com", font=("Segoe UI", 12), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
         self.entry_activacion_email.pack(fill="x", padx=40, pady=(0, 10))
 
         # Contraseña maestra inicial
         ctk.CTkLabel(card, text="Crear Contraseña de Acceso", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"], anchor="w").pack(fill="x", padx=40, pady=(0, 4))
-        self.entry_activacion_pwd = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="••••••••", show="•", font=("Segoe UI", 13), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
+        self.entry_activacion_pwd = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="••••••••", show="•", font=("Segoe UI", 12), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
         self.entry_activacion_pwd.pack(fill="x", padx=40, pady=(0, 16))
 
         self.lbl_act_msg = ctk.CTkLabel(card, text="", font=("Segoe UI", 11), text_color=t["fucsia"])
@@ -51,7 +51,7 @@ class LoginView(ctk.CTkFrame):
 
         btn_activar = ctk.CTkButton(
             card, text="🔐 Activar Licencia y Vincular Equipo", height=46,
-            font=("Segoe UI", 13, "bold"), fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
+            font=("Segoe UI", 11, "bold"), fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
             corner_radius=t["corner_btn"], command=self._ejecutar_activacion
         )
         btn_activar.pack(fill="x", padx=40, pady=(0, 20))
@@ -103,14 +103,14 @@ class LoginView(ctk.CTkFrame):
 
         # Email
         ctk.CTkLabel(card, text="Correo Electrónico", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"], anchor="w").pack(fill="x", padx=40, pady=(0, 4))
-        self.entry_email = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="correo@doctor.com", font=("Segoe UI", 13), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
+        self.entry_email = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="correo@doctor.com", font=("Segoe UI", 12), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
         self.entry_email.pack(fill="x", padx=40, pady=(0, 14))
         if email_sugerido:
             self.entry_email.insert(0, email_sugerido)
 
         # Password
         ctk.CTkLabel(card, text="Contraseña", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"], anchor="w").pack(fill="x", padx=40, pady=(0, 4))
-        self.entry_pwd = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="••••••••", show="•", font=("Segoe UI", 13), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
+        self.entry_pwd = ctk.CTkEntry(card, height=44, corner_radius=12, placeholder_text="••••••••", show="•", font=("Segoe UI", 12), fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
         self.entry_pwd.pack(fill="x", padx=40, pady=(0, 12))
 
         # Mensaje de error
@@ -120,7 +120,7 @@ class LoginView(ctk.CTkFrame):
         # Botón Iniciar Sesión
         btn_login = ctk.CTkButton(
             card, text="Iniciar Sesión", height=46, corner_radius=t["corner_btn"],
-            font=("Segoe UI", 13, "bold"), fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
+            font=("Segoe UI", 11, "bold"), fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
             command=self._intentar_login
         )
         btn_login.pack(fill="x", padx=40, pady=(0, 20))

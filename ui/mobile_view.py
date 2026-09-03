@@ -18,7 +18,7 @@ class MobileView(ctk.CTkFrame):
         top_bar.pack(fill="x", padx=16, pady=(12, 10))
         top_bar.pack_propagate(False)
 
-        ctk.CTkLabel(top_bar, text="📱 Software en tu Smartphone", font=("Segoe UI", 16, "bold"), text_color=t["text_primary"]).pack(side="left", padx=16)
+        ctk.CTkLabel(top_bar, text="📱 Software en tu Smartphone", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]).pack(side="left", padx=16)
         
         badge = ctk.CTkLabel(
             top_bar, text="🔒 Enlace Clínico Encriptado SSL / TLS", font=("Segoe UI", 11, "bold"),
@@ -34,7 +34,7 @@ class MobileView(ctk.CTkFrame):
         ip = obtener_ip_local()
         url_movil = f"https://{ip}:{MOBILE_SERVER_PORT}"
 
-        ctk.CTkLabel(card, text="CONEXIÓN SEGURA CON TU SMARTPHONE", font=("Segoe UI", 14, "bold"), text_color=t["aqua"]).pack(pady=(18, 8))
+        ctk.CTkLabel(card, text="CONEXIÓN SEGURA CON TU SMARTPHONE", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=(18, 8))
 
         pil_qr = generar_codigo_qr_url(url_movil)
         ctk_qr = ctk.CTkImage(light_image=pil_qr, dark_image=pil_qr, size=(200, 200))

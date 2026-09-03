@@ -65,7 +65,7 @@ class VentanaCalendarioSemanalGrande(ctk.CTkToplevel):
         btn_next.pack(side="left", padx=8, pady=12)
 
         self.lbl_rango_semana = ctk.CTkLabel(
-            top_bar, text="Cargando...", font=("Segoe UI", 13, "bold"), text_color=t["aqua"]
+            top_bar, text="Cargando...", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]
         )
         self.lbl_rango_semana.pack(side="left", padx=20, expand=True)
 

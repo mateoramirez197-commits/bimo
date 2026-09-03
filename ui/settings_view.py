@@ -31,7 +31,7 @@ class SettingsView(ctk.CTkFrame):
         # ----------------------------------------------------
         # 0. PERSONALIZACIÓN Y MOTOR DE TEMAS
         # ----------------------------------------------------
-        ctk.CTkLabel(form, text="ESTÉTICA Y MOTOR DE TEMAS", font=("Segoe UI", 13, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=24, pady=(16, 4))
+        ctk.CTkLabel(form, text="ESTÉTICA Y MOTOR DE TEMAS", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=24, pady=(16, 4))
         ctk.CTkLabel(form, text="Selecciona el tema visual de la interfaz médica:", font=("Segoe UI", 11), text_color=t["text_muted"]).pack(anchor="w", padx=24, pady=(0, 6))
 
         self.tema_actual = obtener_tema_guardado()
@@ -67,7 +67,7 @@ class SettingsView(ctk.CTkFrame):
         # ----------------------------------------------------
         # 1. INFORMACIÓN DEL CONSULTORIO, PIN Y DOCTOR TITULAR
         # ----------------------------------------------------
-        ctk.CTkLabel(form, text="DATOS INSTITUCIONALES & ACCESO RÁPIDO", font=("Segoe UI", 13, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=24, pady=(10, 8))
+        ctk.CTkLabel(form, text="DATOS INSTITUCIONALES & ACCESO RÁPIDO", font=("Segoe UI", 11, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=24, pady=(10, 8))
 
         ctk.CTkLabel(form, text="Nombre del Consultorio o Clínica", font=("Segoe UI", 11), text_color=t["text_muted"]).pack(anchor="w", padx=24, pady=(2, 2))
         self.entry_clinica = ctk.CTkEntry(form, height=38, corner_radius=10, fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
@@ -102,17 +102,17 @@ class SettingsView(ctk.CTkFrame):
         self.entry_telefono.insert(0, self.datos_clinica.get("telefono_contacto", ""))
 
         btn_guardar_clinica = ctk.CTkButton(
-            form, text="💾 Guardar Información del Consultorio y PIN", height=42, font=("Segoe UI", 12, "bold"),
+            form, text="💾 Guardar Información del Consultorio y PIN", height=42, font=("Segoe UI", 11, "bold"),
             fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
             corner_radius=t["corner_btn"], command=self._guardar_clinica
         )
         btn_guardar_clinica.pack(fill="x", padx=24, pady=(0, 24))
-        bind_hover_microscale(btn_guardar_clinica, normal_h=42, hover_h=48)
+        bind_hover_microscale(btn_guardar_clinica)
 
         # ----------------------------------------------------
         # 2. CUENTA Y SINCRONIZACIÓN DE GOOGLE CALENDAR
         # ----------------------------------------------------
-        ctk.CTkLabel(form, text="SINCRONIZACIÓN CON GOOGLE CALENDAR", font=("Segoe UI", 13, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=24, pady=(10, 6))
+        ctk.CTkLabel(form, text="SINCRONIZACIÓN CON GOOGLE CALENDAR", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=24, pady=(10, 6))
         ctk.CTkLabel(
             form,
             text="Las citas se sincronizan automáticamente con tu agenda clínica local y Google Calendar.\n"
@@ -121,12 +121,12 @@ class SettingsView(ctk.CTkFrame):
         ).pack(anchor="w", padx=24, pady=(0, 10))
 
         btn_nueva_cuenta = ctk.CTkButton(
-            form, text="🔗 Vincular Nueva Cuenta a Google Calendar", height=40, font=("Segoe UI", 12, "bold"),
+            form, text="🔗 Vincular Nueva Cuenta a Google Calendar", height=40, font=("Segoe UI", 11, "bold"),
             fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff", corner_radius=t["corner_btn"],
             command=self._vincular_nueva_cuenta_calendar
         )
         btn_nueva_cuenta.pack(fill="x", padx=24, pady=(0, 8))
-        bind_hover_microscale(btn_nueva_cuenta, normal_h=40, hover_h=46)
+        bind_hover_microscale(btn_nueva_cuenta)
 
         self.lbl_cal_msg = ctk.CTkLabel(form, text="", font=("Segoe UI", 11, "bold"))
         self.lbl_cal_msg.pack(padx=24, pady=(0, 18), anchor="w")
@@ -134,7 +134,7 @@ class SettingsView(ctk.CTkFrame):
         # ----------------------------------------------------
         # 3. GESTIÓN DE CREDENCIALES DEL PERSONAL
         # ----------------------------------------------------
-        ctk.CTkLabel(form, text="GESTIÓN DE ACCESOS Y PERSONAL", font=("Segoe UI", 13, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=24, pady=(10, 8))
+        ctk.CTkLabel(form, text="GESTIÓN DE ACCESOS Y PERSONAL", font=("Segoe UI", 11, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=24, pady=(10, 8))
 
         ctk.CTkLabel(form, text="Registrar o Actualizar Asistente / Personal Auxiliar", font=("Segoe UI", 11), text_color=t["text_muted"]).pack(anchor="w", padx=24, pady=(2, 2))
         
@@ -156,7 +156,7 @@ class SettingsView(ctk.CTkFrame):
             corner_radius=t["corner_btn"], command=self._crear_asistente
         )
         btn_add_staff.pack(side="right")
-        bind_hover_microscale(btn_add_staff, normal_h=38, hover_h=44)
+        bind_hover_microscale(btn_add_staff)
 
         self.lbl_staff_msg = ctk.CTkLabel(form, text="", font=("Segoe UI", 11))
         self.lbl_staff_msg.pack(pady=(0, 16))
@@ -164,7 +164,7 @@ class SettingsView(ctk.CTkFrame):
         # ----------------------------------------------------
         # 4. ESTADO DE LA LICENCIA Y SEGURIDAD DEL EQUIPO
         # ----------------------------------------------------
-        ctk.CTkLabel(form, text="LICENCIAMIENTO CRIPTOGRÁFICO", font=("Segoe UI", 13, "bold"), text_color=t["text_muted"]).pack(anchor="w", padx=24, pady=(10, 8))
+        ctk.CTkLabel(form, text="LICENCIAMIENTO CRIPTOGRÁFICO", font=("Segoe UI", 11, "bold"), text_color=t["text_muted"]).pack(anchor="w", padx=24, pady=(10, 8))
 
         card_lic = ctk.CTkFrame(form, fg_color=t["bg_dark"], corner_radius=14, border_width=1, border_color=t["border"])
         card_lic.pack(fill="x", padx=24, pady=(0, 20))
@@ -201,7 +201,7 @@ class SettingsView(ctk.CTkFrame):
             modal.attributes("-topmost", True)
             modal.configure(fg_color=t["bg_dark"])
 
-            ctk.CTkLabel(modal, text="🔗 VINCULAR CUENTA DE GOOGLE CALENDAR", font=("Segoe UI", 13, "bold"), text_color=t["aqua"]).pack(pady=(20, 8))
+            ctk.CTkLabel(modal, text="🔗 VINCULAR CUENTA DE GOOGLE CALENDAR", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=(20, 8))
             ctk.CTkLabel(
                 modal,
                 text="Para sincronizar citas de fondo directamente con Google Calendar API,\nse requiere el archivo credentials.json de Google Cloud.\n\nSi ya lo descargaste, selecciónalo aquí para autorizar tu cuenta:",
@@ -223,7 +223,7 @@ class SettingsView(ctk.CTkFrame):
                         self.lbl_cal_msg.configure(text="ℹ️ Autoriza en la ventana del navegador que se abrió.", text_color=t["azul_pastel"])
 
             ctk.CTkButton(
-                modal, text="📂 Cargar credentials.json...", font=("Segoe UI", 12, "bold"),
+                modal, text="📂 Cargar credentials.json...", font=("Segoe UI", 11, "bold"),
                 height=38, fg_color=t["azul_acero"], hover_color=t["azul_pastel"],
                 command=seleccionar_archivo
             ).pack(fill="x", padx=40, pady=(0, 10))

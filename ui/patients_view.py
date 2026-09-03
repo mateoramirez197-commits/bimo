@@ -31,7 +31,7 @@ class PatientsView(ctk.CTkFrame):
         top_bar.pack(fill="x", padx=16, pady=(12, 8))
         top_bar.pack_propagate(False)
 
-        ctk.CTkLabel(top_bar, text="👥 Directorio & Archivo Seccionado", font=("Segoe UI", 16, "bold"), text_color=t["text_primary"]).pack(side="left", padx=16)
+        ctk.CTkLabel(top_bar, text="👥 Directorio & Archivo Seccionado", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]).pack(side="left", padx=16)
 
         btn_abrir_explorador = ctk.CTkButton(
             top_bar, text="📁 Carpeta Física", width=125, height=36, font=("Segoe UI", 11, "bold"),
@@ -152,7 +152,7 @@ class PatientsView(ctk.CTkFrame):
             left_b = ctk.CTkFrame(card, fg_color="transparent")
             left_b.pack(side="left", padx=12, pady=8, fill="x", expand=True)
 
-            ctk.CTkLabel(left_b, text=f"{nombre} (ID: {pac_id})", font=("Segoe UI", 12, "bold"), text_color=t["text_primary"], anchor="w").pack(fill="x")
+            ctk.CTkLabel(left_b, text=f"{nombre} (ID: {pac_id})", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"], anchor="w").pack(fill="x")
             info_text = f"🆔 Cédula: {doc}  |  {edad_str}  |  {categoria}\n📋 Consultas archivadas: {total_cons}"
             ctk.CTkLabel(left_b, text=info_text, font=("Segoe UI", 10), text_color=t["text_muted"], justify="left", anchor="w").pack(fill="x", pady=(2, 0))
 
@@ -182,7 +182,7 @@ class PatientsView(ctk.CTkFrame):
         modal.attributes("-topmost", True)
         modal.configure(fg_color=t["bg_dark"])
 
-        ctk.CTkLabel(modal, text="⚠️ ¿ELIMINAR PACIENTE?", font=("Segoe UI", 14, "bold"), text_color="#ef4444").pack(pady=(20, 6))
+        ctk.CTkLabel(modal, text="⚠️ ¿ELIMINAR PACIENTE?", font=("Segoe UI", 11, "bold"), text_color="#ef4444").pack(pady=(20, 6))
         ctk.CTkLabel(modal, text=f"¿Estás seguro de que deseas eliminar permanentemente a:\n{nombre} (ID: {pac_id})?\nSe borrarán sus consultas y citas asociadas.", font=("Segoe UI", 11), text_color=t["text_muted"], justify="center").pack(pady=(0, 20))
 
         b_row = ctk.CTkFrame(modal, fg_color="transparent")
@@ -213,7 +213,7 @@ class PatientsView(ctk.CTkFrame):
                 except Exception:
                     pass
 
-            ctk.CTkLabel(self.panel_detalles, text=f"✅ Paciente {nombre} y sus expedientes físicos eliminados permanentemente.", font=("Segoe UI", 12, "bold"), text_color=t["aqua"]).pack(pady=40)
+            ctk.CTkLabel(self.panel_detalles, text=f"✅ Paciente {nombre} y sus expedientes físicos eliminados permanentemente.", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=40)
             self._cargar_pacientes()
 
         ctk.CTkButton(b_row, text="Sí, Eliminar", width=120, height=36, font=("Segoe UI", 11, "bold"), fg_color="#dc2626", hover_color="#b91c1c", command=ejecutar_borrado).pack(side="left", padx=10)
@@ -237,7 +237,7 @@ class PatientsView(ctk.CTkFrame):
         top_row = ctk.CTkFrame(header_card, fg_color="transparent")
         top_row.pack(fill="x", padx=14, pady=(10, 4))
 
-        ctk.CTkLabel(top_row, text=f"📋 Historial Clínico: {nombre} (ID: {pac_id})", font=("Segoe UI", 14, "bold"), text_color=t["text_primary"]).pack(side="left")
+        ctk.CTkLabel(top_row, text=f"📋 Historial Clínico: {nombre} (ID: {pac_id})", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]).pack(side="left")
 
         btn_carpeta = ctk.CTkButton(
             top_row, text="📂 Carpeta Windows", height=30, font=("Segoe UI", 10, "bold"),
@@ -383,7 +383,7 @@ class PatientsView(ctk.CTkFrame):
         modal.attributes("-topmost", True)
         modal.configure(fg_color=t["bg_dark"])
 
-        ctk.CTkLabel(modal, text="⚠️ ¿ELIMINAR ESTA CONSULTA?", font=("Segoe UI", 12, "bold"), text_color="#ef4444").pack(pady=(18, 4))
+        ctk.CTkLabel(modal, text="⚠️ ¿ELIMINAR ESTA CONSULTA?", font=("Segoe UI", 11, "bold"), text_color="#ef4444").pack(pady=(18, 4))
         ctk.CTkLabel(modal, text="Se eliminará la consulta y su archivo PDF.", font=("Segoe UI", 10), text_color=t["text_muted"]).pack(pady=(0, 16))
 
         b_row = ctk.CTkFrame(modal, fg_color="transparent")

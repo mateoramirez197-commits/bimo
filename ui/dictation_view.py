@@ -83,7 +83,7 @@ class DictationView(ctk.CTkFrame):
             fg_color="#059669", hover_color="#047857", corner_radius=19, command=self._toggle_escucha_activa
         )
         self.btn_toggle_escucha.pack(side="right", padx=(6, 6))
-        bind_hover_microscale(self.btn_toggle_escucha, normal_h=38, hover_h=44)
+        bind_hover_microscale(self.btn_toggle_escucha)
 
         # Contenedor central dividido en dos paneles Soft 3D
         main_grid = ctk.CTkFrame(self, fg_color="transparent")
@@ -100,20 +100,20 @@ class DictationView(ctk.CTkFrame):
 
         # Botón masivo tipo PÍLDORA con hover neón de alto contraste y animación micro-scale fluida
         self.btn_grabar = ctk.CTkButton(
-            col_left, text="🎤 Iniciar Dictado Manual", font=("Segoe UI", 13, "bold"),
+            col_left, text="🎤 Iniciar Dictado Manual", font=("Segoe UI", 11, "bold"),
             height=52, fg_color=t["azul_acero"], hover_color=t.get("aqua", "#00F5D4"), text_color="#ffffff",
             corner_radius=26, command=self._toggle_grabacion
         )
         self.btn_grabar.pack(fill="x", padx=20, pady=(0, 10))
-        bind_hover_microscale(self.btn_grabar, normal_h=52, hover_h=60)
+        bind_hover_microscale(self.btn_grabar)
 
         self.btn_abrir_pdf = ctk.CTkButton(
-            col_left, text="📄 Abrir Último PDF", font=("Segoe UI", 12, "bold"),
+            col_left, text="📄 Abrir Último PDF", font=("Segoe UI", 11, "bold"),
             height=42, fg_color="#334155", hover_color="#38BDF8",
             corner_radius=21, state="disabled", command=self._abrir_pdf_actual
         )
         self.btn_abrir_pdf.pack(fill="x", padx=20, pady=(0, 12))
-        bind_hover_microscale(self.btn_abrir_pdf, normal_h=42, hover_h=48)
+        bind_hover_microscale(self.btn_abrir_pdf)
 
         # Visualizador de Telemetría Acústica e Ingeniería Médica
         hud_box = ctk.CTkFrame(col_left, fg_color=t["bg_dark"], corner_radius=18, border_width=1, border_color=t["border"])
@@ -147,11 +147,11 @@ class DictationView(ctk.CTkFrame):
         header_r = ctk.CTkFrame(col_right, fg_color="transparent")
         header_r.pack(fill="x", padx=20, pady=(18, 8))
 
-        ctk.CTkLabel(header_r, text="EXPEDIENTE CLÍNICO DIGITALIZADO", font=("Segoe UI", 12, "bold"), text_color=t["text_muted"]).pack(side="left")
+        ctk.CTkLabel(header_r, text="EXPEDIENTE CLÍNICO DIGITALIZADO", font=("Segoe UI", 11, "bold"), text_color=t["text_muted"]).pack(side="left")
 
         # Barra animada de progreso
         self.progress_frame = ctk.CTkFrame(col_right, fg_color="transparent")
-        self.lbl_progress = ctk.CTkLabel(self.progress_frame, text="⏳ BIMO está estructurando la consulta médica y generando el odontograma...", font=("Segoe UI", 12, "bold"), text_color=t["aqua"])
+        self.lbl_progress = ctk.CTkLabel(self.progress_frame, text="⏳ BIMO está estructurando la consulta médica y generando el odontograma...", font=("Segoe UI", 11, "bold"), text_color=t["aqua"])
         self.lbl_progress.pack(pady=(4, 4))
         self.progress_bar = ctk.CTkProgressBar(self.progress_frame, mode="indeterminate", height=6, fg_color=t["bg_dark"], progress_color=t["aqua"])
         self.progress_bar.pack(fill="x", padx=10)
@@ -186,7 +186,7 @@ class DictationView(ctk.CTkFrame):
         card_hero = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
         card_hero.pack(fill="x", padx=10, pady=8)
 
-        ctk.CTkLabel(card_hero, text="🎙️ ESCUCHA ACTIVA BIMO LISTA", font=("Segoe UI", 14, "bold"), text_color=t["aqua"] if t.get("mode") == "dark" else t["azul_acero"]).pack(anchor="w", padx=20, pady=(18, 6))
+        ctk.CTkLabel(card_hero, text="🎙️ ESCUCHA ACTIVA BIMO LISTA", font=("Segoe UI", 11, "bold"), text_color=t["aqua"] if t.get("mode") == "dark" else t["azul_acero"]).pack(anchor="w", padx=20, pady=(18, 6))
         ctk.CTkLabel(
             card_hero,
             text="Habla naturalmente sin presionar botones. BIMO identificará automáticamente tus órdenes:\n"
@@ -199,7 +199,7 @@ class DictationView(ctk.CTkFrame):
         card_status = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
         card_status.pack(fill="x", padx=10, pady=8)
 
-        ctk.CTkLabel(card_status, text="⚡ ESTADO DEL SISTEMA", font=("Segoe UI", 12, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=20, pady=(16, 4))
+        ctk.CTkLabel(card_status, text="⚡ ESTADO DEL SISTEMA", font=("Segoe UI", 11, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=20, pady=(16, 4))
         ctk.CTkLabel(card_status, text="● Motor Whisper Neuronal: Activo\n● Micrófono Remoto HTTPS: En línea\n● Base de Datos y Deduplicación: Operativa", font=("Segoe UI", 11), text_color=t["text_primary"], justify="left").pack(anchor="w", padx=20, pady=(0, 16))
 
     def _on_wake_command(self, texto_comando):
@@ -234,8 +234,8 @@ class DictationView(ctk.CTkFrame):
         card = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=18, border_width=1.5, border_color=t["aqua"])
         card.pack(fill="x", padx=8, pady=8)
 
-        ctk.CTkLabel(card, text="🔊 VOZ DETECTADA POR BIMO", font=("Segoe UI", 13, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=18, pady=(16, 4))
-        ctk.CTkLabel(card, text=f"\"{texto_comando}\"", font=("Segoe UI", 12, "bold"), text_color=t["text_primary"], justify="left").pack(anchor="w", padx=18, pady=(0, 16))
+        ctk.CTkLabel(card, text="🔊 VOZ DETECTADA POR BIMO", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=18, pady=(16, 4))
+        ctk.CTkLabel(card, text=f"\"{texto_comando}\"", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"], justify="left").pack(anchor="w", padx=18, pady=(0, 16))
 
     def _mostrar_tarjeta_aviso_dictado_manual(self):
         t = self.theme
@@ -245,7 +245,7 @@ class DictationView(ctk.CTkFrame):
         card = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=18, border_width=1.5, border_color=t["azul_acero"])
         card.pack(fill="x", padx=8, pady=8)
 
-        ctk.CTkLabel(card, text="📋 HISTORIA CLÍNICA & ODONTOGRAMA (MODO MANUAL)", font=("Segoe UI", 13, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=18, pady=(16, 4))
+        ctk.CTkLabel(card, text="📋 HISTORIA CLÍNICA & ODONTOGRAMA (MODO MANUAL)", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=18, pady=(16, 4))
         ctk.CTkLabel(
             card,
             text="Para máxima fidelidad clínica, la generación de historias clínicas y PDFs se activa mediante dictado manual.\n"
@@ -255,7 +255,7 @@ class DictationView(ctk.CTkFrame):
 
         btn_iniciar = ctk.CTkButton(
             card, text="🎤 Iniciar Dictado Manual de Historia Clínica", height=42,
-            font=("Segoe UI", 12, "bold"), fg_color=t["azul_acero"], hover_color=t["azul_pastel"],
+            font=("Segoe UI", 11, "bold"), fg_color=t["azul_acero"], hover_color=t["azul_pastel"],
             corner_radius=t["corner_btn"], command=self._toggle_grabacion
         )
         btn_iniciar.pack(fill="x", padx=18, pady=(0, 16))
@@ -811,7 +811,7 @@ class DictationView(ctk.CTkFrame):
             c_diag = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
             c_diag.pack(fill="x", padx=10, pady=6)
 
-            ctk.CTkLabel(c_diag, text="🩺 DIAGNÓSTICO & TRATAMIENTO", font=("Segoe UI", 12, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=18, pady=(14, 4))
+            ctk.CTkLabel(c_diag, text="🩺 DIAGNÓSTICO & TRATAMIENTO", font=("Segoe UI", 11, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=18, pady=(14, 4))
             ctk.CTkLabel(c_diag, text=f"• Motivo: {motivo}", font=("Segoe UI", 11), text_color=t["text_primary"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 2))
             ctk.CTkLabel(c_diag, text=f"• Diagnóstico: {diag}", font=("Segoe UI", 11, "bold"), text_color=t["aqua"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 2))
             ctk.CTkLabel(c_diag, text=f"• Plan Sugerido: {plan}", font=("Segoe UI", 11), text_color=t["text_primary"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 14))
@@ -820,7 +820,7 @@ class DictationView(ctk.CTkFrame):
             c_odonto = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
             c_odonto.pack(fill="x", padx=10, pady=6)
 
-            ctk.CTkLabel(c_odonto, text="🦷 ODONTOGRAMA DIGITALIZADO (PIEZAS FDI)", font=("Segoe UI", 12, "bold"), text_color=t["amarillo"]).pack(anchor="w", padx=18, pady=(14, 6))
+            ctk.CTkLabel(c_odonto, text="🦷 ODONTOGRAMA DIGITALIZADO (PIEZAS FDI)", font=("Segoe UI", 11, "bold"), text_color=t["amarillo"]).pack(anchor="w", padx=18, pady=(14, 6))
 
             if odonto:
                 for item in odonto:
@@ -858,7 +858,7 @@ class DictationView(ctk.CTkFrame):
 
             top_pg = ctk.CTkFrame(card_pago, fg_color="transparent")
             top_pg.pack(fill="x", padx=18, pady=(14, 4))
-            ctk.CTkLabel(top_pg, text="💳 CONTROL DE PAGOS & ESTADO DE CUENTA", font=("Segoe UI", 12, "bold"), text_color=t["aqua"]).pack(side="left")
+            ctk.CTkLabel(top_pg, text="💳 CONTROL DE PAGOS & ESTADO DE CUENTA", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(side="left")
 
             # Badge interactivo tipo PÍLDORA de estado de cuenta
             if c_costo > 0 and c_saldo <= 0:
@@ -902,7 +902,7 @@ class DictationView(ctk.CTkFrame):
                 corner_radius=18, command=_abrir_modal_pagos_dictation
             )
             btn_pago_act.pack(anchor="w", padx=18, pady=(0, 12))
-            bind_hover_microscale(btn_pago_act, normal_h=36, hover_h=42)
+            bind_hover_microscale(btn_pago_act)
 
             # 5. Botones de acción clínica tipo PÍLDORA (Vista previa nativa, Corrección de datos y Apertura)
             if ruta_pdf:
@@ -911,12 +911,12 @@ class DictationView(ctk.CTkFrame):
 
                 btn_prev = ctk.CTkButton(
                     bar_actions, text="👁️ Vista Previa del PDF", height=44,
-                    font=("Segoe UI", 12, "bold"), fg_color=t["aqua"], hover_color=t.get("azul_acero", "#7C3AED"),
+                    font=("Segoe UI", 11, "bold"), fg_color=t["aqua"], hover_color=t.get("azul_acero", "#7C3AED"),
                     text_color="#ffffff", corner_radius=22,
                     command=lambda r=ruta_pdf: self._mostrar_vista_previa_pdf(r)
                 )
                 btn_prev.pack(side="left", fill="x", expand=True, padx=(0, 6))
-                bind_hover_microscale(btn_prev, normal_h=44, hover_h=50)
+                bind_hover_microscale(btn_prev)
 
                 btn_edit = ctk.CTkButton(
                     bar_actions, text="✏️ Corregir Datos / Regenerar", height=44,
@@ -925,7 +925,7 @@ class DictationView(ctk.CTkFrame):
                     command=lambda d=datos, r=ruta_pdf, p=paciente_id: self._abrir_modal_correccion(d, r, p)
                 )
                 btn_edit.pack(side="left", fill="x", expand=True, padx=6)
-                bind_hover_microscale(btn_edit, normal_h=44, hover_h=50)
+                bind_hover_microscale(btn_edit)
 
                 from config import abrir_archivo_o_carpeta_nativo
                 btn_ext = ctk.CTkButton(
@@ -935,7 +935,7 @@ class DictationView(ctk.CTkFrame):
                     command=lambda r=ruta_pdf: abrir_archivo_o_carpeta_nativo(r)
                 )
                 btn_ext.pack(side="right", padx=(6, 0))
-                bind_hover_microscale(btn_ext, normal_h=44, hover_h=50)
+                bind_hover_microscale(btn_ext)
 
     def _mostrar_vista_previa_pdf(self, ruta_pdf):
         """Abre la ventana modal con la vista previa nativa de alta definición del PDF."""
@@ -1037,7 +1037,7 @@ class DictationView(ctk.CTkFrame):
         modal.attributes("-topmost", True)
         modal.configure(fg_color=t["bg_dark"])
 
-        ctk.CTkLabel(modal, text="⚠️ PACIENTES HOMÓNIMOS ENCONTRADOS", font=("Segoe UI", 14, "bold"), text_color=t["amarillo"]).pack(pady=(20, 4))
+        ctk.CTkLabel(modal, text="⚠️ PACIENTES HOMÓNIMOS ENCONTRADOS", font=("Segoe UI", 11, "bold"), text_color=t["amarillo"]).pack(pady=(20, 4))
         ctk.CTkLabel(modal, text=f"Se encontró más de un paciente llamado '{nombre_paciente}'.\nSelecciona a cuál corresponde la cita:", font=("Segoe UI", 11), text_color=t["text_muted"], justify="center").pack(pady=(0, 16))
 
         scroll = ctk.CTkScrollableFrame(modal, fg_color=t["card_dark"], corner_radius=10, height=200, border_width=1, border_color=t["border"])

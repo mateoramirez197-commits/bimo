@@ -49,7 +49,7 @@ class VentanaVistaPreviaPDF(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             top_bar, text=f"📄 {os.path.basename(self.ruta_pdf)}",
-            font=("Segoe UI", 12, "bold"), text_color=t["text_primary"]
+            font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]
         ).pack(side="left", padx=16)
 
         btn_externo = ctk.CTkButton(

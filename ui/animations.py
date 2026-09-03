@@ -11,91 +11,70 @@ def ease_out_quad(t: float) -> float:
 def ease_out_cubic(t: float) -> float:
     return 1.0 - pow(1.0 - t, 3)
 
-def bind_hover_microscale(widget, normal_h: int = 52, hover_h: int = 58, expand_font: bool = True):
+def bind_hover_microscale(widget, scale_factor: float = 1.15, duration_ms: int = 150):
     """
-    Aplica animación de micro-escala fluida a 60 FPS al pasar el ratón (hover)
+    Aplica animación de micro-escala fluida a 60 FPS enfocándose ÚNICAMENTE 
+    en el tamaño de fuente, evitando recálculos del geometry manager (stutter).
     """
-    state = {'anim_id': None, 'current_h': float(normal_h)}
+    state = {'anim_id': None, 'curr_size': 0.0}
 
     orig_font = None
-    hover_font = None
+    orig_name = "Segoe UI"
+    orig_size = 12
+    orig_weight = ""
+
     try:
         f = widget.cget('font')
         if isinstance(f, tuple) and len(f) >= 2:
             orig_font = f
-            hover_font = (f[0], f[1] + 1, 'bold' if len(f) < 3 else f[2])
+            orig_name = f[0]
+            orig_size = float(f[1])
+            if len(f) >= 3:
+                orig_weight = f[2]
+        elif hasattr(f, 'cget'):
+            orig_font = f
+            orig_name = f.cget("family")
+            orig_size = float(f.cget("size"))
+            orig_weight = f.cget("weight")
     except Exception:
         pass
 
-    def on_enter(event=None):
+    target_size = orig_size * scale_factor
+    state['curr_size'] = orig_size
+
+    def _anim_step(start_s, end_s, frame, total_frames):
         if state['anim_id']:
-            try:
-                widget.after_cancel(state['anim_id'])
-            except Exception:
-                pass
+            widget.after_cancel(state['anim_id'])
+            state['anim_id'] = None
+            
+        frame += 1
+        t = frame / total_frames
+        ease = ease_out_cubic(t)
+        new_s = start_s + (end_s - start_s) * ease
+        state['curr_size'] = new_s
 
-        if expand_font and hover_font:
-            try:
-                widget.configure(font=hover_font)
-            except Exception:
-                pass
-
-        total_frames = 6
-        frame = 0
-
-        def _step():
-            nonlocal frame
-            frame += 1
-            t = frame / total_frames
-            ease = ease_out_quad(t)
-            h = normal_h + (hover_h - normal_h) * ease
-            state['current_h'] = h
-            try:
-                widget.configure(height=int(h))
-            except Exception:
-                return
-
-            if frame < total_frames:
-                state['anim_id'] = widget.after(14, _step)
+        try:
+            if orig_weight:
+                widget.configure(font=(orig_name, int(new_s), orig_weight))
             else:
-                state['anim_id'] = None
+                widget.configure(font=(orig_name, int(new_s)))
+        except Exception:
+            return
 
-        _step()
+        if frame < total_frames:
+            state['anim_id'] = widget.after(16, lambda: _anim_step(start_s, end_s, frame, total_frames))
+        else:
+            state['anim_id'] = None
+
+    def on_enter(event=None):
+        if not orig_font: return
+        total_f = max(1, duration_ms // 16)
+        _anim_step(state['curr_size'], target_size, 0, total_f)
 
     def on_leave(event=None):
-        if state['anim_id']:
-            try:
-                widget.after_cancel(state['anim_id'])
-            except Exception:
-                pass
-
-        if expand_font and orig_font:
-            try:
-                widget.configure(font=orig_font)
-            except Exception:
-                pass
-
-        total_frames = 6
-        frame = 0
-
-        def _step():
-            nonlocal frame
-            frame += 1
-            t = frame / total_frames
-            ease = ease_out_quad(t)
-            h = hover_h - (hover_h - normal_h) * ease
-            state['current_h'] = h
-            try:
-                widget.configure(height=int(h))
-            except Exception:
-                return
-
-            if frame < total_frames:
-                state['anim_id'] = widget.after(14, _step)
-            else:
-                state['anim_id'] = None
-
-        _step()
+        if not orig_font: return
+        total_f = max(1, duration_ms // 16)
+        _anim_step(state['curr_size'], orig_size, 0, total_f)
 
     widget.bind('<Enter>', on_enter, add='+')
     widget.bind('<Leave>', on_leave, add='+')

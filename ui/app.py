@@ -61,6 +61,10 @@ class BimoApp(ctk.CTk):
         self.title("BIMO - Asistente Clínico Inteligente (SaaS Odontológico)")
         self.geometry("1220x800")
         self.minsize(1040, 720)
+        try:
+            self.state("zoomed")
+        except Exception:
+            pass
 
         # Aplicar el tema guardado al arrancar
         tema_ini = obtener_tema_guardado()
@@ -91,8 +95,8 @@ class BimoApp(ctk.CTk):
         splash.place(relx=0.5, rely=0.48, anchor="center")
 
         BimoLogo(splash, font_size=56).pack(pady=(0, 6))
-        ctk.CTkLabel(splash, text="B  I  M  O    P  R  O", font=("Segoe UI", 16, "bold"), text_color=t["aqua"]).pack(pady=(0, 6))
-        ctk.CTkLabel(splash, text=f"🏥 {nom_clinica}", font=("Segoe UI", 13), text_color=t["text_muted"]).pack(pady=(0, 24))
+        ctk.CTkLabel(splash, text="B  I  M  O    P  R  O", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=(0, 6))
+        ctk.CTkLabel(splash, text=f"🏥 {nom_clinica}", font=("Segoe UI", 12), text_color=t["text_muted"]).pack(pady=(0, 24))
 
         pbar = ctk.CTkProgressBar(splash, mode="indeterminate", width=300, height=6, fg_color=t["card_dark"], progress_color=t["aqua"])
         pbar.pack(pady=(0, 14))
@@ -143,14 +147,14 @@ class BimoApp(ctk.CTk):
         lbl_icon = ctk.CTkLabel(box, text=pasos[0]["icono"], font=("Segoe UI", 52))
         lbl_icon.pack(pady=(32, 10))
 
-        lbl_title = ctk.CTkLabel(box, text=pasos[0]["titulo"], font=("Segoe UI", 16, "bold"), text_color=t["aqua"], justify="center")
+        lbl_title = ctk.CTkLabel(box, text=pasos[0]["titulo"], font=("Segoe UI", 11, "bold"), text_color=t["aqua"], justify="center")
         lbl_title.pack(padx=24, pady=(0, 10))
 
         lbl_desc = ctk.CTkLabel(box, text=pasos[0]["desc"], font=("Segoe UI", 12), text_color=t["text_muted"], justify="center", wraplength=520)
         lbl_desc.pack(padx=30, pady=(0, 16))
 
         # Indicador de puntos (dots)
-        lbl_dots = ctk.CTkLabel(box, text="●  ○  ○", font=("Segoe UI", 14), text_color=t["aqua"])
+        lbl_dots = ctk.CTkLabel(box, text="●  ○  ○", font=("Segoe UI", 12), text_color=t["aqua"])
         lbl_dots.pack(pady=(0, 14))
 
         # Checkbox "No volver a mostrar"
@@ -197,7 +201,7 @@ class BimoApp(ctk.CTk):
         btn_skip.pack(side="left")
 
         btn_next = ctk.CTkButton(
-            btn_row, text="Siguiente ➔", width=200, height=40, font=("Segoe UI", 12, "bold"),
+            btn_row, text="Siguiente ➔", width=200, height=40, font=("Segoe UI", 11, "bold"),
             fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
             corner_radius=12, command=siguiente
         )
@@ -230,7 +234,7 @@ class BimoApp(ctk.CTk):
         email = self._usuario_en_login.get("email", "")
 
         BimoLogo(card, font_size=28).pack(pady=(22, 6))
-        self.lbl_usuario_titular = ctk.CTkLabel(card, text=f"👨‍⚕️ {nom}", font=("Segoe UI", 16, "bold"), text_color=t["text_primary"])
+        self.lbl_usuario_titular = ctk.CTkLabel(card, text=f"👨‍⚕️ {nom}", font=("Segoe UI", 11, "bold"), text_color=t["text_primary"])
         self.lbl_usuario_titular.pack()
         self.lbl_sub_auth = ctk.CTkLabel(card, text=f"{email}  •  Acceso por PIN Maestro", font=("Segoe UI", 10, "bold"), text_color=t["text_muted"])
         self.lbl_sub_auth.pack(pady=(2, 12))
@@ -302,19 +306,19 @@ class BimoApp(ctk.CTk):
             for c in r:
                 if c == "⌫":
                     b = ctk.CTkButton(
-                        row_f, text=c, width=70, height=42, font=("Segoe UI", 16, "bold"),
+                        row_f, text=c, width=70, height=42, font=("Segoe UI", 11, "bold"),
                         fg_color=t["bg_dark"], hover_color=t["card_hover"], text_color=t["text_muted"],
                         corner_radius=10, command=press_back
                     )
                 elif c == "✓":
                     b = ctk.CTkButton(
-                        row_f, text=c, width=70, height=42, font=("Segoe UI", 16, "bold"),
+                        row_f, text=c, width=70, height=42, font=("Segoe UI", 11, "bold"),
                         fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
                         corner_radius=10, command=verificar_pin
                     )
                 else:
                     b = ctk.CTkButton(
-                        row_f, text=c, width=70, height=42, font=("Segoe UI", 16, "bold"),
+                        row_f, text=c, width=70, height=42, font=("Segoe UI", 11, "bold"),
                         fg_color=t["bg_dark"], hover_color=t["card_hover"], text_color=t["text_primary"],
                         corner_radius=10, command=lambda val=c: press_num(val)
                     )
@@ -340,7 +344,7 @@ class BimoApp(ctk.CTk):
             modal_inv.attributes("-topmost", True)
             modal_inv.configure(fg_color=t["bg_dark"])
 
-            ctk.CTkLabel(modal_inv, text="👤 INGRESO DE INVITADO", font=("Segoe UI", 13, "bold"), text_color=t["aqua"]).pack(pady=(16, 6))
+            ctk.CTkLabel(modal_inv, text="👤 INGRESO DE INVITADO", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=(16, 6))
             ctk.CTkLabel(modal_inv, text="Ingresa tu nombre para registrar la sesión clínica:", font=("Segoe UI", 11), text_color=t["text_muted"]).pack(pady=(0, 10))
 
             ent_inv = ctk.CTkEntry(modal_inv, width=280, height=36, corner_radius=10, placeholder_text="Nombre de invitado / asistente...", fg_color=t["input_bg"], border_color=t["input_border"], text_color=t["text_primary"])
@@ -446,85 +450,70 @@ class BimoApp(ctk.CTk):
         self.main_app_card.place(relx=0.014, rely=0.015, relwidth=0.968, relheight=0.964)
 
         # ---------------------------------------------------------------------
-        # REGLA 2: MENÚ LATERAL MINIMALISTA (SLIM SIDEBAR)
-        # Muy estrecho (width=74), esquinas redondeadas (corner_radius=22),
-        # fondo acento violeta (#7C3AED), solo iconos blancos sin texto.
+        # REGLA 3: TARJETAS FLOTANTES CON SOMBRAS SIMULADAS (SOFT 3D)
         # ---------------------------------------------------------------------
-        self.slim_sidebar = ctk.CTkFrame(
-            self.main_app_card, fg_color=t["sidebar"], width=74, corner_radius=22, border_width=0
+        self.views_container = ctk.CTkFrame(self.main_app_card, fg_color="transparent")
+        # El contenedor ahora ocupa todo el ancho, ya que el dock está abajo
+        self.content_shadow = ctk.CTkFrame(
+            self.main_app_card, fg_color=t.get("border", "#E2E8F0"), corner_radius=30, border_width=0
         )
-        self.slim_sidebar.place(relx=0.012, rely=0.016, relheight=0.968)
+        self.content_shadow.place(relx=0.012, rely=0.012, relwidth=0.978, relheight=0.978)
 
-        # Emblema Superior Minimalista
-        lbl_logo = ctk.CTkLabel(
-            self.slim_sidebar, text="⚡", font=("Segoe UI", 26, "bold"), text_color="#FFFFFF"
+        self.main_content = ctk.CTkFrame(
+            self.main_app_card, fg_color=t.get("card_inner", "#F8FAFC"),
+            corner_radius=30, border_width=1, border_color=t["border"]
         )
-        lbl_logo.pack(pady=(20, 16))
+        self.main_content.place(relx=0.01, rely=0.01, relwidth=0.978, relheight=0.978)
 
-        # Botones de Navegación (Solo íconos blancos, tipo píldora corner_radius=25)
+        # REGLA 2: MAC DOCK INFERIOR (Floating Navigation)
+        # ---------------------------------------------------------------------
+        self.mac_dock = ctk.CTkFrame(
+            self.main_app_card, fg_color=t["sidebar"], height=64, corner_radius=32, border_width=1, border_color=t["border"]
+        )
+        # Animación interactiva: Siempre visible, anclado al fondo
+        self.mac_dock.place(relx=0.5, rely=0.98, anchor="s")
+
         self.nav_buttons = {}
         items_menu = [
-            ("dictation", "🎙️", "Dictado Clínico"),
-            ("patients", "👥", "Pacientes & Archivo"),
-            ("agenda", "📅", "Agenda de Citas"),
-            ("mobile", "📱", "App Smartphone"),
-            ("settings", "⚙️", "Configuración"),
+            ("dictation", "🎙️"),
+            ("patients", "👥"),
+            ("agenda", "📅"),
+            ("mobile", "📱"),
+            ("settings", "⚙️"),
         ]
 
-        nav_box = ctk.CTkFrame(self.slim_sidebar, fg_color="transparent")
-        nav_box.pack(fill="x", expand=True, pady=10)
-
-        for key, icon, tooltip in items_menu:
+        for key, icon in items_menu:
             btn = ctk.CTkButton(
-                nav_box, text=icon, width=48, height=48, font=("Segoe UI", 20),
+                self.mac_dock, text=icon, width=48, height=48, font=("Segoe UI", 12),
                 fg_color="transparent", text_color="#FFFFFF",
                 hover_color=t.get("azul_pastel", "#8B5CF6"), corner_radius=24,
                 border_width=0, command=lambda k=key: self._cambiar_vista(k)
             )
-            btn.pack(pady=6)
-            bind_hover_microscale(btn, normal_h=48, hover_h=54)
+            btn.pack(side="left", padx=8, pady=8)
+            bind_hover_microscale(btn, scale_factor=1.25)
             self.nav_buttons[key] = btn
 
-        # Separador sutil
-        sep = ctk.CTkFrame(self.slim_sidebar, width=36, height=2, fg_color=t.get("azul_pastel", "#8B5CF6"))
-        sep.pack(pady=12)
+        # Separador vertical en el dock
+        sep = ctk.CTkFrame(self.mac_dock, width=2, height=32, fg_color=t.get("azul_pastel", "#8B5CF6"))
+        sep.pack(side="left", padx=6, pady=16)
 
-        # Botón Widget Flotante Escritorio
         btn_floating = ctk.CTkButton(
-            self.slim_sidebar, text="📌", width=48, height=48, font=("Segoe UI", 18),
-            fg_color="transparent", text_color="#FFFFFF",
-            hover_color=t.get("azul_pastel", "#8B5CF6"), corner_radius=24,
+            self.mac_dock, text="📌", width=48, height=48, font=("Segoe UI", 12),
+            fg_color="transparent", text_color="#FFFFFF", hover_color=t.get("azul_pastel", "#8B5CF6"), corner_radius=24,
             command=self._toggle_floating_widget
         )
-        btn_floating.pack(pady=4)
-        bind_hover_microscale(btn_floating, normal_h=48, hover_h=54)
+        btn_floating.pack(side="left", padx=8, pady=8)
+        bind_hover_microscale(btn_floating, scale_factor=1.25)
 
-        # Botón Logout
         btn_logout = ctk.CTkButton(
-            self.slim_sidebar, text="🚪", width=48, height=48, font=("Segoe UI", 18),
-            fg_color="transparent", text_color="#FCA5A5",
-            hover_color="#DC2626", corner_radius=24,
+            self.mac_dock, text="🚪", width=48, height=48, font=("Segoe UI", 12),
+            fg_color="transparent", text_color="#FCA5A5", hover_color="#DC2626", corner_radius=24,
             command=self._logout
         )
-        btn_logout.pack(side="bottom", pady=20)
-        bind_hover_microscale(btn_logout, normal_h=48, hover_h=54)
+        btn_logout.pack(side="left", padx=8, pady=8)
+        bind_hover_microscale(btn_logout, scale_factor=1.25)
 
         # ---------------------------------------------------------------------
-        # REGLA 3: TARJETAS FLOTANTES CON SOMBRAS SIMULADAS (SOFT 3D)
-        # Frame trasero gris muy claro (#E2E8F0) desplazado 2px (.place())
-        # Frame de contenido principal (#F8FAFC) con corner_radius=25 y márgenes amplios (padx=20, pady=20)
-        # ---------------------------------------------------------------------
-        self.content_shadow = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("border", "#E2E8F0"), corner_radius=25, border_width=0
-        )
-        self.content_shadow.place(relx=0.086, rely=0.019, relwidth=0.902, relheight=0.962)
-
-        self.main_content = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("card_inner", "#F8FAFC"),
-            corner_radius=25, border_width=1, border_color=t["border"]
-        )
-        self.main_content.place(relx=0.084, rely=0.016, relwidth=0.902, relheight=0.962)
-
         # Instanciar vistas clínicas dentro del lienzo
         self.views = {
             "dictation": DictationView(self.main_content),
@@ -570,21 +559,36 @@ class BimoApp(ctk.CTk):
                     border_width=0, corner_radius=24
                 )
 
-        target_view = self.views[key_vista]
-        # Márgenes amplios (padx=20, pady=20) para que la interfaz respire
-        target_view.pack(fill="both", expand=True, padx=20, pady=20)
+        # Skeleton Loader Spotify Lite Style
+        loader_frame = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        loader_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Animación de Shimmer estática rápida
+        shimmer = ctk.CTkFrame(loader_frame, fg_color=t.get("border", "#E2E8F0"), corner_radius=20, height=120)
+        shimmer.pack(fill="x", pady=(0, 20))
+        shimmer2 = ctk.CTkFrame(loader_frame, fg_color=t.get("border", "#E2E8F0"), corner_radius=20)
+        shimmer2.pack(fill="both", expand=True)
 
-        # Sincronización en caliente
-        if key_vista == "patients" and hasattr(self.views["patients"], "_cargar_pacientes"):
-            try:
-                self.views["patients"]._cargar_pacientes()
-            except Exception as e_rf:
-                print(f"[APP SYNC] Error refrescando pacientes: {e_rf}")
-        elif key_vista == "agenda" and hasattr(self.views["agenda"], "actualizar_citas"):
-            try:
-                self.views["agenda"].actualizar_citas()
-            except Exception as e_ra:
-                print(f"[APP SYNC] Error refrescando agenda: {e_ra}")
+        def _finalize_load():
+            if loader_frame.winfo_exists():
+                loader_frame.destroy()
+            target_view = self.views[key_vista]
+            target_view.pack(fill="both", expand=True, padx=20, pady=20)
+
+            # Sincronización en caliente
+            if key_vista == "patients" and hasattr(self.views["patients"], "_cargar_pacientes"):
+                try:
+                    self.views["patients"]._cargar_pacientes()
+                except Exception:
+                    pass
+            elif key_vista == "agenda" and hasattr(self.views["agenda"], "actualizar_citas"):
+                try:
+                    self.views["agenda"].actualizar_citas()
+                except Exception:
+                    pass
+
+        # 180ms delay for ultra-fluid loading sensation
+        self.after(180, _finalize_load)
 
     def _toggle_floating_widget(self):
         if self.floating_widget is None or not self.floating_widget.winfo_exists():
