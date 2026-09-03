@@ -20,6 +20,48 @@ RUTA_CLINICA_CONF = BASE_DIR / "clinica.json"
 # PALETA Y MOTOR DE TEMAS BIMO (INSPIRADOS EN REFERENCIAS VISUALES)
 # ==========================================
 TEMAS_BIMO = {
+    "Skeuomorphism Desk (Light)": {
+        "mode": "light",
+        "bg_dark": "#E6E0D4",
+        "card_dark": "#FDFBF7",
+        "card_inner": "#FFFFFF",
+        "sidebar": "#2B2B2B",
+        "border": "#D3CFC6",
+        "text_primary": "#222222",
+        "text_muted": "#7A756D",
+        "input_bg": "#F2EFEB",
+        "input_border": "#C4BDB1",
+        "card_hover": "#F4F1EA",
+        "aqua": "#D32F2F",
+        "azul_acero": "#1976D2",
+        "azul_pastel": "#4CAF50",
+        "amarillo": "#FBC02D",
+        "fucsia": "#C2185B",
+        "logo_colors": ["#D32F2F", "#1976D2", "#4CAF50", "#FBC02D"],
+        "corner_radius": 4,
+        "corner_btn": 6,
+    },
+    "Skeuomorphism Stereo (Dark)": {
+        "mode": "dark",
+        "bg_dark": "#1A1C1E",
+        "card_dark": "#232629",
+        "card_inner": "#1E2023",
+        "sidebar": "#121315",
+        "border": "#3B4045",
+        "text_primary": "#E8EAED",
+        "text_muted": "#80868B",
+        "input_bg": "#0F1112",
+        "input_border": "#292C30",
+        "card_hover": "#292C30",
+        "aqua": "#00E676",
+        "azul_acero": "#2979FF",
+        "azul_pastel": "#FF1744",
+        "amarillo": "#FFEA00",
+        "fucsia": "#D500F9",
+        "logo_colors": ["#00E676", "#2979FF", "#FF1744", "#FFEA00"],
+        "corner_radius": 8,
+        "corner_btn": 4,
+    },
     "Bimo Classic": {
         "mode": "dark",
         "bg_dark": "#0B0F19",
@@ -224,18 +266,18 @@ def obtener_tema_guardado() -> str:
         if os.path.exists(RUTA_CLINICA_CONF):
             with open(RUTA_CLINICA_CONF, "r", encoding="utf-8") as f:
                 d = json.load(f)
-                return d.get("tema_visual", "Bimo Classic")
+                return d.get("tema_visual", "Skeuomorphism Stereo (Dark)")
     except Exception:
         pass
-    return "Bimo Classic"
+    return "Skeuomorphism Stereo (Dark)"
 
 def obtener_tema_activo_dict() -> dict:
     """Retorna siempre el diccionario completo y actualizado del tema activo."""
     nombre = obtener_tema_guardado()
-    return TEMAS_BIMO.get(nombre, TEMAS_BIMO["Bimo Classic"])
+    return TEMAS_BIMO.get(nombre, TEMAS_BIMO["Skeuomorphism Stereo (Dark)"])
 
 _tema_inicial = obtener_tema_guardado()
-_t_init = TEMAS_BIMO.get(_tema_inicial, TEMAS_BIMO["Bimo Classic"])
+_t_init = TEMAS_BIMO.get(_tema_inicial, TEMAS_BIMO["Skeuomorphism Stereo (Dark)"])
 
 COLOR_BG_DARK = _t_init["bg_dark"]
 COLOR_CARD_DARK = _t_init["card_dark"]

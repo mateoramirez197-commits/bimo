@@ -445,12 +445,12 @@ class BimoApp(ctk.CTk):
         self.container.configure(fg_color="transparent")
 
         self.main_app_card = ctk.CTkFrame(
-            self.container, fg_color=t["card_dark"], corner_radius=25, border_width=1, border_color=t["border"]
+            self.container, fg_color=t["card_dark"], corner_radius=t.get("corner_radius", 16), border_width=1, border_color=t["border"]
         )
         self.main_app_card.place(relx=0.01, rely=0.01, relwidth=0.98, relheight=0.98)
 
         self.main_content = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("card_inner", "#F8FAFC"), corner_radius=25, border_width=0
+            self.main_app_card, fg_color=t.get("card_inner", "#F8FAFC"), corner_radius=t.get("corner_radius", 16), border_width=0
         )
         self.main_content.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
 
@@ -458,7 +458,7 @@ class BimoApp(ctk.CTk):
                                 # REGLA 2: MAC DOCK INFERIOR (Floating Navigation)
         # ---------------------------------------------------------------------
         self.mac_dock = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("card_dark", "#FFFFFF"), width=440, height=60, corner_radius=30, border_width=1, border_color=t["border"]
+            self.main_app_card, fg_color=t.get("card_dark", "#FFFFFF"), width=440, height=60, corner_radius=t.get("corner_radius", 16), border_width=1, border_color=t["border"]
         )
         self.mac_dock.place(relx=0.5, rely=0.97, anchor="s")
         self.mac_dock.pack_propagate(False)
@@ -477,7 +477,7 @@ class BimoApp(ctk.CTk):
             btn = ctk.CTkButton(
                 parent, text=icon, width=44, height=44, font=("Material Icons", 26),
                 fg_color="transparent", text_color=normal_c,
-                hover_color="transparent", corner_radius=22, border_width=0, command=command
+                hover_color="transparent", corner_radius=t.get("corner_btn", 8), border_width=0, command=command
             )
             btn.place(x=x_pos, rely=0.5, anchor="w")
             
