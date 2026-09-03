@@ -431,87 +431,77 @@ class BimoApp(ctk.CTk):
         t = obtener_tema_activo_dict()
 
         # ---------------------------------------------------------------------
-        # REGLA 1: ARQUITECTURA DE LIENZO FLOTANTE (CANVAS SOBRE CANVAS)
-        # Fondo pastel en ventana raíz + Marco blanco puro (#FFFFFF) masivo con corner_radius=30
+                # ---------------------------------------------------------------------
+        # REGLA 1: ARQUITECTURA LIMPIA (Cero sombras simuladas superpuestas)
         # ---------------------------------------------------------------------
         self.configure(fg_color=t["bg_dark"])
         self.container.configure(fg_color="transparent")
 
-        # Capa Sombra Suave Neumórfica (desplazada 2px hacia abajo y a la derecha)
-        self.canvas_shadow = ctk.CTkFrame(
-            self.container, fg_color=t.get("shadow", "#CBD5E1"), corner_radius=30, border_width=0
-        )
-        self.canvas_shadow.place(relx=0.016, rely=0.018, relwidth=0.968, relheight=0.964)
-
-        # Lienzo Principal Blanco Puro (#FFFFFF) Masivo Flotante
         self.main_app_card = ctk.CTkFrame(
-            self.container, fg_color=t["card_dark"], corner_radius=30, border_width=1, border_color=t["border"]
+            self.container, fg_color=t["card_dark"], corner_radius=25, border_width=1, border_color=t["border"]
         )
-        self.main_app_card.place(relx=0.014, rely=0.015, relwidth=0.968, relheight=0.964)
-
-        # ---------------------------------------------------------------------
-        # REGLA 3: TARJETAS FLOTANTES CON SOMBRAS SIMULADAS (SOFT 3D)
-        # ---------------------------------------------------------------------
-        self.views_container = ctk.CTkFrame(self.main_app_card, fg_color="transparent")
-        # El contenedor ahora ocupa todo el ancho, ya que el dock está abajo
-        self.content_shadow = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("border", "#E2E8F0"), corner_radius=30, border_width=0
-        )
-        self.content_shadow.place(relx=0.012, rely=0.012, relwidth=0.978, relheight=0.978)
+        self.main_app_card.place(relx=0.01, rely=0.01, relwidth=0.98, relheight=0.98)
 
         self.main_content = ctk.CTkFrame(
-            self.main_app_card, fg_color=t.get("card_inner", "#F8FAFC"),
-            corner_radius=30, border_width=1, border_color=t["border"]
+            self.main_app_card, fg_color=t.get("card_inner", "#F8FAFC"), corner_radius=25, border_width=0
         )
-        self.main_content.place(relx=0.01, rely=0.01, relwidth=0.978, relheight=0.978)
+        self.main_content.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
 
-        # REGLA 2: MAC DOCK INFERIOR (Floating Navigation)
+
+                # REGLA 2: MAC DOCK INFERIOR (Floating Navigation)
         # ---------------------------------------------------------------------
         self.mac_dock = ctk.CTkFrame(
-            self.main_app_card, fg_color=t["sidebar"], height=64, corner_radius=32, border_width=1, border_color=t["border"]
+            self.main_app_card, fg_color=t["sidebar"], width=460, height=64, corner_radius=32, border_width=1, border_color=t["border"]
         )
-        # Animación interactiva: Siempre visible, anclado al fondo
         self.mac_dock.place(relx=0.5, rely=0.98, anchor="s")
+        self.mac_dock.pack_propagate(False)
 
         self.nav_buttons = {}
         items_menu = [
-            ("dictation", "🎙️"),
-            ("patients", "👥"),
-            ("agenda", "📅"),
-            ("mobile", "📱"),
-            ("settings", "⚙️"),
+            ("dictation", "???"),
+            ("patients", "??"),
+            ("agenda", "??"),
+            ("mobile", "??"),
+            ("settings", "??"),
         ]
 
+        from ui.animations import bind_hover_lift_and_fade
+        
+        current_x = 16
         for key, icon in items_menu:
             btn = ctk.CTkButton(
-                self.mac_dock, text=icon, width=48, height=48, font=("Segoe UI", 12),
+                self.mac_dock, text=icon, width=48, height=48, font=("Segoe UI", 20),
                 fg_color="transparent", text_color="#FFFFFF",
                 hover_color=t.get("azul_pastel", "#8B5CF6"), corner_radius=24,
                 border_width=0, command=lambda k=key: self._cambiar_vista(k)
             )
-            btn.pack(side="left", padx=8, pady=8)
-            bind_hover_microscale(btn, scale_factor=1.25)
+            btn.place(x=current_x, rely=0.5, anchor="w")
+            bind_hover_lift_and_fade(btn, normal_rely=0.5, hover_rely=0.35, normal_color=t["sidebar"], hover_color=t.get("azul_pastel", "#8B5CF6"), is_dock_button=True)
             self.nav_buttons[key] = btn
+            current_x += 56
 
         # Separador vertical en el dock
         sep = ctk.CTkFrame(self.mac_dock, width=2, height=32, fg_color=t.get("azul_pastel", "#8B5CF6"))
-        sep.pack(side="left", padx=6, pady=16)
+        sep.place(x=current_x, rely=0.5, anchor="w")
+        current_x += 16
 
         btn_floating = ctk.CTkButton(
-            self.mac_dock, text="📌", width=48, height=48, font=("Segoe UI", 12),
+            self.mac_dock, text="??", width=48, height=48, font=("Segoe UI", 20),
             fg_color="transparent", text_color="#FFFFFF", hover_color=t.get("azul_pastel", "#8B5CF6"), corner_radius=24,
             command=self._toggle_floating_widget
         )
-        btn_floating.pack(side="left", padx=8, pady=8)
-        bind_hover_microscale(btn_floating, scale_factor=1.25)
+        btn_floating.place(x=current_x, rely=0.5, anchor="w")
+        bind_hover_lift_and_fade(btn_floating, normal_rely=0.5, hover_rely=0.35, normal_color=t["sidebar"], hover_color=t.get("azul_pastel", "#8B5CF6"), is_dock_button=True)
+        current_x += 56
 
         btn_logout = ctk.CTkButton(
-            self.mac_dock, text="🚪", width=48, height=48, font=("Segoe UI", 12),
+            self.mac_dock, text="??", width=48, height=48, font=("Segoe UI", 20),
             fg_color="transparent", text_color="#FCA5A5", hover_color="#DC2626", corner_radius=24,
             command=self._logout
         )
-        btn_logout.pack(side="left", padx=8, pady=8)
-        bind_hover_microscale(btn_logout, scale_factor=1.25)
+        btn_logout.place(x=current_x, rely=0.5, anchor="w")
+        bind_hover_lift_and_fade(btn_logout, normal_rely=0.5, hover_rely=0.35, normal_color=t["sidebar"], hover_color="#DC2626", is_dock_button=True)
+
 
         # ---------------------------------------------------------------------
         # Instanciar vistas clínicas dentro del lienzo
@@ -549,24 +539,17 @@ class BimoApp(ctk.CTk):
         t = obtener_tema_activo_dict()
         for k, btn in self.nav_buttons.items():
             if k == key_vista:
-                btn.configure(
-                    fg_color="#FFFFFF", text_color=t["sidebar"],
-                    border_width=0, corner_radius=24
-                )
+                btn.configure(fg_color="#FFFFFF", text_color=t["sidebar"])
             else:
-                btn.configure(
-                    fg_color="transparent", text_color="#FFFFFF",
-                    border_width=0, corner_radius=24
-                )
+                btn.configure(fg_color=t["sidebar"], text_color="#FFFFFF")
 
-        # Skeleton Loader Spotify Lite Style
         loader_frame = ctk.CTkFrame(self.main_content, fg_color="transparent")
         loader_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        # Animación de Shimmer estática rápida
-        shimmer = ctk.CTkFrame(loader_frame, fg_color=t.get("border", "#E2E8F0"), corner_radius=20, height=120)
+        shimmer_color = t.get("border", "#E2E8F0")
+        shimmer = ctk.CTkFrame(loader_frame, fg_color=shimmer_color, corner_radius=20, height=120)
         shimmer.pack(fill="x", pady=(0, 20))
-        shimmer2 = ctk.CTkFrame(loader_frame, fg_color=t.get("border", "#E2E8F0"), corner_radius=20)
+        shimmer2 = ctk.CTkFrame(loader_frame, fg_color=shimmer_color, corner_radius=20)
         shimmer2.pack(fill="both", expand=True)
 
         def _finalize_load():
@@ -575,20 +558,15 @@ class BimoApp(ctk.CTk):
             target_view = self.views[key_vista]
             target_view.pack(fill="both", expand=True, padx=20, pady=20)
 
-            # Sincronización en caliente
             if key_vista == "patients" and hasattr(self.views["patients"], "_cargar_pacientes"):
-                try:
-                    self.views["patients"]._cargar_pacientes()
-                except Exception:
-                    pass
+                try: self.views["patients"]._cargar_pacientes()
+                except: pass
             elif key_vista == "agenda" and hasattr(self.views["agenda"], "actualizar_citas"):
-                try:
-                    self.views["agenda"].actualizar_citas()
-                except Exception:
-                    pass
+                try: self.views["agenda"].actualizar_citas()
+                except: pass
 
-        # 180ms delay for ultra-fluid loading sensation
-        self.after(180, _finalize_load)
+        self.after(160, _finalize_load)
+
 
     def _toggle_floating_widget(self):
         if self.floating_widget is None or not self.floating_widget.winfo_exists():
