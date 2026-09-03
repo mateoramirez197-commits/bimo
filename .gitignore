@@ -1,0 +1,62 @@
+# ==========================================
+# BIMO - GITIGNORE DE SEGURIDAD CLINICA
+# ==========================================
+
+# 1. Bovedas criptograficas y credenciales
+bimo.vault
+*.vault
+credentials.json
+token.json
+client_secret*.json
+*.env
+.env
+*.pem
+*.key
+*.cert
+
+# 2. Bases de datos y registros confidenciales de pacientes
+bimo.db
+bimo.db-wal
+bimo.db-shm
+*.db
+*.db-wal
+*.db-shm
+Pacientes/
+Reportes_Excel_CSV/
+
+# 3. Archivos temporales de audio e imagen
+temp_*.png
+temp_*.wav
+*.wav
+*.mp3
+*.log
+crash_log.txt
+
+# 4. Compilaciones y ejecutables
+build/
+dist/
+*.spec
+*.exe
+
+# 5. Python & Entornos Virtuales
+__pycache__/
+*.py[cod]
+*.class
+venv/
+.venv/
+env/
+.pytest_cache/
+
+# 6. IDEs y Sistema Operativo
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 7. Archivos de datos locales y perfiles
+*.xlsx
+*.csv
+*.lic
+*.ics
+calendar_profile.json

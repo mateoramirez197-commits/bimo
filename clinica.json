@@ -1,0 +1,17 @@
+{
+  "nombre_clinica": "BIMO Dental Clinic",
+  "nombre_doctor": "Dr. Mateo",
+  "registro_profesional": "RP-ODONT-2026",
+  "telefono_contacto": "+57 300 123 4567",
+  "pin_rapido": "1234",
+  "ultimo_usuario_recordado": {
+    "id": 3,
+    "nombre": "Dr. Titular",
+    "email": "mateoramirez197@gmail.com",
+    "rol": "medico",
+    "activo": 1,
+    "creado_en": "2026-09-01 09:01:56"
+  },
+  "tema_visual": "Obsidian Amber",
+  "onboarding_completado": true
+}
