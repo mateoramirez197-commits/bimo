@@ -63,6 +63,10 @@ class BimoApp(ctk.CTk):
         self.minsize(1040, 720)
         try:
             self.state("zoomed")
+        except:
+            pass
+        try:
+            self.state("zoomed")
         except Exception:
             pass
 
@@ -423,13 +427,6 @@ class BimoApp(ctk.CTk):
         
         self.after(500, self._toggle_floating_widget)
         
-        def force_zoomed():
-            try:
-                self.state("zoomed")
-            except:
-                pass
-        self.after(600, force_zoomed)
-
 
     def _construir_dashboard(self):
         # Detener listeners previos si existen antes de reconstruir
@@ -605,8 +602,13 @@ class BimoApp(ctk.CTk):
         self.configure(fg_color=t["bg_dark"])
         self.container.configure(fg_color="transparent")
         
+        
         vista_previa = getattr(self, "vista_actual", "settings")
         self._construir_dashboard()
+        if self.floating_widget and self.floating_widget.winfo_exists():
+            if hasattr(self.floating_widget, "aplicar_tema"):
+                self.floating_widget.aplicar_tema()
+
         self._cambiar_vista(vista_previa)
         
         if self.floating_widget and self.floating_widget.winfo_exists():

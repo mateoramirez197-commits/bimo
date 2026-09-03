@@ -42,14 +42,19 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         self._actualizar_reloj()
         self.actualizar_agenda()
 
-    def aplicar_tema(self, nombre_tema):
-        t = TEMAS_BIMO.get(nombre_tema, TEMAS_BIMO["Bimo Classic"])
+    def aplicar_tema(self, nombre_tema=None):
+        if hasattr(self, "main_frame") and self.main_frame.winfo_exists():
+            self.main_frame.destroy()
+        
+        # Actualizar bg de toplevel
+        from config import obtener_tema_activo_dict
+        t = obtener_tema_activo_dict()
         self.configure(fg_color=t["bg_dark"])
-        if hasattr(self, "main_frame"):
-            self.main_frame.configure(fg_color=t["bg_dark"], border_color=t["border"])
-        if hasattr(self, "header"):
-            self.header.configure(fg_color=t["card_dark"])
+        
+        self._build_ui()
+        self._actualizar_reloj()
         self.actualizar_agenda()
+
 
     def _build_ui(self):
         t = obtener_tema_activo_dict()
