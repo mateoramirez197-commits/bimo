@@ -38,9 +38,10 @@ class BimoApp(ctk.CTk):
 
         self.usuario_actual = None
         self.floating_widget = None
+        self.vista_actual = "dictation"
         self.configure(fg_color=t_ini.get("bg_dark", "#080C14"))
-        self.container = ctk.CTkFrame(self, fg_color=t_ini["bg_dark"], corner_radius=28, border_width=1, border_color=t_ini["border"])
-        self.container.pack(fill="both", expand=True, padx=12, pady=12)
+        self.container = ctk.CTkFrame(self, fg_color="transparent")
+        self.container.pack(fill="both", expand=True)
 
         # Iniciar con el Splash Screen de bienvenida animado
         self._mostrar_splash_screen()
@@ -384,11 +385,11 @@ class BimoApp(ctk.CTk):
         from config import obtener_tema_activo_dict
         t = obtener_tema_activo_dict()
 
-        self.container.configure(fg_color=t["bg_dark"], border_color=t["border"])
+        self.container.configure(fg_color="transparent")
 
-        # Marco exterior del Sidebar con borde redondeado pulido estilo Encarta Soft 3D
-        sidebar_outer = ctk.CTkFrame(self.container, fg_color=t["sidebar"], width=265, corner_radius=24, border_width=1, border_color=t["border"])
-        sidebar_outer.pack(side="left", fill="y", padx=(8, 8), pady=8)
+        # Marco exterior del Sidebar Flotante Separado con borde redondeado estilo Encarta Soft 3D
+        sidebar_outer = ctk.CTkFrame(self.container, fg_color=t["sidebar"], width=265, corner_radius=26, border_width=1, border_color=t["border"])
+        sidebar_outer.pack(side="left", fill="y", padx=(14, 10), pady=12)
         sidebar_outer.pack_propagate(False)
 
         self.sidebar = ctk.CTkFrame(sidebar_outer, fg_color="transparent")
@@ -452,9 +453,9 @@ class BimoApp(ctk.CTk):
         )
         btn_logout.pack(side="bottom", fill="x", padx=4, pady=16)
 
-        # Panel de Contenido Principal con márgenes suaves y bordes redondeados
-        self.main_content = ctk.CTkFrame(self.container, fg_color="transparent", corner_radius=26)
-        self.main_content.pack(side="right", fill="both", expand=True, padx=(0, 8), pady=8)
+        # Área de Contenido Central: CTkFrame MASIVO con corner_radius=30 ("Aplicación dentro de la aplicación")
+        self.main_content = ctk.CTkFrame(self.container, fg_color=t["card_dark"], corner_radius=30, border_width=1, border_color=t["border"])
+        self.main_content.pack(side="right", fill="both", expand=True, padx=(0, 14), pady=12)
 
         # Instanciar vistas
         self.views = {
@@ -495,10 +496,25 @@ class BimoApp(ctk.CTk):
             else:
                 btn.configure(fg_color="transparent", text_color=t["text_muted"], border_width=0)
 
-        # Transición suave estilo Encarta: Desempaquetado y micro-elevación
+        # Transición suave estilo Encarta: Micro-animación fluida multifotograma con .after()
         target_view = self.views[key_vista]
-        target_view.pack(fill="both", expand=True, pady=(6, 0))
-        self.after(20, lambda: target_view.pack_configure(pady=0))
+        target_view.pack(fill="both", expand=True, pady=(20, 0))
+
+        def _anim_step2():
+            if getattr(self, "vista_actual", None) == key_vista:
+                target_view.pack_configure(pady=(10, 0))
+                self.after(14, _anim_step3)
+
+        def _anim_step3():
+            if getattr(self, "vista_actual", None) == key_vista:
+                target_view.pack_configure(pady=(3, 0))
+                self.after(14, _anim_step_final)
+
+        def _anim_step_final():
+            if getattr(self, "vista_actual", None) == key_vista:
+                target_view.pack_configure(pady=0)
+
+        self.after(14, _anim_step2)
 
         # Sincronización en caliente: Refrescar automáticamente la base de datos al cambiar de pestaña
         if key_vista == "patients" and hasattr(self.views["patients"], "_cargar_pacientes"):

@@ -176,6 +176,7 @@ TEMAS_BIMO = {
         "input_bg": "#162035",
         "input_border": "#283956",
         "card_hover": "#1A253C",
+        "card_inner": "#1C2942",
         "aqua": "#00F5D4",
         "azul_acero": "#7C3AED",
         "azul_pastel": "#A78BFA",

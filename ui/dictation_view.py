@@ -56,7 +56,7 @@ class DictationView(ctk.CTkFrame):
         t = self.theme
 
         # Header Superior Pulido con Esquinas Redondeadas Soft 3D
-        top_bar = ctk.CTkFrame(self, fg_color=t["card_dark"], height=74, corner_radius=22, border_width=1, border_color=t["border"])
+        top_bar = ctk.CTkFrame(self, fg_color=t.get("card_inner", "#1C2942"), height=74, corner_radius=22, border_width=1, border_color=t["border"])
         top_bar.pack(fill="x", padx=20, pady=(16, 16))
         top_bar.pack_propagate(False)
 
@@ -89,7 +89,7 @@ class DictationView(ctk.CTkFrame):
         # ----------------------------------------------------
         # Panel Izquierdo: Controles, Botón y Widget de Agenda
         # ----------------------------------------------------
-        col_left = ctk.CTkFrame(main_grid, fg_color=t["card_dark"], corner_radius=26, width=400, border_width=1, border_color=t["border"])
+        col_left = ctk.CTkFrame(main_grid, fg_color=t.get("card_inner", "#1C2942"), corner_radius=24, width=400, border_width=1, border_color=t["border"])
         col_left.pack(side="left", fill="y", padx=(0, 14))
         col_left.pack_propagate(False)
 
@@ -105,7 +105,7 @@ class DictationView(ctk.CTkFrame):
 
         self.btn_abrir_pdf = ctk.CTkButton(
             col_left, text="📄 Abrir Último PDF", font=("Segoe UI", 12, "bold"),
-            height=42, fg_color="#334155", hover_color=t.get("card_hover", "#475569"),
+            height=42, fg_color="#334155", hover_color="#38BDF8",
             corner_radius=21, state="disabled", command=self._abrir_pdf_actual
         )
         self.btn_abrir_pdf.pack(fill="x", padx=20, pady=(0, 12))
@@ -136,7 +136,7 @@ class DictationView(ctk.CTkFrame):
         # ----------------------------------------------------
         # Panel Derecho: Salida Médica Elegante en Tarjetas Visuales (Cards)
         # ----------------------------------------------------
-        col_right = ctk.CTkFrame(main_grid, fg_color=t["card_dark"], corner_radius=26, border_width=1, border_color=t["border"])
+        col_right = ctk.CTkFrame(main_grid, fg_color=t.get("card_inner", "#1C2942"), corner_radius=24, border_width=1, border_color=t["border"])
         col_right.pack(side="right", fill="both", expand=True)
 
         header_r = ctk.CTkFrame(col_right, fg_color="transparent")
