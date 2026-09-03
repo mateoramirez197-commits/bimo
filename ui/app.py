@@ -20,6 +20,7 @@ from config import (
     obtener_ultimo_usuario_recordado, guardar_ultimo_usuario_recordado
 )
 from audio_feedback import sonar_confirmacion_exito
+from ui.animations import bind_hover_microscale
 
 def ease_out_cubic(t: float) -> float:
     """Función de aceleración/desaceleración suave (Cubic Easing Out)."""
@@ -481,6 +482,7 @@ class BimoApp(ctk.CTk):
                 border_width=0, command=lambda k=key: self._cambiar_vista(k)
             )
             btn.pack(pady=6)
+            bind_hover_microscale(btn, normal_h=48, hover_h=54)
             self.nav_buttons[key] = btn
 
         # Separador sutil
@@ -495,6 +497,7 @@ class BimoApp(ctk.CTk):
             command=self._toggle_floating_widget
         )
         btn_floating.pack(pady=4)
+        bind_hover_microscale(btn_floating, normal_h=48, hover_h=54)
 
         # Botón Logout
         btn_logout = ctk.CTkButton(
@@ -504,6 +507,7 @@ class BimoApp(ctk.CTk):
             command=self._logout
         )
         btn_logout.pack(side="bottom", pady=20)
+        bind_hover_microscale(btn_logout, normal_h=48, hover_h=54)
 
         # ---------------------------------------------------------------------
         # REGLA 3: TARJETAS FLOTANTES CON SOMBRAS SIMULADAS (SOFT 3D)
@@ -601,10 +605,11 @@ class BimoApp(ctk.CTk):
         guardar_tema_visual(nuevo_tema)
         aplicar_tema_config(nuevo_tema)
         t = obtener_tema_activo_dict()
+        ctk.set_appearance_mode(t.get("mode", "light"))
         self.configure(fg_color=t["bg_dark"])
         self.container.configure(fg_color="transparent")
         
-        vista_previa = getattr(self, "vista_actual", "dictation")
+        vista_previa = getattr(self, "vista_actual", "settings")
         self._construir_dashboard()
         self._cambiar_vista(vista_previa)
         

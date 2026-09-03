@@ -11,12 +11,13 @@ from config import (
 )
 from export_excel import exportar_a_excel
 from ui.pdf_preview_modal import VentanaVistaPreviaPDF
+from ui.animations import bind_hover_microscale, animar_despliegue_tarjeta
 
 class PatientsView(ctk.CTkFrame):
     def __init__(self, master):
         from config import obtener_tema_activo_dict
         self.theme = obtener_tema_activo_dict()
-        super().__init__(master, fg_color=self.theme["bg_dark"], corner_radius=self.theme["corner_radius"])
+        super().__init__(master, fg_color="transparent")
         self.paciente_seleccionado = None
         self.fecha_filtro = datetime.date.today().isoformat()
         self._build_ui()

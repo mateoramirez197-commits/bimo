@@ -9,10 +9,12 @@ from config import (
     CORNER_RADIUS_CARD, CORNER_RADIUS_BTN
 )
 
+from ui.animations import bind_hover_microscale
+
 class AgendaView(ctk.CTkFrame):
     def __init__(self, master):
         self.theme = obtener_tema_activo_dict()
-        super().__init__(master, fg_color=self.theme["bg_dark"], corner_radius=self.theme["corner_radius"])
+        super().__init__(master, fg_color="transparent")
         self._build_ui()
         self._cargar_citas()
 
@@ -31,6 +33,7 @@ class AgendaView(ctk.CTkFrame):
             fg_color="#334155", hover_color="#475569", corner_radius=t["corner_btn"], command=self._cargar_citas
         )
         btn_refresh.pack(side="right", padx=(6, 16))
+        bind_hover_microscale(btn_refresh, normal_h=36, hover_h=42)
 
         # Contenedor dividido en lista y formulario
         content = ctk.CTkFrame(self, fg_color="transparent")
@@ -86,6 +89,7 @@ class AgendaView(ctk.CTkFrame):
             command=self._guardar_cita
         )
         btn_agendar.pack(fill="x", padx=20, pady=(0, 14))
+        bind_hover_microscale(btn_agendar, normal_h=42, hover_h=48)
 
     def _on_cedula_change(self, event=None):
         ced = self.entry_cedula.get().strip().replace(" ", "")

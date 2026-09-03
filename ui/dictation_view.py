@@ -32,10 +32,12 @@ from wake_word_listener import BackgroundWakeListener
 from ui.pdf_preview_modal import VentanaVistaPreviaPDF
 from ui.correction_modal import VentanaCorreccionExpediente
 
+from ui.animations import bind_hover_microscale, animar_despliegue_tarjeta
+
 class DictationView(ctk.CTkFrame):
     def __init__(self, master):
         self.theme = obtener_tema_activo_dict()
-        super().__init__(master, fg_color=self.theme["bg_dark"], corner_radius=self.theme["corner_radius"])
+        super().__init__(master, fg_color="transparent")
         
         self.grabando = False
         self.datos_audio = []
@@ -81,6 +83,7 @@ class DictationView(ctk.CTkFrame):
             fg_color="#059669", hover_color="#047857", corner_radius=19, command=self._toggle_escucha_activa
         )
         self.btn_toggle_escucha.pack(side="right", padx=(6, 6))
+        bind_hover_microscale(self.btn_toggle_escucha, normal_h=38, hover_h=44)
 
         # Contenedor central dividido en dos paneles Soft 3D
         main_grid = ctk.CTkFrame(self, fg_color="transparent")
@@ -95,13 +98,14 @@ class DictationView(ctk.CTkFrame):
 
         ctk.CTkLabel(col_left, text="CONTROL DE CAPTURA", font=("Segoe UI", 11, "bold"), text_color=t["text_muted"]).pack(pady=(18, 10), padx=20, anchor="w")
 
-        # Botón masivo tipo PÍLDORA con hover neón de alto contraste
+        # Botón masivo tipo PÍLDORA con hover neón de alto contraste y animación micro-scale fluida
         self.btn_grabar = ctk.CTkButton(
             col_left, text="🎤 Iniciar Dictado Manual", font=("Segoe UI", 13, "bold"),
             height=52, fg_color=t["azul_acero"], hover_color=t.get("aqua", "#00F5D4"), text_color="#ffffff",
             corner_radius=26, command=self._toggle_grabacion
         )
         self.btn_grabar.pack(fill="x", padx=20, pady=(0, 10))
+        bind_hover_microscale(self.btn_grabar, normal_h=52, hover_h=60)
 
         self.btn_abrir_pdf = ctk.CTkButton(
             col_left, text="📄 Abrir Último PDF", font=("Segoe UI", 12, "bold"),
@@ -109,6 +113,7 @@ class DictationView(ctk.CTkFrame):
             corner_radius=21, state="disabled", command=self._abrir_pdf_actual
         )
         self.btn_abrir_pdf.pack(fill="x", padx=20, pady=(0, 12))
+        bind_hover_microscale(self.btn_abrir_pdf, normal_h=42, hover_h=48)
 
         # Visualizador de Telemetría Acústica e Ingeniería Médica
         hud_box = ctk.CTkFrame(col_left, fg_color=t["bg_dark"], corner_radius=18, border_width=1, border_color=t["border"])
@@ -176,10 +181,12 @@ class DictationView(ctk.CTkFrame):
         for w in self.cards_scroll.winfo_children():
             w.destroy()
 
-        card_hero = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=20, border_width=1, border_color=t["border"])
+        card_bg = t.get("card_dark", "#FFFFFF") if t.get("mode") == "light" else t.get("bg_dark", "#080C14")
+
+        card_hero = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
         card_hero.pack(fill="x", padx=10, pady=8)
 
-        ctk.CTkLabel(card_hero, text="🎙️ ESCUCHA ACTIVA BIMO LISTA", font=("Segoe UI", 14, "bold"), text_color=t["aqua"]).pack(anchor="w", padx=20, pady=(18, 6))
+        ctk.CTkLabel(card_hero, text="🎙️ ESCUCHA ACTIVA BIMO LISTA", font=("Segoe UI", 14, "bold"), text_color=t["aqua"] if t.get("mode") == "dark" else t["azul_acero"]).pack(anchor="w", padx=20, pady=(18, 6))
         ctk.CTkLabel(
             card_hero,
             text="Habla naturalmente sin presionar botones. BIMO identificará automáticamente tus órdenes:\n"
@@ -189,7 +196,7 @@ class DictationView(ctk.CTkFrame):
             font=("Segoe UI", 11, "bold"), text_color=t["text_muted"], justify="left"
         ).pack(anchor="w", padx=20, pady=(0, 18))
 
-        card_status = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=20, border_width=1, border_color=t["border"])
+        card_status = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
         card_status.pack(fill="x", padx=10, pady=8)
 
         ctk.CTkLabel(card_status, text="⚡ ESTADO DEL SISTEMA", font=("Segoe UI", 12, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=20, pady=(16, 4))
@@ -786,149 +793,149 @@ class DictationView(ctk.CTkFrame):
                     crear_historia_clinica(datos, paciente_id=paciente_id)
                     self.after(0, lambda: self._renderizar_tarjetas_clinicas(datos, ruta_pdf, cedula_faltante=False, paciente_id=paciente_id))
 
-            ctk.CTkButton(row_input, text="💾 Asignar Cédula", width=130, height=36, font=("Segoe UI", 11, "bold"), fg_color=t["azul_acero"], hover_color=t.get("aqua", "#00F5D4"), corner_radius=18, command=asignar_cedula).pack(side="left")
-            ent_c.bind("<Return>", lambda e: asignar_cedula())
+            # 1. Card Filiación Soft 3D
+            card_bg = t.get("card_dark", "#FFFFFF") if t.get("mode") == "light" else t.get("bg_dark", "#080C14")
 
-        # 1. Card Filiación Soft 3D
-        c_fil = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=20, border_width=1, border_color=t["border"])
-        c_fil.pack(fill="x", padx=10, pady=6)
+            c_fil = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
+            c_fil.pack(fill="x", padx=10, pady=6)
 
-        top_fil = ctk.CTkFrame(c_fil, fg_color="transparent")
-        top_fil.pack(fill="x", padx=18, pady=(14, 4))
-        ctk.CTkLabel(top_fil, text=f"👤 {nom}", font=("Segoe UI", 15, "bold"), text_color=t["text_primary"]).pack(side="left")
-        ctk.CTkLabel(top_fil, text=f"🆔 Cédula: {ced}", font=("Segoe UI", 11, "bold"), text_color=t["aqua"], fg_color=t["card_hover"], corner_radius=14, padx=12, pady=4).pack(side="right")
+            top_fil = ctk.CTkFrame(c_fil, fg_color="transparent")
+            top_fil.pack(fill="x", padx=18, pady=(14, 4))
+            ctk.CTkLabel(top_fil, text=f"👤 {nom}", font=("Segoe UI", 15, "bold"), text_color=t["text_primary"]).pack(side="left")
+            ctk.CTkLabel(top_fil, text=f"🆔 Cédula: {ced}", font=("Segoe UI", 11, "bold"), text_color=t["aqua"], fg_color=t["card_hover"], corner_radius=14, padx=12, pady=4).pack(side="right")
 
-        meta_str = f"Edad: {edad} años  |  Contacto: {tel}"
-        ctk.CTkLabel(c_fil, text=meta_str, font=("Segoe UI", 10, "bold"), text_color=t["text_muted"]).pack(anchor="w", padx=18, pady=(0, 14))
+            meta_str = f"Edad: {edad} años  |  Contacto: {tel}"
+            ctk.CTkLabel(c_fil, text=meta_str, font=("Segoe UI", 10, "bold"), text_color=t["text_muted"]).pack(anchor="w", padx=18, pady=(0, 14))
 
-        # 2. Card Diagnóstico y Tratamiento Soft 3D
-        c_diag = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=20, border_width=1, border_color=t["border"])
-        c_diag.pack(fill="x", padx=10, pady=6)
+            # 2. Card Diagnóstico y Tratamiento Soft 3D
+            c_diag = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
+            c_diag.pack(fill="x", padx=10, pady=6)
 
-        ctk.CTkLabel(c_diag, text="🩺 DIAGNÓSTICO & TRATAMIENTO", font=("Segoe UI", 12, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=18, pady=(14, 4))
-        ctk.CTkLabel(c_diag, text=f"• Motivo: {motivo}", font=("Segoe UI", 11), text_color=t["text_primary"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 2))
-        ctk.CTkLabel(c_diag, text=f"• Diagnóstico: {diag}", font=("Segoe UI", 11, "bold"), text_color=t["aqua"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 2))
-        ctk.CTkLabel(c_diag, text=f"• Plan Sugerido: {plan}", font=("Segoe UI", 11), text_color=t["text_primary"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 14))
+            ctk.CTkLabel(c_diag, text="🩺 DIAGNÓSTICO & TRATAMIENTO", font=("Segoe UI", 12, "bold"), text_color=t["azul_acero"]).pack(anchor="w", padx=18, pady=(14, 4))
+            ctk.CTkLabel(c_diag, text=f"• Motivo: {motivo}", font=("Segoe UI", 11), text_color=t["text_primary"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 2))
+            ctk.CTkLabel(c_diag, text=f"• Diagnóstico: {diag}", font=("Segoe UI", 11, "bold"), text_color=t["aqua"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 2))
+            ctk.CTkLabel(c_diag, text=f"• Plan Sugerido: {plan}", font=("Segoe UI", 11), text_color=t["text_primary"], anchor="w", justify="left").pack(fill="x", padx=18, pady=(2, 14))
 
-        # 3. Card Odontograma Digitalizado Soft 3D
-        c_odonto = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=20, border_width=1, border_color=t["border"])
-        c_odonto.pack(fill="x", padx=10, pady=6)
+            # 3. Card Odontograma Digitalizado Soft 3D
+            c_odonto = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
+            c_odonto.pack(fill="x", padx=10, pady=6)
 
-        ctk.CTkLabel(c_odonto, text="🦷 ODONTOGRAMA DIGITALIZADO (PIEZAS FDI)", font=("Segoe UI", 12, "bold"), text_color=t["amarillo"]).pack(anchor="w", padx=18, pady=(14, 6))
+            ctk.CTkLabel(c_odonto, text="🦷 ODONTOGRAMA DIGITALIZADO (PIEZAS FDI)", font=("Segoe UI", 12, "bold"), text_color=t["amarillo"]).pack(anchor="w", padx=18, pady=(14, 6))
 
-        if odonto:
-            for item in odonto:
-                p = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
-                h = item.get("procedimientos_o_hallazgos", [])
-                h_str = ", ".join(h) if isinstance(h, list) else str(h)
-                
-                h_lower = h_str.lower()
-                if any(k in h_lower for k in ["ausent", "perd", "extrac", "exodoncia", "extraíd", "extraida", "extraído", "extraido", "sacar", "sacaron"]):
-                    color_badge = "#94a3b8"
-                    icon_badge = "⚪"
-                elif any(k in h_lower for k in ["caries", "dolor", "fractura", "pulpitis", "infecci"]):
-                    color_badge = t.get("fucsia", "#ef4444")
-                    icon_badge = "🔴"
-                else:
-                    color_badge = t.get("azul_pastel", "#38bdf8")
-                    icon_badge = "🔵"
+            if odonto:
+                for item in odonto:
+                    p = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
+                    h = item.get("procedimientos_o_hallazgos", [])
+                    h_str = ", ".join(h) if isinstance(h, list) else str(h)
+                    
+                    h_lower = h_str.lower()
+                    if any(k in h_lower for k in ["ausent", "perd", "extrac", "exodoncia", "extraíd", "extraida", "extraído", "extraido", "sacar", "sacaron"]):
+                        color_badge = "#94a3b8"
+                        icon_badge = "⚪"
+                    elif any(k in h_lower for k in ["caries", "dolor", "fractura", "pulpitis", "infecci"]):
+                        color_badge = t.get("fucsia", "#ef4444")
+                        icon_badge = "🔴"
+                    else:
+                        color_badge = t.get("azul_pastel", "#38bdf8")
+                        icon_badge = "🔵"
 
-                row_p = ctk.CTkFrame(c_odonto, fg_color="transparent")
-                row_p.pack(fill="x", padx=18, pady=2)
-                ctk.CTkLabel(row_p, text=f"{icon_badge} Pieza {p}:", font=("Segoe UI", 11, "bold"), text_color=color_badge, width=85, anchor="w").pack(side="left")
-                ctk.CTkLabel(row_p, text=h_str, font=("Segoe UI", 10, "bold"), text_color=t["text_primary"], anchor="w").pack(side="left", fill="x", expand=True)
-            ctk.CTkFrame(c_odonto, height=10, fg_color="transparent").pack()
-        else:
-            ctk.CTkLabel(c_odonto, text="Estructuras dentales sin alteraciones patológicas registradas.", font=("Segoe UI", 10), text_color=t["text_muted"]).pack(anchor="w", padx=18, pady=(0, 14))
+                    row_p = ctk.CTkFrame(c_odonto, fg_color="transparent")
+                    row_p.pack(fill="x", padx=18, pady=2)
+                    ctk.CTkLabel(row_p, text=f"{icon_badge} Pieza {p}:", font=("Segoe UI", 11, "bold"), text_color=color_badge, width=85, anchor="w").pack(side="left")
+                    ctk.CTkLabel(row_p, text=h_str, font=("Segoe UI", 10, "bold"), text_color=t["text_primary"], anchor="w").pack(side="left", fill="x", expand=True)
+                ctk.CTkFrame(c_odonto, height=10, fg_color="transparent").pack()
+            else:
+                ctk.CTkLabel(c_odonto, text="Estructuras dentales sin alteraciones patológicas registradas.", font=("Segoe UI", 10), text_color=t["text_muted"]).pack(anchor="w", padx=18, pady=(0, 14))
 
-        # 4. Card Control de Pagos y Saldos Soft 3D
-        pagos_data = datos.get("pagos", {})
-        c_costo = float(pagos_data.get("costo_total") or 0.0)
-        c_abono = float(pagos_data.get("abono") or 0.0)
-        c_saldo = float(pagos_data.get("saldo_pendiente") if pagos_data.get("saldo_pendiente") is not None else max(0.0, round(c_costo - c_abono, 2)))
+            # 4. Card Control de Pagos y Saldos Soft 3D
+            pagos_data = datos.get("pagos", {})
+            c_costo = float(pagos_data.get("costo_total") or 0.0)
+            c_abono = float(pagos_data.get("abono") or 0.0)
+            c_saldo = float(pagos_data.get("saldo_pendiente") if pagos_data.get("saldo_pendiente") is not None else max(0.0, round(c_costo - c_abono, 2)))
 
-        card_pago = ctk.CTkFrame(self.cards_scroll, fg_color=t["bg_dark"], corner_radius=20, border_width=1, border_color=t["border"])
-        card_pago.pack(fill="x", padx=10, pady=6)
+            card_pago = ctk.CTkFrame(self.cards_scroll, fg_color=card_bg, corner_radius=20, border_width=1, border_color=t["border"])
+            card_pago.pack(fill="x", padx=10, pady=6)
 
-        top_pg = ctk.CTkFrame(card_pago, fg_color="transparent")
-        top_pg.pack(fill="x", padx=18, pady=(14, 4))
-        ctk.CTkLabel(top_pg, text="💳 CONTROL DE PAGOS & ESTADO DE CUENTA", font=("Segoe UI", 12, "bold"), text_color=t["aqua"]).pack(side="left")
+            top_pg = ctk.CTkFrame(card_pago, fg_color="transparent")
+            top_pg.pack(fill="x", padx=18, pady=(14, 4))
+            ctk.CTkLabel(top_pg, text="💳 CONTROL DE PAGOS & ESTADO DE CUENTA", font=("Segoe UI", 12, "bold"), text_color=t["aqua"]).pack(side="left")
 
-        # Badge interactivo tipo PÍLDORA de estado de cuenta
-        if c_costo > 0 and c_saldo <= 0:
-            badge_p_col = "#10b981"
-            badge_p_bg = "#064e3b" if t["mode"] == "dark" else "#d1fae5"
-            badge_p_txt = "✅ SALDO CANCELADO"
-        elif c_saldo > 0:
-            badge_p_col = "#fbbf24"
-            badge_p_bg = "#451a03" if t["mode"] == "dark" else "#fef3c7"
-            badge_p_txt = f"⚠️ SALDO RESTANTE: ${c_saldo:.2f}"
-        else:
-            badge_p_col = t.get("text_muted", "#94a3b8")
-            badge_p_bg = t.get("card_hover", "#334155")
-            badge_p_txt = "● CUENTAS AL DIA"
+            # Badge interactivo tipo PÍLDORA de estado de cuenta
+            if c_costo > 0 and c_saldo <= 0:
+                badge_p_col = "#10b981"
+                badge_p_bg = "#064e3b" if t["mode"] == "dark" else "#d1fae5"
+                badge_p_txt = "✅ SALDO CANCELADO"
+            elif c_saldo > 0:
+                badge_p_col = "#fbbf24"
+                badge_p_bg = "#451a03" if t["mode"] == "dark" else "#fef3c7"
+                badge_p_txt = f"⚠️ SALDO RESTANTE: ${c_saldo:.2f}"
+            else:
+                badge_p_col = t["text_muted"]
+                badge_p_bg = t["card_hover"]
+                badge_p_txt = "ℹ️ SIN PAGOS REGISTRADOS"
 
-        ctk.CTkLabel(top_pg, text=badge_p_txt, font=("Segoe UI", 11, "bold"), text_color=badge_p_col, fg_color=badge_p_bg, corner_radius=14, padx=14, pady=4).pack(side="right")
-
-        costo_f_str = f"${c_costo:.2f}" if c_costo > 0 else "Por definir"
-        abono_f_str = f"${c_abono:.2f}" if c_abono > 0 else "$0.00"
-        saldo_f_str = f"${c_saldo:.2f}" if c_saldo > 0 else "$0.00"
-        metodo_f_str = pagos_data.get("metodo_pago") or "Efectivo"
-
-        detalles_fin = f"• Costo del Tratamiento: {costo_f_str}   |   Abono Recibido: {abono_f_str}   |   Saldo Pendiente: {saldo_f_str}\n• Método de Pago: {metodo_f_str}"
-        if pagos_data.get("notas"):
-            detalles_fin += f"   |   Concepto: {pagos_data['notas']}"
-
-        ctk.CTkLabel(card_pago, text=detalles_fin, font=("Segoe UI", 10, "bold"), text_color=t["text_primary"], justify="left", anchor="w").pack(fill="x", padx=18, pady=(2, 8))
-
-        from ui.payment_modal import VentanaPagosModal
-        def _abrir_modal_pagos_dictation():
-            from database import obtener_consulta_del_dia
-            c_hoy = obtener_consulta_del_dia(paciente_id) if paciente_id else None
-            c_id_pago = c_hoy.get("id") if c_hoy else None
-            VentanaPagosModal(
-                self, datos, paciente_id=paciente_id, consulta_id=c_id_pago, ruta_pdf=ruta_pdf,
-                on_update_callback=lambda d_up, r_up: self.after(0, lambda: self._renderizar_tarjetas_clinicas(d_up, r_up, cedula_faltante=cedula_faltante, paciente_id=paciente_id, es_actualizacion=es_actualizacion)),
-                theme=t
+            badge_pago = ctk.CTkLabel(
+                top_pg, text=badge_p_txt, font=("Segoe UI", 10, "bold"),
+                text_color=badge_p_col, fg_color=badge_p_bg, corner_radius=12, padx=10, pady=4
             )
+            badge_pago.pack(side="right")
 
-        btn_pago_act = ctk.CTkButton(
-            card_pago, text="💵 Ventanita de Pagos & Saldos", height=36, width=220,
-            font=("Segoe UI", 11, "bold"), fg_color=t.get("azul_acero", "#1e3a8a"),
-            hover_color=t.get("aqua", "#00F5D4"), text_color="#ffffff",
-            corner_radius=18, command=_abrir_modal_pagos_dictation
-        )
-        btn_pago_act.pack(anchor="w", padx=18, pady=(0, 12))
+            row_p_info = ctk.CTkFrame(card_pago, fg_color="transparent")
+            row_p_info.pack(fill="x", padx=18, pady=(4, 8))
+            txt_pagos = f"• Costo Tratamiento: ${c_costo:.2f}  |  • Abono Recibido: ${c_abono:.2f}  |  • Saldo Pendiente: ${c_saldo:.2f}"
+            ctk.CTkLabel(row_p_info, text=txt_pagos, font=("Segoe UI", 11, "bold"), text_color=t["text_primary"]).pack(side="left")
 
-        # 5. Botones de acción clínica tipo PÍLDORA (Vista previa nativa, Corrección de datos y Apertura)
-        if ruta_pdf:
-            bar_actions = ctk.CTkFrame(self.cards_scroll, fg_color="transparent")
-            bar_actions.pack(fill="x", padx=10, pady=(8, 14))
+            # Botón para abrir modal de pagos con micro-animación fluida
+            c_id_pago = datos.get("id") or datos.get("consulta_id")
+            def _abrir_modal_pagos_dictation():
+                from ui.payment_modal import VentanaModalPagos
+                VentanaModalPagos(
+                    self, datos, paciente_id=paciente_id, consulta_id=c_id_pago, ruta_pdf=ruta_pdf,
+                    on_update_callback=lambda d_up, r_up: self.after(0, lambda: self._renderizar_tarjetas_clinicas(d_up, r_up, cedula_faltante=cedula_faltante, paciente_id=paciente_id, es_actualizacion=es_actualizacion)),
+                    theme=t
+                )
 
-            btn_prev = ctk.CTkButton(
-                bar_actions, text="👁️ Vista Previa del PDF", height=44,
-                font=("Segoe UI", 12, "bold"), fg_color=t["aqua"], hover_color=t.get("azul_acero", "#7C3AED"),
-                text_color="#ffffff", corner_radius=22,
-                command=lambda r=ruta_pdf: self._mostrar_vista_previa_pdf(r)
+            btn_pago_act = ctk.CTkButton(
+                card_pago, text="💵 Ventanita de Pagos & Saldos", height=36, width=220,
+                font=("Segoe UI", 11, "bold"), fg_color=t.get("azul_acero", "#1e3a8a"),
+                hover_color=t.get("aqua", "#00F5D4"), text_color="#ffffff",
+                corner_radius=18, command=_abrir_modal_pagos_dictation
             )
-            btn_prev.pack(side="left", fill="x", expand=True, padx=(0, 6))
+            btn_pago_act.pack(anchor="w", padx=18, pady=(0, 12))
+            bind_hover_microscale(btn_pago_act, normal_h=36, hover_h=42)
 
-            btn_edit = ctk.CTkButton(
-                bar_actions, text="✏️ Corregir Datos / Regenerar", height=44,
-                font=("Segoe UI", 11, "bold"), fg_color="#334155", hover_color="#475569",
-                text_color="#ffffff", corner_radius=22,
-                command=lambda d=datos, r=ruta_pdf, p=paciente_id: self._abrir_modal_correccion(d, r, p)
-            )
-            btn_edit.pack(side="left", fill="x", expand=True, padx=6)
+            # 5. Botones de acción clínica tipo PÍLDORA (Vista previa nativa, Corrección de datos y Apertura)
+            if ruta_pdf:
+                bar_actions = ctk.CTkFrame(self.cards_scroll, fg_color="transparent")
+                bar_actions.pack(fill="x", padx=10, pady=(8, 14))
 
-            from config import abrir_archivo_o_carpeta_nativo
-            btn_ext = ctk.CTkButton(
-                bar_actions, text="↗ Abrir", width=85, height=44,
-                font=("Segoe UI", 11, "bold"), fg_color=t["azul_acero"], hover_color=t.get("azul_pastel", "#38bdf8"),
-                text_color="#ffffff", corner_radius=22,
-                command=lambda r=ruta_pdf: abrir_archivo_o_carpeta_nativo(r)
-            )
-            btn_ext.pack(side="right", padx=(6, 0))
+                btn_prev = ctk.CTkButton(
+                    bar_actions, text="👁️ Vista Previa del PDF", height=44,
+                    font=("Segoe UI", 12, "bold"), fg_color=t["aqua"], hover_color=t.get("azul_acero", "#7C3AED"),
+                    text_color="#ffffff", corner_radius=22,
+                    command=lambda r=ruta_pdf: self._mostrar_vista_previa_pdf(r)
+                )
+                btn_prev.pack(side="left", fill="x", expand=True, padx=(0, 6))
+                bind_hover_microscale(btn_prev, normal_h=44, hover_h=50)
+
+                btn_edit = ctk.CTkButton(
+                    bar_actions, text="✏️ Corregir Datos / Regenerar", height=44,
+                    font=("Segoe UI", 11, "bold"), fg_color="#334155", hover_color="#475569",
+                    text_color="#ffffff", corner_radius=22,
+                    command=lambda d=datos, r=ruta_pdf, p=paciente_id: self._abrir_modal_correccion(d, r, p)
+                )
+                btn_edit.pack(side="left", fill="x", expand=True, padx=6)
+                bind_hover_microscale(btn_edit, normal_h=44, hover_h=50)
+
+                from config import abrir_archivo_o_carpeta_nativo
+                btn_ext = ctk.CTkButton(
+                    bar_actions, text="↗ Abrir", width=85, height=44,
+                    font=("Segoe UI", 11, "bold"), fg_color=t["azul_acero"], hover_color=t.get("azul_pastel", "#38bdf8"),
+                    text_color="#ffffff", corner_radius=22,
+                    command=lambda r=ruta_pdf: abrir_archivo_o_carpeta_nativo(r)
+                )
+                btn_ext.pack(side="right", padx=(6, 0))
+                bind_hover_microscale(btn_ext, normal_h=44, hover_h=50)
 
     def _mostrar_vista_previa_pdf(self, ruta_pdf):
         """Abre la ventana modal con la vista previa nativa de alta definición del PDF."""

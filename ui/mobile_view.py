@@ -7,7 +7,7 @@ from mobile_mic_server import obtener_ip_local, generar_codigo_qr_url
 class MobileView(ctk.CTkFrame):
     def __init__(self, master):
         self.theme = obtener_tema_activo_dict()
-        super().__init__(master, fg_color=self.theme["bg_dark"], corner_radius=self.theme["corner_radius"])
+        super().__init__(master, fg_color="transparent")
         self._build_ui()
 
     def _build_ui(self):

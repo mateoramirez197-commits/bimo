@@ -5,11 +5,12 @@ from config import (
 )
 from auth import registrar_usuario
 from license_manager import validar_licencia, obtener_hwid_equipo
+from ui.animations import bind_hover_microscale
 
 class SettingsView(ctk.CTkFrame):
     def __init__(self, master):
         self.theme = obtener_tema_activo_dict()
-        super().__init__(master, fg_color=self.theme["bg_dark"], corner_radius=self.theme["corner_radius"])
+        super().__init__(master, fg_color="transparent")
         self.datos_clinica = cargar_datos_clinica()
         self._build_ui()
 
@@ -106,6 +107,7 @@ class SettingsView(ctk.CTkFrame):
             corner_radius=t["corner_btn"], command=self._guardar_clinica
         )
         btn_guardar_clinica.pack(fill="x", padx=24, pady=(0, 24))
+        bind_hover_microscale(btn_guardar_clinica, normal_h=42, hover_h=48)
 
         # ----------------------------------------------------
         # 2. CUENTA Y SINCRONIZACIÓN DE GOOGLE CALENDAR
@@ -124,6 +126,7 @@ class SettingsView(ctk.CTkFrame):
             command=self._vincular_nueva_cuenta_calendar
         )
         btn_nueva_cuenta.pack(fill="x", padx=24, pady=(0, 8))
+        bind_hover_microscale(btn_nueva_cuenta, normal_h=40, hover_h=46)
 
         self.lbl_cal_msg = ctk.CTkLabel(form, text="", font=("Segoe UI", 11, "bold"))
         self.lbl_cal_msg.pack(padx=24, pady=(0, 18), anchor="w")
@@ -153,6 +156,7 @@ class SettingsView(ctk.CTkFrame):
             corner_radius=t["corner_btn"], command=self._crear_asistente
         )
         btn_add_staff.pack(side="right")
+        bind_hover_microscale(btn_add_staff, normal_h=38, hover_h=44)
 
         self.lbl_staff_msg = ctk.CTkLabel(form, text="", font=("Segoe UI", 11))
         self.lbl_staff_msg.pack(pady=(0, 16))
