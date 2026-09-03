@@ -477,7 +477,7 @@ class BimoApp(ctk.CTk):
             btn = ctk.CTkButton(
                 parent, text=icon, width=44, height=44, font=("Material Icons", 26),
                 fg_color="transparent", text_color=normal_c,
-                hover_color="transparent", corner_radius=t.get("corner_btn", 8), border_width=0, command=command
+                hover_color=t.get("sidebar", "#1E293B"), corner_radius=t.get("corner_btn", 8), border_width=0, command=command
             )
             btn.place(x=x_pos, rely=0.5, anchor="w")
             
