@@ -38,10 +38,9 @@ class BimoApp(ctk.CTk):
 
         self.usuario_actual = None
         self.floating_widget = None
-        self.vista_actual = "dictation"
-
-        self.container = ctk.CTkFrame(self, fg_color=t_ini["bg_dark"], corner_radius=20, border_width=1, border_color=t_ini["border"])
-        self.container.pack(fill="both", expand=True, padx=6, pady=6)
+        self.configure(fg_color=t_ini.get("bg_dark", "#080C14"))
+        self.container = ctk.CTkFrame(self, fg_color=t_ini["bg_dark"], corner_radius=28, border_width=1, border_color=t_ini["border"])
+        self.container.pack(fill="both", expand=True, padx=12, pady=12)
 
         # Iniciar con el Splash Screen de bienvenida animado
         self._mostrar_splash_screen()
@@ -387,9 +386,9 @@ class BimoApp(ctk.CTk):
 
         self.container.configure(fg_color=t["bg_dark"], border_color=t["border"])
 
-        # Marco exterior del Sidebar con borde redondeado pulido
-        sidebar_outer = ctk.CTkFrame(self.container, fg_color=t["sidebar"], width=255, corner_radius=16, border_width=1, border_color=t["border"])
-        sidebar_outer.pack(side="left", fill="y", padx=(2, 6))
+        # Marco exterior del Sidebar con borde redondeado pulido estilo Encarta Soft 3D
+        sidebar_outer = ctk.CTkFrame(self.container, fg_color=t["sidebar"], width=265, corner_radius=24, border_width=1, border_color=t["border"])
+        sidebar_outer.pack(side="left", fill="y", padx=(8, 8), pady=8)
         sidebar_outer.pack_propagate(False)
 
         self.sidebar = ctk.CTkFrame(sidebar_outer, fg_color="transparent")
@@ -397,64 +396,65 @@ class BimoApp(ctk.CTk):
 
         # Logotipo Vanguardista Superior Izquierdo BIMO
         logo_box = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        logo_box.pack(pady=(18, 2))
+        logo_box.pack(pady=(16, 2))
         BimoLogo(logo_box, font_size=32).pack()
 
-        ctk.CTkLabel(self.sidebar, text="CLINICAL PLATFORM", font=("Segoe UI", 10, "bold"), text_color=t["text_muted"]).pack(pady=(0, 16))
+        ctk.CTkLabel(self.sidebar, text="CLINICAL PLATFORM", font=("Segoe UI", 10, "bold"), text_color=t["text_muted"]).pack(pady=(0, 14))
 
         # Tarjeta de Usuario Conectado con esquinas suaves
-        user_card = ctk.CTkFrame(self.sidebar, fg_color=t["card_dark"], corner_radius=14, border_width=1, border_color=t["border"])
-        user_card.pack(fill="x", padx=6, pady=(0, 16))
+        user_card = ctk.CTkFrame(self.sidebar, fg_color=t["card_dark"], corner_radius=18, border_width=1, border_color=t["border"])
+        user_card.pack(fill="x", padx=4, pady=(0, 16))
         
         nombre_u = self.usuario_actual.get("nombre", "Usuario")
         rol_u = self.usuario_actual.get("rol", "medico").upper()
         rol_color = t["aqua"] if rol_u == "MEDICO" else t["azul_acero"]
 
-        ctk.CTkLabel(user_card, text=nombre_u, font=("Segoe UI", 12, "bold"), text_color=t["text_primary"]).pack(anchor="w", padx=12, pady=(10, 2))
-        ctk.CTkLabel(user_card, text=f"● Rol: {rol_u}", font=("Segoe UI", 10, "bold"), text_color=rol_color).pack(anchor="w", padx=12, pady=(0, 10))
+        ctk.CTkLabel(user_card, text=nombre_u, font=("Segoe UI", 12, "bold"), text_color=t["text_primary"]).pack(anchor="w", padx=14, pady=(10, 2))
+        ctk.CTkLabel(user_card, text=f"● Rol: {rol_u}", font=("Segoe UI", 10, "bold"), text_color=rol_color).pack(anchor="w", padx=14, pady=(0, 10))
 
-        # Botones de Navegación del Sidebar con bordes redondeados pulidos
+        # Botones de Navegación del Sidebar tipo PÍLDORA (pill-shaped) con hover neón vibrante
         self.nav_buttons = {}
         items_menu = [
-            ("dictation", "🎙️  Dictado Clínico"),
-            ("patients", "👥  Pacientes & Archivo"),
-            ("agenda", "📅  Agenda de Citas"),
-            ("mobile", "📱  App Smartphone"),
-            ("settings", "⚙️  Configuración"),
+            ("dictation", "🎙️   Dictado Clínico"),
+            ("patients", "👥   Pacientes & Archivo"),
+            ("agenda", "📅   Agenda de Citas"),
+            ("mobile", "📱   App Smartphone"),
+            ("settings", "⚙️   Configuración"),
         ]
 
         for key, text in items_menu:
             btn = ctk.CTkButton(
-                self.sidebar, text=text, height=44, font=("Segoe UI", 13, "bold"),
+                self.sidebar, text=text, height=46, font=("Segoe UI", 12, "bold"),
                 anchor="w", fg_color="transparent", text_color=t["text_muted"],
-                hover_color=t["card_hover"], corner_radius=t["corner_btn"],
+                hover_color=t.get("card_hover", "#1A253C"), corner_radius=23,
+                border_width=0,
                 command=lambda k=key: self._cambiar_vista(k)
             )
-            btn.pack(fill="x", padx=6, pady=3)
+            btn.pack(fill="x", padx=4, pady=3)
             self.nav_buttons[key] = btn
 
         # Botón para activar/abrir el Widget Flotante en el Escritorio
         btn_floating = ctk.CTkButton(
-            self.sidebar, text="📌  Widget en Escritorio", height=40, font=("Segoe UI", 11, "bold"),
-            anchor="w", fg_color=t["card_dark"], text_color=t["aqua"], hover_color=t["card_hover"],
-            corner_radius=t["corner_btn"], border_width=1, border_color=t["border"],
+            self.sidebar, text="📌   Widget en Escritorio", height=42, font=("Segoe UI", 11, "bold"),
+            anchor="w", fg_color=t["card_dark"], text_color=t["aqua"], hover_color=t.get("card_hover", "#1A253C"),
+            corner_radius=21, border_width=1, border_color=t["border"],
             command=self._toggle_floating_widget
         )
-        btn_floating.pack(fill="x", padx=6, pady=(14, 3))
+        btn_floating.pack(fill="x", padx=4, pady=(14, 3))
 
         # Botón Cerrar Sesión
         btn_logout = ctk.CTkButton(
-            self.sidebar, text="🚪  Cerrar Sesión", height=40, font=("Segoe UI", 12, "bold"),
+            self.sidebar, text="🚪   Cerrar Sesión", height=42, font=("Segoe UI", 11, "bold"),
             anchor="w", fg_color="transparent", text_color=t["fucsia"],
             hover_color="#fee2e2" if t["mode"] == "light" else "#331018",
-            corner_radius=t["corner_btn"],
+            corner_radius=21,
             command=self._logout
         )
-        btn_logout.pack(side="bottom", fill="x", padx=6, pady=16)
+        btn_logout.pack(side="bottom", fill="x", padx=4, pady=16)
 
         # Panel de Contenido Principal con márgenes suaves y bordes redondeados
-        self.main_content = ctk.CTkFrame(self.container, fg_color=t["bg_dark"], corner_radius=t["corner_radius"])
-        self.main_content.pack(side="right", fill="both", expand=True, padx=(4, 8), pady=8)
+        self.main_content = ctk.CTkFrame(self.container, fg_color="transparent", corner_radius=26)
+        self.main_content.pack(side="right", fill="both", expand=True, padx=(0, 8), pady=8)
 
         # Instanciar vistas
         self.views = {
@@ -488,11 +488,17 @@ class BimoApp(ctk.CTk):
         t = obtener_tema_activo_dict()
         for k, btn in self.nav_buttons.items():
             if k == key_vista:
-                btn.configure(fg_color=t["azul_acero"], text_color="#ffffff")
+                btn.configure(
+                    fg_color=t["azul_acero"], text_color="#ffffff",
+                    border_width=1, border_color=t.get("aqua", "#00F5D4")
+                )
             else:
-                btn.configure(fg_color="transparent", text_color=t["text_muted"])
+                btn.configure(fg_color="transparent", text_color=t["text_muted"], border_width=0)
 
-        self.views[key_vista].pack(fill="both", expand=True)
+        # Transición suave estilo Encarta: Desempaquetado y micro-elevación
+        target_view = self.views[key_vista]
+        target_view.pack(fill="both", expand=True, pady=(6, 0))
+        self.after(20, lambda: target_view.pack_configure(pady=0))
 
         # Sincronización en caliente: Refrescar automáticamente la base de datos al cambiar de pestaña
         if key_vista == "patients" and hasattr(self.views["patients"], "_cargar_pacientes"):

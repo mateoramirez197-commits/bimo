@@ -164,6 +164,26 @@ TEMAS_BIMO = {
         "logo_colors": ["#00F0FF", "#38BDF8", "#0284C7", "#FDE047"],
         "corner_radius": 16,
         "corner_btn": 12,
+    },
+    "Soft 3D Encarta": {
+        "mode": "dark",
+        "bg_dark": "#080C14",
+        "card_dark": "#121A2B",
+        "sidebar": "#0D1322",
+        "border": "#1E2A40",
+        "text_primary": "#FFFFFF",
+        "text_muted": "#94A3B8",
+        "input_bg": "#162035",
+        "input_border": "#283956",
+        "card_hover": "#1A253C",
+        "aqua": "#00F5D4",
+        "azul_acero": "#7C3AED",
+        "azul_pastel": "#A78BFA",
+        "amarillo": "#FBBF24",
+        "fucsia": "#F43F5E",
+        "logo_colors": ["#00F5D4", "#7C3AED", "#A78BFA", "#38BDF8"],
+        "corner_radius": 26,
+        "corner_btn": 22,
     }
 }
 
