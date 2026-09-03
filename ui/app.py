@@ -66,6 +66,13 @@ class BimoApp(ctk.CTk):
         except Exception:
             pass
 
+        try:
+            import customtkinter as ctk
+            ctk.FontManager.load_font('assets/MaterialIcons-Regular.ttf')
+        except Exception as e:
+            print(f'Could not load material icons: {e}')
+
+
         # Aplicar el tema guardado al arrancar
         tema_ini = obtener_tema_guardado()
         t_ini = aplicar_tema_config(tema_ini)
@@ -448,59 +455,56 @@ class BimoApp(ctk.CTk):
         self.main_content.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=1.0)
 
 
-                # REGLA 2: MAC DOCK INFERIOR (Floating Navigation)
+                                # REGLA 2: MAC DOCK INFERIOR (Floating Navigation)
         # ---------------------------------------------------------------------
         self.mac_dock = ctk.CTkFrame(
-            self.main_app_card, fg_color=t["sidebar"], width=460, height=64, corner_radius=32, border_width=1, border_color=t["border"]
+            self.main_app_card, fg_color=t.get("card_dark", "#FFFFFF"), width=440, height=60, corner_radius=30, border_width=1, border_color=t["border"]
         )
-        self.mac_dock.place(relx=0.5, rely=0.98, anchor="s")
+        self.mac_dock.place(relx=0.5, rely=0.97, anchor="s")
         self.mac_dock.pack_propagate(False)
 
         self.nav_buttons = {}
+        # Usamos ligaduras de Material Icons en vez de emojis cuadrados
         items_menu = [
-            ("dictation", "???"),
-            ("patients", "??"),
-            ("agenda", "??"),
-            ("mobile", "??"),
-            ("settings", "??"),
+            ("dictation", "mic"),
+            ("patients", "people"),
+            ("agenda", "event"),
+            ("mobile", "smartphone"),
+            ("settings", "settings"),
         ]
 
-        from ui.animations import bind_hover_lift_and_fade
-        
-        current_x = 16
-        for key, icon in items_menu:
+        def create_dock_btn(parent, icon, x_pos, command, hover_c, normal_c):
             btn = ctk.CTkButton(
-                self.mac_dock, text=icon, width=48, height=48, font=("Segoe UI", 20),
-                fg_color="transparent", text_color="#FFFFFF",
-                hover_color=t.get("azul_pastel", "#8B5CF6"), corner_radius=24,
-                border_width=0, command=lambda k=key: self._cambiar_vista(k)
+                parent, text=icon, width=44, height=44, font=("Material Icons", 26),
+                fg_color="transparent", text_color=normal_c,
+                hover_color="transparent", corner_radius=22, border_width=0, command=command
             )
-            btn.place(x=current_x, rely=0.5, anchor="w")
-            bind_hover_lift_and_fade(btn, normal_rely=0.5, hover_rely=0.35, normal_color=t["sidebar"], hover_color=t.get("azul_pastel", "#8B5CF6"), is_dock_button=True)
+            btn.place(x=x_pos, rely=0.5, anchor="w")
+            
+            # Hover instantaneo nativo sin loops para evitar destellos
+            def on_enter(e): btn.configure(text_color=hover_c)
+            def on_leave(e): btn.configure(text_color=normal_c)
+            btn.bind("<Enter>", on_enter, add="+")
+            btn.bind("<Leave>", on_leave, add="+")
+            return btn
+        
+        current_x = 18
+        for key, icon in items_menu:
+            btn = create_dock_btn(self.mac_dock, icon, current_x, lambda k=key: self._cambiar_vista(k), t["aqua"], t.get("text_muted", "#64748B"))
             self.nav_buttons[key] = btn
-            current_x += 56
+            current_x += 54
 
         # Separador vertical en el dock
-        sep = ctk.CTkFrame(self.mac_dock, width=2, height=32, fg_color=t.get("azul_pastel", "#8B5CF6"))
+        sep = ctk.CTkFrame(self.mac_dock, width=2, height=28, fg_color=t["border"])
         sep.place(x=current_x, rely=0.5, anchor="w")
         current_x += 16
 
-        btn_floating = ctk.CTkButton(
-            self.mac_dock, text="??", width=48, height=48, font=("Segoe UI", 20),
-            fg_color="transparent", text_color="#FFFFFF", hover_color=t.get("azul_pastel", "#8B5CF6"), corner_radius=24,
-            command=self._toggle_floating_widget
-        )
-        btn_floating.place(x=current_x, rely=0.5, anchor="w")
-        bind_hover_lift_and_fade(btn_floating, normal_rely=0.5, hover_rely=0.35, normal_color=t["sidebar"], hover_color=t.get("azul_pastel", "#8B5CF6"), is_dock_button=True)
-        current_x += 56
+        btn_floating = create_dock_btn(self.mac_dock, "push_pin", current_x, self._toggle_floating_widget, t.get("azul_pastel", "#8B5CF6"), t.get("text_muted", "#64748B"))
+        current_x += 54
 
-        btn_logout = ctk.CTkButton(
-            self.mac_dock, text="??", width=48, height=48, font=("Segoe UI", 20),
-            fg_color="transparent", text_color="#FCA5A5", hover_color="#DC2626", corner_radius=24,
-            command=self._logout
-        )
-        btn_logout.place(x=current_x, rely=0.5, anchor="w")
-        bind_hover_lift_and_fade(btn_logout, normal_rely=0.5, hover_rely=0.35, normal_color=t["sidebar"], hover_color="#DC2626", is_dock_button=True)
+        btn_logout = create_dock_btn(self.mac_dock, "logout", current_x, self._logout, "#DC2626", t.get("text_muted", "#64748B"))
+
+
 
 
         # ---------------------------------------------------------------------
@@ -539,9 +543,9 @@ class BimoApp(ctk.CTk):
         t = obtener_tema_activo_dict()
         for k, btn in self.nav_buttons.items():
             if k == key_vista:
-                btn.configure(fg_color="#FFFFFF", text_color=t["sidebar"])
+                btn.configure(text_color=t.get("aqua", "#0ea5e9"))
             else:
-                btn.configure(fg_color=t["sidebar"], text_color="#FFFFFF")
+                btn.configure(text_color=t.get("text_muted", "#64748B"))
 
         loader_frame = ctk.CTkFrame(self.main_content, fg_color="transparent")
         loader_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -566,6 +570,7 @@ class BimoApp(ctk.CTk):
                 except: pass
 
         self.after(160, _finalize_load)
+
 
 
     def _toggle_floating_widget(self):
