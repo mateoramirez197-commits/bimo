@@ -185,6 +185,28 @@ TEMAS_BIMO = {
         "logo_colors": ["#00F5D4", "#7C3AED", "#A78BFA", "#38BDF8"],
         "corner_radius": 26,
         "corner_btn": 22,
+    },
+    "Soft Neumorphism Light": {
+        "mode": "light",
+        "bg_dark": "#EEF2F6",
+        "card_dark": "#FFFFFF",
+        "sidebar": "#7C3AED",
+        "border": "#E2E8F0",
+        "shadow": "#CBD5E1",
+        "text_primary": "#0F172A",
+        "text_muted": "#64748B",
+        "input_bg": "#F8FAFC",
+        "input_border": "#CBD5E1",
+        "card_hover": "#F1F5F9",
+        "card_inner": "#F8FAFC",
+        "aqua": "#00F5D4",
+        "azul_acero": "#7C3AED",
+        "azul_pastel": "#8B5CF6",
+        "amarillo": "#F59E0B",
+        "fucsia": "#EC4899",
+        "logo_colors": ["#7C3AED", "#EC4899", "#8B5CF6", "#00F5D4"],
+        "corner_radius": 30,
+        "corner_btn": 25,
     }
 }
 
