@@ -348,6 +348,11 @@ DETECCIÓN DE CITAS FUTURAS DENTRO DE HISTORIA CLÍNICA:
   }}
   Asume SIEMPRE que la cita corresponde al MISMO paciente de la historia clínica.
 
+REGLA OBLIGATORIA DE APROBACIÓN DE ORTODONCIA:
+- Si el doctor indica que 'se aprueba ortodoncia', 'aprobado para ortodoncia', 'aprobada la ortodoncia', 'ortodoncia aprobada', 'iniciar ortodoncia' o colocación de brackets:
+  1. En 'plan_tratamiento', incluye: 'Tratamiento de ortodoncia aprobado (aparatología fija / brackets)'.
+  2. En 'evaluacion_ortodoncia', NUNCA pongas 'Sin aparatología'; coloca 'Brackets metálicos' o aparatología indicada, con 'clase_angle' y 'alineacion' acordes.
+
 Analiza la siguiente transcripción de voz y clasifícala estrictamente en una de cinco intenciones:
 1. COMANDO_CITA: Si el doctor solicita agendar o programar una nueva cita.
 2. CANCELAR_CITA: Si el doctor solicita cancelar o eliminar citas.
@@ -511,9 +516,31 @@ Texto dictado:
             # Extracción y cálculo matemático estricto de honorarios y pagos
             resultado["pagos"] = _extraer_y_calcular_pagos(resultado.get("pagos", {}), texto_crudo)
 
+            # Garantizar que si el texto dictado aprueba ortodoncia, se marque en evaluacion_ortodoncia
+            t_low = texto_crudo.lower()
+            if any(k in t_low for k in ["se aprueba ortodoncia", "aprobada la ortodoncia", "aprobado para ortodoncia", "ortodoncia aprobada", "iniciar ortodoncia", "iniciamos ortodoncia", "aprobada en esa cita", "se aprobaba en esa cita", "aprobada ortodoncia", "aprobado ortodoncia"]):
+                orto_obj = resultado.setdefault("evaluacion_ortodoncia", {})
+                if not orto_obj.get("aparatologia") or "sin " in str(orto_obj.get("aparatologia")).lower():
+                    orto_obj["aparatologia"] = "Brackets metálicos (Tratamiento aprobado)"
+                if not orto_obj.get("clase_angle") or orto_obj.get("clase_angle") in ("No evaluada", "No especificado"):
+                    orto_obj["clase_angle"] = "Clase I (Normo-oclusión)"
+                if not orto_obj.get("mordida") or orto_obj.get("mordida") == "No especificado":
+                    orto_obj["mordida"] = "Normo-oclusión"
+                if not orto_obj.get("alineacion") or orto_obj.get("alineacion") == "No especificado":
+                    orto_obj["alineacion"] = "Apiñamiento dentario leve a moderado"
+                
+                plan_t = resultado.get("plan_tratamiento", "")
+                if not plan_t or plan_t == "No especificado":
+                    resultado["plan_tratamiento"] = "Se aprueba inicio de tratamiento de ortodoncia con aparatología fija"
+                elif "ortodoncia" not in plan_t.lower():
+                    resultado["plan_tratamiento"] = f"{plan_t}. Se aprueba inicio de tratamiento de ortodoncia con aparatología fija"
+
         elif resultado.get("tipo") in ("COMANDO_CITA", "CANCELAR_CITA", "REPROGRAMAR_CITA"):
             nom = _normalizar_nombres_espanol(resultado.get("nombre_paciente", ""))
             resultado["nombre_paciente"] = nom
+            f_h = resultado.get("fecha_hora", "")
+            if not f_h or f_h == "No especificado":
+                resultado["fecha_hora"] = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d 10:00:00")
 
         return resultado
     except Exception as e:

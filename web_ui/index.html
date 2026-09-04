@@ -695,11 +695,11 @@
       <header class="flex justify-between items-center mb-6">
         <div>
           <h2 class="text-3xl font-black text-white tracking-tight">Visor de Historias Clínicas en PDF</h2>
-          <p class="text-xs text-slate-400 mt-1">Directorio de documentos generados listos para visualización e impresión.</p>
+          <p class="text-xs text-slate-400 mt-1">Directorio de documentos generados listos para visualización directa.</p>
         </div>
         <div class="flex items-center gap-3">
-          <button onclick="imprimirPdfUltimo()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-indigo-600/30">
-            Imprimir Último PDF
+          <button onclick="abrirPdfActual()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-indigo-600/30 flex items-center gap-1.5">
+            Abrir Último PDF ↗
           </button>
         </div>
       </header>
@@ -735,11 +735,8 @@
                 <span id="previewPageIndicator" class="text-[11px] font-bold text-indigo-300 px-2 font-mono">1 / 1</span>
                 <button onclick="cambiarPaginaPdf(1)" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95">▶</button>
               </div>
-              <button onclick="abrirPdfActual()" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-xl text-xs font-semibold cursor-pointer transition-all border border-indigo-500/30 flex items-center gap-1">
+              <button onclick="abrirPdfActual()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
                 Abrir Externo ↗
-              </button>
-              <button onclick="imprimirPdfActual()" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs cursor-pointer transition-colors" title="Imprimir Expediente">
-                🖨️
               </button>
             </div>
           </div>
@@ -761,32 +758,113 @@
     <div id="tab-widget" class="tab-content hidden flex-1 flex flex-col">
       <header class="flex justify-between items-center mb-6">
         <div>
-          <h2 class="text-3xl font-black text-white tracking-tight">Widget Flotante de Escritorio</h2>
-          <p class="text-xs text-slate-400 mt-1">Accesorio Always-on-Desk que acompaña tus consultas sin tapar la pantalla de trabajo.</p>
+          <h2 class="text-3xl font-black text-white tracking-tight">Widget Flotante de Escritorio HUD</h2>
+          <p class="text-xs text-slate-400 mt-1">Accesorio Always-on-Desk con anclaje al fondo, reloj en vivo y dictado rápido directo.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="cargarEstadoWidget()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+            ↻ Actualizar Estado
+          </button>
         </div>
       </header>
 
-      <div class="flex-1 bg-slate-950/80 rounded-3xl border border-slate-800 p-8 flex items-center justify-center">
-        <div id="floatingWidgetCard" class="w-96 bg-slate-900/90 border border-slate-700/80 rounded-3xl p-6 shadow-2xl backdrop-blur-2xl transition-all duration-500">
-          <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-black text-white tracking-widest">BIMO DOCK</span>
-              <span class="text-[9px] text-slate-400">by Matsword</span>
+      <div class="flex-1 grid grid-cols-12 gap-6 overflow-y-auto pr-1">
+        <!-- Columna Izquierda: Control Principal On/Off & Preferencias (col-span-7) -->
+        <div class="col-span-7 space-y-5">
+          <!-- Tarjeta de Interruptor On / Off Principal -->
+          <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-4">
+                <div id="widgetStatusIconBox" class="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl border border-indigo-500/30">
+                  ⚡
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-base font-black text-white">Estado del Widget HUD</h3>
+                    <span id="widgetBadgeLive" class="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                      ● Activo en Escritorio
+                    </span>
+                  </div>
+                  <p class="text-xs text-slate-400 mt-1">Activa o desactiva la mini ventana flotante Always-on-Desk en Windows.</p>
+                </div>
+              </div>
+
+              <!-- Switch Deslizante Moderno -->
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="toggleWidgetSwitch" class="sr-only peer" onchange="toggleWidgetDesktop(this.checked)" checked>
+                <div class="w-16 h-9 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-7 peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-7 after:w-7 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+              </label>
             </div>
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+
+            <!-- Telemetría en vivo del HUD -->
+            <div class="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-slate-800/80 text-xs">
+              <div class="bg-slate-950/70 p-3 rounded-2xl border border-slate-800/80">
+                <span class="text-[10px] text-slate-500 uppercase font-bold block">Proceso de Sistema</span>
+                <span id="widgetPidText" class="text-white font-mono font-bold mt-0.5 block">PID: Activo</span>
+              </div>
+              <div class="bg-slate-950/70 p-3 rounded-2xl border border-slate-800/80">
+                <span class="text-[10px] text-slate-500 uppercase font-bold block">Comportamiento</span>
+                <span class="text-emerald-400 font-semibold mt-0.5 block">Anclado al Fondo</span>
+              </div>
+              <div class="bg-slate-950/70 p-3 rounded-2xl border border-slate-800/80">
+                <span class="text-[10px] text-slate-500 uppercase font-bold block">Impacto de CPU</span>
+                <span class="text-indigo-300 font-semibold mt-0.5 block">Ultra Ligero (&lt; 25MB)</span>
+              </div>
+            </div>
           </div>
-          <div class="flex items-center gap-4 mb-5">
-            <button id="widgetMicBtn" onclick="toggleWidgetMic()" class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform">
-              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" /></svg>
-            </button>
+
+          <!-- Ajustes & Posición del HUD -->
+          <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <span>Preferencias de Pantalla</span>
+            </h3>
+            <div class="space-y-4 text-xs">
+              <div>
+                <label class="text-slate-300 font-medium block mb-2">Posición Inicial en Pantalla</label>
+                <div class="grid grid-cols-3 gap-2">
+                  <button type="button" class="py-2.5 px-3 bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 rounded-xl font-bold text-center">
+                    Superior Derecha (Defecto)
+                  </button>
+                  <button type="button" class="py-2.5 px-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 text-slate-400 rounded-xl font-medium text-center">
+                    Inferior Derecha
+                  </button>
+                  <button type="button" class="py-2.5 px-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 text-slate-400 rounded-xl font-medium text-center">
+                    Superior Izquierda
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-slate-300 font-medium block mb-2">Nivel de Transparencia Glassmorphism</label>
+                <div class="flex items-center gap-3">
+                  <button type="button" class="flex-1 py-2 bg-slate-950/70 border border-slate-800 text-slate-400 rounded-xl font-medium text-center hover:text-white">75% Ligera</button>
+                  <button type="button" class="flex-1 py-2 bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 rounded-xl font-bold text-center">90% Equilibrada (Recomendado)</button>
+                  <button type="button" class="flex-1 py-2 bg-slate-950/70 border border-slate-800 text-slate-400 rounded-xl font-medium text-center hover:text-white">100% Opaca</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Columna Derecha: Bloc de Notas Clínico Rápido (Scratchpad) (col-span-5) -->
+        <div class="col-span-5 flex flex-col bg-slate-900/70 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+          <div class="flex items-center justify-between mb-3">
             <div>
-              <div id="widgetMicTitle" class="text-sm font-bold text-white">Dictado Rápido</div>
-              <div class="text-xs text-slate-400 mt-0.5">Presiona o di "Oye Bimo"</div>
+              <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                <span>Bloc de Notas Clínico Rápido</span>
+              </h3>
+              <p class="text-[11px] text-slate-400 mt-0.5">Apuntes temporales de consulta guardados automáticamente en memoria.</p>
             </div>
+            <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono" id="scratchpadCharCount">0 car.</span>
           </div>
-          <div class="grid grid-cols-2 gap-2.5 text-xs">
-            <button onclick="switchTab('dictado')" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer text-center transition-colors">Abrir App</button>
-            <button onclick="switchTab('pdf')" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer text-center transition-colors">Ver PDF</button>
+
+          <textarea id="scratchpadArea" oninput="guardarScratchpad()" placeholder="Escribe aquí notas rápidas, cifras de tensión arterial, recordatorios o datos antes de dictar..." class="flex-1 w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-4 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed min-h-[160px]"></textarea>
+
+          <div class="flex items-center justify-between pt-4 mt-3 border-t border-slate-800/80 text-xs">
+            <button onclick="limpiarScratchpad()" class="text-slate-400 hover:text-rose-400 transition-colors font-medium cursor-pointer">Limpiar Notas</button>
+            <button onclick="copiarScratchpad()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-indigo-600/30">
+              Copiar al Portapapeles
+            </button>
           </div>
         </div>
       </div>
@@ -983,6 +1061,63 @@
       <div class="flex items-center justify-end gap-3 pt-5 mt-4 border-t border-slate-800">
         <button onclick="cerrarModalCita()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer">Cancelar</button>
         <button onclick="guardarCitaForm()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-md shadow-indigo-600/30">Agendar Cita</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL HISTORIA CLÍNICA COMPLETA ================= -->
+  <div id="modalHistoriaClinica" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-3xl w-full max-w-4xl max-h-[90vh] p-6 shadow-2xl flex flex-col overflow-hidden">
+      <!-- Encabezado del Modal -->
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <div id="historiaInitials" class="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-lg border border-indigo-500/30">
+            HC
+          </div>
+          <div>
+            <h3 id="historiaNombre" class="text-xl font-black text-white">Historia Clínica del Paciente</h3>
+            <div id="historiaMeta" class="text-xs text-slate-400 mt-0.5">Expediente Médico Odontológico • BIMO Pro</div>
+          </div>
+        </div>
+        <button onclick="cerrarModalHistoria()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold cursor-pointer transition-colors">✕</button>
+      </div>
+
+      <!-- Resumen Ficha Rápida del Paciente -->
+      <div class="grid grid-cols-4 gap-3 py-3 px-4 bg-slate-950/60 rounded-2xl border border-slate-800 my-4 text-xs">
+        <div>
+          <span class="text-slate-500 block text-[10px] uppercase font-bold">Cédula / Documento</span>
+          <span id="historiaDoc" class="text-slate-200 font-mono font-bold">---</span>
+        </div>
+        <div>
+          <span class="text-slate-500 block text-[10px] uppercase font-bold">Edad & Sexo</span>
+          <span id="historiaEdadSexo" class="text-slate-200 font-medium">---</span>
+        </div>
+        <div>
+          <span class="text-slate-500 block text-[10px] uppercase font-bold">Contacto / Teléfono</span>
+          <span id="historiaTel" class="text-slate-200">---</span>
+        </div>
+        <div>
+          <span class="text-slate-500 block text-[10px] uppercase font-bold">Estado Financiero</span>
+          <span id="historiaSaldo" class="text-emerald-400 font-bold">$0.00</span>
+        </div>
+      </div>
+
+      <!-- Línea de Tiempo de Consultas Históricas -->
+      <div class="flex items-center justify-between mb-2">
+        <h4 class="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+          <span>Consultas & Atenciones Registradas</span>
+          <span id="historiaTotalConsultas" class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold">0</span>
+        </h4>
+      </div>
+
+      <div id="historiaConsultasTimeline" class="flex-1 overflow-y-auto space-y-3 pr-2 min-h-[260px]">
+        <!-- Inserción dinámica de consultas -->
+      </div>
+
+      <!-- Barra de Cierre -->
+      <div class="flex items-center justify-between pt-4 mt-2 border-t border-slate-800">
+        <span class="text-[11px] text-slate-500">Haz clic en "Ver en Visor PDF" para estudiar el documento con su odontograma a detalle.</span>
+        <button onclick="cerrarModalHistoria()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer transition-colors">Cerrar</button>
       </div>
     </div>
   </div>
@@ -1309,6 +1444,7 @@
       if (tabId === 'pacientes') cargarPacientes();
       else if (tabId === 'agenda') cargarCitas();
       else if (tabId === 'pdf') cargarPdfs();
+      else if (tabId === 'widget') { cargarEstadoWidget(); cargarScratchpad(); }
       else if (tabId === 'mobile') cargarInfoMovil();
       else if (tabId === 'config') cargarConfiguracion();
     }
@@ -1418,11 +1554,17 @@
               title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
               badge.innerText = 'Sincronizado';
 
-              mostrarToast('¡Consulta clínica procesada con éxito!');
-              cargarUltimoExpediente();
-              cargarPacientes();
-              cargarCitas();
-              cargarPdfs();
+              if (resp.tipo === 'COMANDO_CITA' || resp.tipo === 'REPROGRAMAR_CITA') {
+                mostrarToast(resp.mensaje || '¡Cita clínica agendada con éxito!');
+                cargarCitas();
+                switchTab('agenda');
+              } else {
+                mostrarToast('¡Consulta clínica procesada y PDF generado con éxito!');
+                cargarUltimoExpediente();
+                cargarPacientes();
+                cargarCitas();
+                cargarPdfs();
+              }
             } else {
               title.innerText = 'En espera';
               title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
@@ -1527,13 +1669,13 @@
         const saldoColor = p.saldo && p.saldo !== '$0.00' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold';
 
         return `
-          <tr class="hover:bg-slate-800/40 transition-colors">
+          <tr onclick="abrirHistoriaClinica(${p.id})" class="hover:bg-slate-800/40 transition-colors cursor-pointer group">
             <td class="py-4 font-bold text-white flex items-center gap-2.5">
-              <div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-xs shadow-inner">
+              <div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-xs shadow-inner group-hover:scale-105 transition-transform">
                 ${initials}
               </div>
               <div>
-                <div>${p.nombre}</div>
+                <div class="group-hover:text-indigo-300 transition-colors">${p.nombre}</div>
                 <div class="text-[10px] text-slate-500 font-normal">ID: #${p.id}</div>
               </div>
             </td>
@@ -1541,9 +1683,9 @@
             <td class="py-4 text-slate-400">${edad}</td>
             <td class="py-4 text-slate-300">${p.ultima_visita || 'Sin registros'}</td>
             <td class="py-4 ${saldoColor}">${p.saldo || '$0.00'}</td>
-            <td class="py-4 text-right space-x-2">
+            <td class="py-4 text-right space-x-2" onclick="event.stopPropagation()">
               <button onclick="editarPaciente(${p.id})" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">✏️ Editar</button>
-              <button onclick="seleccionarPacienteVer(${p.id}, '${p.nombre}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors">Ver Historia</button>
+              <button onclick="abrirHistoriaClinica(${p.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors">Ver Historia</button>
             </td>
           </tr>
         `;
@@ -1634,11 +1776,200 @@
       }
     }
 
+    // ==========================================
+    // HISTORIA CLÍNICA COMPLETA DE PACIENTE
+    // ==========================================
+    async function abrirHistoriaClinica(pacienteId) {
+      try {
+        if (!window.pywebview || !window.pywebview.api) {
+          mostrarToast('Modo demostración: paciente seleccionado', 'info');
+          return;
+        }
+        const resp = await window.pywebview.api.obtener_paciente_detalle(pacienteId);
+        if (!resp || resp.status !== 'ok') {
+          mostrarToast(resp?.message || 'No se pudo cargar la historia clínica', 'error');
+          return;
+        }
+
+        const p = resp.paciente || {};
+        const consultas = resp.consultas || [];
+
+        const initials = (p.nombre || 'P').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        document.getElementById('historiaInitials').innerText = initials;
+        document.getElementById('historiaNombre').innerText = p.nombre || 'Paciente';
+        document.getElementById('historiaMeta').innerText = `Expediente #${p.id} • ${p.direccion && p.direccion !== 'No especificado' ? p.direccion : 'Consultorio Odontológico'}`;
+        document.getElementById('historiaDoc').innerText = p.documento && p.documento !== 'None' ? p.documento : 'Sin cédula';
+        document.getElementById('historiaEdadSexo').innerText = `${p.edad ? p.edad + ' años' : 'Edad no reg.'} • ${p.sexo || 'No especificado'}`;
+        document.getElementById('historiaTel').innerText = p.telefono && p.telefono !== 'No especificado' ? p.telefono : 'Sin teléfono';
+        
+        const pacEnCache = pacientesCache.find(x => x.id === pacienteId);
+        const saldoTxt = pacEnCache ? pacEnCache.saldo : '$0.00';
+        document.getElementById('historiaSaldo').innerText = saldoTxt || '$0.00';
+        document.getElementById('historiaSaldo').className = (saldoTxt && saldoTxt !== '$0.00') ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold';
+
+        document.getElementById('historiaTotalConsultas').innerText = consultas.length;
+
+        const cont = document.getElementById('historiaConsultasTimeline');
+        if (!consultas.length) {
+          cont.innerHTML = `
+            <div class="text-center py-12 bg-slate-950/40 rounded-2xl border border-slate-800/80">
+              <div class="w-12 h-12 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center text-xl mx-auto mb-2">📋</div>
+              <p class="text-xs font-bold text-slate-300">Sin consultas registradas aún</p>
+              <p class="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">Este paciente no tiene historias previas. Utiliza el dictado por voz para registrar la primera atención odontológica.</p>
+            </div>
+          `;
+        } else {
+          cont.innerHTML = consultas.map((c, idx) => {
+            const fechaStr = c.fecha_hora ? c.fecha_hora.replace('T', ' ').slice(0, 16) : 'Fecha no registrada';
+            let diag = c.diagnostico || 'Evaluación general';
+            let plan = c.plan_tratamiento || 'Plan regular';
+            let motivo = c.motivo_consulta || 'Consulta de rutina';
+            let rutaPdf = c.ruta_pdf || '';
+
+            return `
+              <div class="p-4 bg-slate-950/70 hover:bg-slate-950 rounded-2xl border border-slate-800 transition-all">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-bold flex items-center justify-center">#${consultas.length - idx}</span>
+                    <span class="text-xs font-bold text-white">${fechaStr}</span>
+                    <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">${motivo}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    ${rutaPdf ? `
+                      <button onclick="verPdfDesdeHistoria('${rutaPdf.replace(/\\/g, '\\\\')}')" class="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1">
+                        Ver en Visor PDF 📄
+                      </button>
+                      <button onclick="abrirPdfExternoDesdeHistoria('${rutaPdf.replace(/\\/g, '\\\\')}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs cursor-pointer transition-colors" title="Abrir en Windows">
+                        ↗
+                      </button>
+                    ` : '<span class="text-[10px] text-slate-500">PDF no disponible</span>'}
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-xs mt-3 pt-3 border-t border-slate-800/80">
+                  <div>
+                    <span class="text-[10px] text-slate-500 font-bold uppercase block">Diagnóstico:</span>
+                    <p class="text-slate-300 text-[11px] mt-0.5">${diag}</p>
+                  </div>
+                  <div>
+                    <span class="text-[10px] text-slate-500 font-bold uppercase block">Plan de Tratamiento:</span>
+                    <p class="text-slate-300 text-[11px] mt-0.5">${plan}</p>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        document.getElementById('modalHistoriaClinica').classList.remove('hidden');
+      } catch (e) {
+        console.error('Error al abrir historia clínica:', e);
+        mostrarToast('Error al abrir historia clínica: ' + e, 'error');
+      }
+    }
+
+    function cerrarModalHistoria() {
+      document.getElementById('modalHistoriaClinica').classList.add('hidden');
+    }
+
+    function verPdfDesdeHistoria(rutaPdf) {
+      cerrarModalHistoria();
+      switchTab('pdf');
+      cargarPreviewPdf(rutaPdf);
+    }
+
+    async function abrirPdfExternoDesdeHistoria(rutaPdf) {
+      if (window.pywebview && window.pywebview.api) {
+        await window.pywebview.api.abrir_pdf(rutaPdf);
+      }
+    }
+
     function seleccionarPacienteVer(id, nombre) {
-      document.getElementById('cardPacNombre').innerText = nombre;
-      document.getElementById('previewPacName').innerText = nombre;
-      switchTab('dictado');
-      mostrarToast(`Visualizando expediente de ${nombre}`, 'info');
+      abrirHistoriaClinica(id);
+    }
+
+    // ==========================================
+    // CONTROL DEL WIDGET HUD & SCRATCHPAD
+    // ==========================================
+    async function cargarEstadoWidget() {
+      try {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.obtener_estado_widget) {
+          const info = await window.pywebview.api.obtener_estado_widget();
+          const sw = document.getElementById('toggleWidgetSwitch');
+          const badge = document.getElementById('widgetBadgeLive');
+          const pidText = document.getElementById('widgetPidText');
+
+          if (info && info.activo) {
+            sw.checked = true;
+            badge.innerText = `● Activo (PID: ${info.pid || 'HUD'})`;
+            badge.className = 'text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold';
+            pidText.innerText = `PID: ${info.pid || 'Activo'}`;
+          } else {
+            sw.checked = false;
+            badge.innerText = '○ En Reposo (Inactivo)';
+            badge.className = 'text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2.5 py-0.5 rounded-full font-bold';
+            pidText.innerText = 'PID: Detenido';
+          }
+        }
+      } catch (e) {
+        console.warn('cargarEstadoWidget:', e);
+      }
+    }
+
+    async function toggleWidgetDesktop(activar) {
+      try {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.toggle_widget_escritorio) {
+          const resp = await window.pywebview.api.toggle_widget_escritorio(activar);
+          if (resp && resp.status === 'ok') {
+            mostrarToast(resp.message || (activar ? 'Widget HUD activado' : 'Widget HUD desactivado'));
+          } else {
+            mostrarToast((resp && resp.message) || 'Error al cambiar estado del widget', 'error');
+          }
+          cargarEstadoWidget();
+        } else {
+          mostrarToast(`Widget HUD ${activar ? 'activado' : 'desactivado'} (Modo demostración)`);
+        }
+      } catch (e) {
+        mostrarToast('Error con widget HUD: ' + e, 'error');
+      }
+    }
+
+    function guardarScratchpad() {
+      const txt = document.getElementById('scratchpadArea').value;
+      document.getElementById('scratchpadCharCount').innerText = `${txt.length} car.`;
+      try {
+        localStorage.setItem('bimo_scratchpad_notes', txt);
+      } catch(e) {}
+    }
+
+    function cargarScratchpad() {
+      try {
+        const saved = localStorage.getItem('bimo_scratchpad_notes') || '';
+        const area = document.getElementById('scratchpadArea');
+        if (area) {
+          area.value = saved;
+          document.getElementById('scratchpadCharCount').innerText = `${saved.length} car.`;
+        }
+      } catch(e) {}
+    }
+
+    function limpiarScratchpad() {
+      const area = document.getElementById('scratchpadArea');
+      if (area) {
+        area.value = '';
+        guardarScratchpad();
+        mostrarToast('Notas rápidas limpiadas');
+      }
+    }
+
+    function copiarScratchpad() {
+      const area = document.getElementById('scratchpadArea');
+      if (area && area.value) {
+        navigator.clipboard.writeText(area.value);
+        mostrarToast('¡Notas copiadas al portapapeles!');
+      } else {
+        mostrarToast('El bloc de notas está vacío', 'info');
+      }
     }
 
     // ==========================================
@@ -2057,6 +2388,8 @@
       cargarPdfs();
       cargarInfoMovil();
       cargarConfiguracion();
+      cargarEstadoWidget();
+      cargarScratchpad();
     }
 
     window.addEventListener('DOMContentLoaded', () => {

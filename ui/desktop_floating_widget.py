@@ -58,12 +58,16 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
 
     def _build_ui(self):
         t = obtener_tema_activo_dict()
-        self.main_frame = ctk.CTkFrame(self, fg_color=t["bg_dark"], corner_radius=16, border_width=1.5, border_color=t["border"])
+        bg_obsidian = "#070510"
+        card_obsidian = "#0e1122"
+        border_neon = "#1f243d"
+
+        self.main_frame = ctk.CTkFrame(self, fg_color=bg_obsidian, corner_radius=18, border_width=1.5, border_color=border_neon)
         self.main_frame.pack(fill="both", expand=True)
 
         # Barra superior arrastrable (Header)
-        self.header = ctk.CTkFrame(self.main_frame, fg_color=t["card_dark"], height=36, corner_radius=12)
-        self.header.pack(fill="x", padx=4, pady=4)
+        self.header = ctk.CTkFrame(self.main_frame, fg_color=card_obsidian, height=38, corner_radius=14)
+        self.header.pack(fill="x", padx=5, pady=5)
         self.header.pack_propagate(False)
 
         self.header.bind("<ButtonPress-1>", self._iniciar_arrastre)
@@ -74,23 +78,23 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         left_h.bind("<ButtonPress-1>", self._iniciar_arrastre)
         left_h.bind("<B1-Motion>", self._mover_widget)
 
-        lbl_tit = ctk.CTkLabel(left_h, text="🏥 BIMO MEDICAL HUD", font=("Segoe UI", 10, "bold"), text_color=t["aqua"])
+        lbl_tit = ctk.CTkLabel(left_h, text="⚡ BIMO HUD", font=("Segoe UI", 10, "bold"), text_color="#38bdf8")
         lbl_tit.pack(side="left")
         lbl_tit.bind("<ButtonPress-1>", self._iniciar_arrastre)
         lbl_tit.bind("<B1-Motion>", self._mover_widget)
 
-        self.lbl_status_dot = ctk.CTkLabel(left_h, text=" ● En Línea", font=("Segoe UI", 9, "bold"), text_color="#10b981")
-        self.lbl_status_dot.pack(side="left", padx=(4, 0))
+        self.lbl_status_dot = ctk.CTkLabel(left_h, text="● En Línea", font=("Segoe UI", 9, "bold"), text_color="#10b981")
+        self.lbl_status_dot.pack(side="left", padx=(6, 0))
 
         lbl_pin = ctk.CTkLabel(
             self.header, text="📌 Anclado", font=("Segoe UI", 9, "bold"),
-            text_color=t["text_muted"]
+            text_color="#64748b"
         )
         lbl_pin.pack(side="right", padx=(2, 6))
 
         self.btn_collapse = ctk.CTkButton(
-            self.header, text="➖", width=22, height=22, font=("Segoe UI", 9, "bold"),
-            fg_color="transparent", text_color=t["text_muted"], hover_color=t["card_hover"], command=self._toggle_collapse
+            self.header, text="➖", width=24, height=24, font=("Segoe UI", 9, "bold"),
+            fg_color="transparent", text_color="#94a3b8", hover_color="#1e293b", command=self._toggle_collapse
         )
         self.btn_collapse.pack(side="right", padx=(2, 2))
 
@@ -99,37 +103,37 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         self.body_frame.pack(fill="both", expand=True, padx=8, pady=(0, 6))
 
         # Columna Izquierda: Reloj digital y botones rápidos
-        self.col_left = ctk.CTkFrame(self.body_frame, fg_color=t["card_dark"], width=175, corner_radius=12, border_width=1, border_color=t["border"])
+        self.col_left = ctk.CTkFrame(self.body_frame, fg_color=card_obsidian, width=180, corner_radius=14, border_width=1, border_color=border_neon)
         self.col_left.pack(side="left", fill="both", padx=(0, 6), pady=2)
         self.col_left.pack_propagate(False)
 
-        self.lbl_reloj = ctk.CTkLabel(self.col_left, text="00:00:00", font=("Segoe UI", 20, "bold"), text_color=t["aqua"])
-        self.lbl_reloj.pack(pady=(10, 0))
+        self.lbl_reloj = ctk.CTkLabel(self.col_left, text="00:00:00", font=("Segoe UI", 21, "bold"), text_color="#38bdf8")
+        self.lbl_reloj.pack(pady=(8, 0))
 
-        self.lbl_fecha = ctk.CTkLabel(self.col_left, text="---", font=("Segoe UI", 10), text_color=t["text_muted"])
-        self.lbl_fecha.pack(pady=(0, 8))
+        self.lbl_fecha = ctk.CTkLabel(self.col_left, text="---", font=("Segoe UI", 9), text_color="#64748b")
+        self.lbl_fecha.pack(pady=(0, 6))
 
         btn_dictar = ctk.CTkButton(
-            self.col_left, text="🎤 Dictar", font=("Segoe UI", 10, "bold"), height=28,
-            fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff", corner_radius=8,
+            self.col_left, text="🎤 Dictar a BIMO", font=("Segoe UI", 10, "bold"), height=30,
+            fg_color="#4f46e5", hover_color="#6366f1", text_color="#ffffff", corner_radius=10,
             command=self._enfocar_dictado
         )
         btn_dictar.pack(fill="x", padx=12, pady=(0, 4))
 
         btn_gcal_w = ctk.CTkButton(
-            self.col_left, text="🌐 Calendar Web", font=("Segoe UI", 10), height=26,
-            fg_color="transparent", hover_color=t["card_hover"], text_color=t["text_primary"], corner_radius=8,
+            self.col_left, text="🌐 Google Calendar", font=("Segoe UI", 9), height=24,
+            fg_color="#1e293b", hover_color="#334155", text_color="#cbd5e1", corner_radius=8,
             command=lambda: webbrowser.open("https://calendar.google.com")
         )
         btn_gcal_w.pack(fill="x", padx=12, pady=(0, 4))
 
         # Columna Derecha: Agenda del día compacta
-        self.col_right = ctk.CTkFrame(self.body_frame, fg_color=t["card_dark"], corner_radius=12, border_width=1, border_color=t["border"])
+        self.col_right = ctk.CTkFrame(self.body_frame, fg_color=card_obsidian, corner_radius=14, border_width=1, border_color=border_neon)
         self.col_right.pack(side="left", fill="both", expand=True, pady=2)
 
         header_citas = ctk.CTkFrame(self.col_right, fg_color="transparent")
         header_citas.pack(fill="x", padx=10, pady=(6, 2))
-        ctk.CTkLabel(header_citas, text="📅 CITAS DE HOY", font=("Segoe UI", 9, "bold"), text_color=t["text_muted"]).pack(side="left")
+        ctk.CTkLabel(header_citas, text="📅 CITAS DE HOY", font=("Segoe UI", 9, "bold"), text_color="#94a3b8").pack(side="left")
 
         self.scroll_citas = ctk.CTkScrollableFrame(self.col_right, fg_color="transparent")
         self.scroll_citas.pack(fill="both", expand=True, padx=4, pady=(0, 4))
@@ -149,7 +153,7 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         pos = "+".join(cur_geom.split("+")[1:])
         if not self._colapsado:
             self.body_frame.pack_forget()
-            self.geometry(f"240x44+{pos}")
+            self.geometry(f"250x46+{pos}")
             self.btn_collapse.configure(text="➕")
             self._colapsado = True
         else:
@@ -173,6 +177,25 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
             self.master_app.lift()
             if hasattr(self.master_app, "mostrar_vista"):
                 self.master_app.mostrar_vista("dictado")
+        else:
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                def enum_cb(hwnd, lparam):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buff = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buff, length + 1)
+                        title = buff.value
+                        if "BIMO" in title and "HUD" not in title:
+                            user32.ShowWindow(hwnd, 9)
+                            user32.SetForegroundWindow(hwnd)
+                            return False
+                    return True
+                WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+                user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+            except Exception as e:
+                print(f"[HUD] Error al enfocar ventana principal: {e}")
 
     def actualizar_agenda(self):
         import threading
@@ -216,11 +239,11 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
                 color_hora = t["text_muted"] if es_pasada else t["aqua"]
                 color_txt = t["text_muted"] if es_pasada else t["text_primary"]
 
-                card_c = ctk.CTkFrame(self.scroll_citas, fg_color=t["bg_dark"], height=34, corner_radius=8, border_width=1, border_color=t["border"])
+                card_c = ctk.CTkFrame(self.scroll_citas, fg_color="#070510", height=34, corner_radius=10, border_width=1, border_color="#1f243d")
                 card_c.pack(fill="x", pady=2)
                 card_c.pack_propagate(False)
 
-                ctk.CTkLabel(card_c, text=hora_solo, width=42, font=("Segoe UI", 9, "bold"), text_color=color_hora).pack(side="left", padx=(6, 2))
+                ctk.CTkLabel(card_c, text=hora_solo, width=46, font=("Segoe UI", 9, "bold"), text_color=color_hora).pack(side="left", padx=(6, 2))
                 ctk.CTkLabel(card_c, text=f"{paciente} • {desc}", font=("Segoe UI", 9), text_color=color_txt, anchor="w").pack(side="left", fill="x", expand=True, padx=4)
 
         except Exception as e:

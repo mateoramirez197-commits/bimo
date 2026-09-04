@@ -213,12 +213,12 @@ class BimoBridge:
     def _grabar_audio_loop(self):
         def callback(indata, frames, time, status):
             if self.grabando:
-                self.datos_audio.extend(indata.copy())
+                self.datos_audio.append(indata.copy())
         
         try:
             with sd.InputStream(samplerate=self.frecuencia, channels=1, dtype='int16', callback=callback):
                 while self.grabando:
-                    sd.sleep(80)
+                    sd.sleep(50)
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] Error en stream de audio: {e}")
 
@@ -237,7 +237,7 @@ class BimoBridge:
                 return {"status": "error", "message": "No se detectó audio."}
 
             ruta_wav = str(BASE_DIR / "temp_dictado.wav")
-            audio_np = np.array(self.datos_audio, dtype=np.int16)
+            audio_np = np.concatenate(self.datos_audio, axis=0)
             wav_write(ruta_wav, self.frecuencia, audio_np)
 
             texto = transcribir_audio(ruta_wav)
@@ -268,7 +268,17 @@ class BimoBridge:
             pac_nom = resultado_ia.get("nombre_paciente", "").strip() or "Paciente"
             f_hora = resultado_ia.get("fecha_hora", "")
             motivo = resultado_ia.get("motivo", "Consulta agendada por voz")
-            cita_id = crear_cita_db(nombre_paciente=pac_nom, fecha_hora_inicio=f_hora, descripcion=motivo)
+            cita_id = None
+            try:
+                res_cal = agendar_cita(nombre_paciente=pac_nom, fecha_hora_inicio=f_hora, descripcion=motivo, abrir_en_navegador=False)
+                cita_id = res_cal.get("cita_id") if isinstance(res_cal, dict) else res_cal
+            except Exception as e_cal:
+                print(f"[AGENDAR CITA WARN] {e_cal}")
+                try:
+                    cita_id = crear_cita_db(nombre_paciente=pac_nom, fecha_hora_inicio=f_hora, descripcion=motivo)
+                except Exception as e_db:
+                    print(f"[CREAR CITA DB ERROR] {e_db}")
+
             return {
                 "status": "ok",
                 "tipo": tipo,
@@ -327,9 +337,13 @@ class BimoBridge:
             m_c = cita_info.get("motivo") or f"Control post-tratamiento de {nombre}"
             if f_c:
                 try:
-                    agendar_cita(paciente_id=pac_id, nombre_paciente=nombre, fecha_hora=f_c, motivo=m_c)
-                except Exception:
-                    crear_cita_db(paciente_id=pac_id, nombre_paciente=nombre, fecha_hora_inicio=f_c, descripcion=m_c)
+                    agendar_cita(paciente_id=pac_id, nombre_paciente=nombre, fecha_hora_inicio=f_c, descripcion=m_c, abrir_en_navegador=False)
+                except Exception as e_ag:
+                    print(f"[AGENDAR CITA WARN] {e_ag}")
+                    try:
+                        crear_cita_db(paciente_id=pac_id, nombre_paciente=nombre, fecha_hora_inicio=f_c, descripcion=m_c)
+                    except Exception as e_c:
+                        print(f"[CREAR CITA DB WARN] {e_c}")
 
         return {
             "status": "ok",
@@ -727,6 +741,61 @@ class BimoBridge:
             return {"status": "ok"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] guardar_configuracion: {e}")
+            return {"status": "error", "message": str(e)}
+
+    # ==========================================
+    # WIDGET FLOTANTE DE ESCRITORIO
+    # ==========================================
+    def obtener_estado_widget(self):
+        activo = False
+        pid = None
+        if self.widget_process and self.widget_process.poll() is None:
+            activo = True
+            pid = self.widget_process.pid
+        return {
+            "status": "ok",
+            "activo": activo,
+            "pid": pid,
+            "posicion": "Superior Derecha",
+            "opacidad": 90,
+            "anclado": True
+        }
+
+    def toggle_widget_escritorio(self, activar=True):
+        try:
+            if isinstance(activar, str):
+                activar = activar.lower() in ("true", "1", "si", "yes")
+
+            if activar:
+                if not self.widget_process or self.widget_process.poll() is not None:
+                    proc = subprocess.Popen([sys.executable, "widget_runner.py", "--parent-pid", str(os.getpid())])
+                    self.widget_process = proc
+                    print(f"[BIMO DESKTOP] Widget HUD iniciado (PID: {proc.pid})")
+                return {
+                    "status": "ok",
+                    "activo": True,
+                    "pid": self.widget_process.pid if self.widget_process else None,
+                    "message": "Widget HUD de escritorio activado"
+                }
+            else:
+                if self.widget_process and self.widget_process.poll() is None:
+                    try:
+                        self.widget_process.terminate()
+                        self.widget_process.wait(timeout=1.5)
+                    except Exception:
+                        try:
+                            self.widget_process.kill()
+                        except Exception:
+                            pass
+                    self.widget_process = None
+                    print("[BIMO DESKTOP] Widget HUD detenido.")
+                return {
+                    "status": "ok",
+                    "activo": False,
+                    "message": "Widget HUD de escritorio desactivado"
+                }
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] toggle_widget_escritorio: {e}")
             return {"status": "error", "message": str(e)}
 
 

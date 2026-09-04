@@ -811,11 +811,31 @@ def obtener_consulta_por_id(consulta_id):
 
 # --- OPERACIONES DE AGENDA ---
 
-def crear_cita_db(paciente_id, nombre_paciente, telefono, fecha_hora_inicio, fecha_hora_fin=None, descripcion="", google_event_id=None):
+def crear_cita_db(paciente_id=None, nombre_paciente="", telefono="", fecha_hora_inicio="", fecha_hora_fin=None, descripcion="", google_event_id=None, **kwargs):
     import datetime
-    creado_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not fecha_hora_inicio and "fecha_hora" in kwargs:
+        fecha_hora_inicio = kwargs["fecha_hora"]
+    if not descripcion and "motivo" in kwargs:
+        descripcion = kwargs["motivo"]
+    if not nombre_paciente and "paciente" in kwargs:
+        nombre_paciente = kwargs["paciente"]
+
+    nombre_paciente = str(nombre_paciente or "").strip() or "Paciente"
+    telefono = str(telefono or "").strip()
+    if not fecha_hora_inicio:
+        fecha_hora_inicio = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d 10:00:00")
+
     with get_connection() as conn:
         cursor = conn.cursor()
+        if not paciente_id and nombre_paciente and nombre_paciente.lower() not in ("paciente", "no especificado"):
+            cursor.execute("SELECT id, telefono FROM pacientes WHERE LOWER(nombre) = ? ORDER BY id DESC LIMIT 1", (nombre_paciente.lower(),))
+            row_p = cursor.fetchone()
+            if row_p:
+                paciente_id = row_p["id"]
+                if not telefono and row_p["telefono"] and row_p["telefono"] != "No especificado":
+                    telefono = row_p["telefono"]
+
+        creado_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
             INSERT INTO citas_agenda (
                 paciente_id, nombre_paciente, telefono, fecha_hora_inicio,

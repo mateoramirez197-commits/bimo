@@ -414,6 +414,15 @@ def es_caso_de_ortodoncia(datos: dict) -> bool:
 
     orto_eval = datos.get("evaluacion_ortodoncia", {})
     if isinstance(orto_eval, dict):
+        clase = str(orto_eval.get("clase_angle", "")).lower()
+        if any(c in clase for c in ["clase ii", "clase iii"]):
+            return True
+        mord = str(orto_eval.get("mordida", "")).lower()
+        if any(m in mord for m in ["cruzada", "abierta", "profunda", "sobremordida"]):
+            return True
+        alin = str(orto_eval.get("alineacion", "")).lower()
+        if any(a in alin for a in ["apiñamiento", "diastema"]):
+            return True
         apar = str(orto_eval.get("aparatologia", "")).lower()
         if any(k in apar for k in ["bracket", "alineador", "retenedor", "arco", "banda", "frenillo", "ortopédic", "ortopedic"]) and "sin " not in apar:
             return True
@@ -431,9 +440,13 @@ def es_caso_de_ortodoncia(datos: dict) -> bool:
     palabras_clave_orto = [
         "ortodoncia", "ortodoncic", "ortodóncic", "bracket", "frenillo",
         "alineador", "invisalign", "apiñamiento", "diastema", "mordida abierta",
-        "mordida cruzada", "mordida profunda", "arco niti", "activacion de arco",
+        "mordida cruzada", "mordida profunda", "sobremordida", "arco niti", "activacion de arco",
         "activación de arco", "cambio de ligas", "elásticos intermaxilares",
-        "retenedor", "disyuntor"
+        "retenedor", "disyuntor", "se aprueba ortodoncia", "aprobada ortodoncia",
+        "aprobado ortodoncia", "aprobada para ortodoncia", "aprobado para ortodoncia",
+        "ortodoncia aprobada", "iniciar ortodoncia", "inicio de ortodoncia",
+        "plan de ortodoncia", "tratamiento ortodóncico", "tratamiento de ortodoncia",
+        "cefalometría", "cefalometria"
     ]
 
     return any(kw in texto_unificado for kw in palabras_clave_orto)

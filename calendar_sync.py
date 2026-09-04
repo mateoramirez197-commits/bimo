@@ -159,11 +159,24 @@ def exportar_calendario_ics(ruta_salida=None):
         f.write("\n".join(lineas))
     return str(ruta_salida)
 
-def agendar_cita(nombre_paciente, telefono, fecha_hora_inicio, fecha_hora_fin=None, descripcion="Consulta Odontológica", paciente_id=None, abrir_en_navegador=True, duracion_minutos=30, **kwargs):
+def agendar_cita(nombre_paciente="", telefono="", fecha_hora_inicio="", fecha_hora_fin=None, descripcion="Consulta Odontológica", paciente_id=None, abrir_en_navegador=True, duracion_minutos=30, **kwargs):
     """
     Agenda una cita en SQLite, actualiza el archivo .ics y abre la ventana oficial de Google Calendar
     con el evento precargado para que el usuario confirme y guarde con un solo clic.
     """
+    if not fecha_hora_inicio and "fecha_hora" in kwargs:
+        fecha_hora_inicio = kwargs["fecha_hora"]
+    if not descripcion or descripcion == "Consulta Odontológica":
+        if "motivo" in kwargs and kwargs["motivo"]:
+            descripcion = kwargs["motivo"]
+    if not nombre_paciente and "paciente" in kwargs:
+        nombre_paciente = kwargs["paciente"]
+
+    nombre_paciente = str(nombre_paciente or "").strip() or "Paciente"
+    telefono = str(telefono or "").strip()
+    if not fecha_hora_inicio:
+        fecha_hora_inicio = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d 10:00:00")
+
     # 0. Calcular fecha fin si no se especifica
     try:
         dt_inicio = datetime.datetime.fromisoformat(fecha_hora_inicio.replace(" ", "T"))
