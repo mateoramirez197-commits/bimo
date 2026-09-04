@@ -633,21 +633,14 @@
 
           <div class="mt-6 w-full max-w-sm">
             <h4 class="text-base font-bold text-white">Escanea con la cámara de tu teléfono</h4>
-            <p class="text-xs text-slate-400 mt-1">Conexión directa local sin instalar aplicaciones en iOS o Android.</p>
-            
-            <div class="mt-4 flex items-center gap-2 bg-slate-950 px-3.5 py-2.5 rounded-2xl border border-slate-800 justify-between">
-              <span id="mobileServerUrl" class="text-xs font-mono font-bold text-indigo-400 select-all truncate">https://127.0.0.1:8765/</span>
-              <button onclick="copiarUrlMovil()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] font-bold cursor-pointer shrink-0 transition-colors">
-                Copiar 📋
-              </button>
-            </div>
+            <p class="text-xs text-slate-400 mt-1">Conexión instantánea en la misma red Wi-Fi sin instalar aplicaciones adicionales.</p>
 
-            <div class="mt-3 flex gap-2">
-              <button onclick="abrirUrlMovilNativo()" class="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/20">
-                Abrir en Navegador ↗
+            <div class="mt-4 flex gap-2">
+              <button onclick="cargarInfoMovil()" class="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-1.5">
+                <span>↻ Regenerar Código QR</span>
               </button>
-              <button onclick="cargarInfoMovil()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors" title="Regenerar QR">
-                ↻
+              <button onclick="abrirUrlMovilNativo()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors" title="Abrir en Navegador">
+                ↗
               </button>
             </div>
           </div>
@@ -775,8 +768,8 @@
           <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-4">
-                <div id="widgetStatusIconBox" class="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl border border-indigo-500/30">
-                  ⚡
+                <div id="widgetStatusIconBox" class="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-500/30">
+                  <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 </div>
                 <div>
                   <div class="flex items-center gap-2">
@@ -1207,11 +1200,16 @@
       const content = document.getElementById('toastContent');
 
       msg.innerText = mensaje;
+      let toastDuration = 3000;
       if (tipo === 'success') {
         icon.innerText = '✅';
         content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/40 shadow-2xl text-xs font-semibold text-emerald-300 backdrop-blur-xl';
-      } else if (tipo === 'error') {
+      } else if (tipo === 'warning') {
         icon.innerText = '⚠️';
+        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-amber-500/50 shadow-2xl text-xs font-semibold text-amber-300 backdrop-blur-xl';
+        toastDuration = 4500;
+      } else if (tipo === 'error') {
+        icon.innerText = '❌';
         content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-rose-500/40 shadow-2xl text-xs font-semibold text-rose-300 backdrop-blur-xl';
       } else {
         icon.innerText = 'ℹ️';
@@ -1225,7 +1223,7 @@
       setTimeout(() => {
         toast.classList.add('translate-y-4');
         setTimeout(() => toast.classList.add('hidden'), 300);
-      }, 3000);
+      }, toastDuration);
     }
 
     // ==========================================
@@ -1559,7 +1557,11 @@
                 cargarCitas();
                 switchTab('agenda');
               } else {
-                mostrarToast('¡Consulta clínica procesada y PDF generado con éxito!');
+                if (resp.alerta_cedula_requerida) {
+                  mostrarToast(`⚠️ Por favor registre o dicte la cédula de ${resp.paciente || 'el paciente'} para archivar su historia.`, 'warning');
+                } else {
+                  mostrarToast('¡Consulta clínica procesada y PDF generado con éxito!');
+                }
                 cargarUltimoExpediente();
                 cargarPacientes();
                 cargarCitas();
@@ -1635,8 +1637,10 @@
       const tbody = document.getElementById('tablaPacientesBody');
       try {
         let lista = [];
-        if (window.pywebview && window.pywebview.api) {
-          lista = await window.pywebview.api.obtener_pacientes(filtro);
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        if (api && (typeof api.obtener_pacientes === 'function' || typeof api.obtenerPacientes === 'function')) {
+          const fn = api.obtener_pacientes || api.obtenerPacientes;
+          lista = await fn.call(api, filtro);
         } else {
           // Datos para navegador
           lista = [
@@ -1675,13 +1679,12 @@
                 ${initials}
               </div>
               <div>
-                <div class="group-hover:text-indigo-300 transition-colors">${p.nombre}</div>
-                <div class="text-[10px] text-slate-500 font-normal">ID: #${p.id}</div>
+                <div class="group-hover:text-indigo-300 transition-colors font-bold">${p.nombre}</div>
               </div>
             </td>
-            <td class="py-4 text-slate-300 font-mono">${doc}</td>
-            <td class="py-4 text-slate-400">${edad}</td>
-            <td class="py-4 text-slate-300">${p.ultima_visita || 'Sin registros'}</td>
+            <td class="py-4 text-slate-300 font-mono font-medium">${doc}</td>
+            <td class="py-4 text-slate-300">${edad}</td>
+            <td class="py-4 text-slate-400">${p.ultima_visita || 'Sin registros'}</td>
             <td class="py-4 ${saldoColor}">${p.saldo || '$0.00'}</td>
             <td class="py-4 text-right space-x-2" onclick="event.stopPropagation()">
               <button onclick="editarPaciente(${p.id})" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">✏️ Editar</button>
@@ -1719,7 +1722,7 @@
       const p = pacientesCache.find(x => x.id === id);
       if (!p) return;
 
-      document.getElementById('modalPacienteTitulo').innerText = 'Editar Paciente #' + id;
+      document.getElementById('modalPacienteTitulo').innerText = 'Editar Ficha: ' + (p.nombre || 'Paciente');
       document.getElementById('pacienteId').value = p.id;
       document.getElementById('pacienteNombre').value = p.nombre || '';
       document.getElementById('pacienteDoc').value = p.documento && p.documento !== 'None' ? p.documento : '';
@@ -1797,7 +1800,9 @@
         const initials = (p.nombre || 'P').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
         document.getElementById('historiaInitials').innerText = initials;
         document.getElementById('historiaNombre').innerText = p.nombre || 'Paciente';
-        document.getElementById('historiaMeta').innerText = `Expediente #${p.id} • ${p.direccion && p.direccion !== 'No especificado' ? p.direccion : 'Consultorio Odontológico'}`;
+        const docTxt = p.documento && p.documento !== 'None' ? `CI: ${p.documento}` : 'Sin cédula';
+        const edadTxt = p.edad ? `${p.edad} años` : 'Edad no reg.';
+        document.getElementById('historiaMeta').innerText = `${docTxt} • ${edadTxt} • ${p.direccion && p.direccion !== 'No especificado' ? p.direccion : 'Consultorio Odontológico'}`;
         document.getElementById('historiaDoc').innerText = p.documento && p.documento !== 'None' ? p.documento : 'Sin cédula';
         document.getElementById('historiaEdadSexo').innerText = `${p.edad ? p.edad + ' años' : 'Edad no reg.'} • ${p.sexo || 'No especificado'}`;
         document.getElementById('historiaTel').innerText = p.telefono && p.telefono !== 'No especificado' ? p.telefono : 'Sin teléfono';
@@ -1979,8 +1984,10 @@
       const cont = document.getElementById('listaCitasContenedor');
       try {
         let citas = [];
-        if (window.pywebview && window.pywebview.api) {
-          citas = await window.pywebview.api.obtener_citas();
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        if (api && (typeof api.obtener_citas === 'function' || typeof api.obtenerCitas === 'function')) {
+          const fn = api.obtener_citas || api.obtenerCitas;
+          citas = await fn.call(api);
         } else {
           citas = [
             { id: 41, nombre_paciente: 'Brian Benítez', fecha_hora_inicio: '2026-09-04 09:00', descripcion: 'Dolor y caries en premolar superior' },
@@ -2105,8 +2112,10 @@
       const cont = document.getElementById('listaPdfsContenedor');
       try {
         let pdfs = [];
-        if (window.pywebview && window.pywebview.api) {
-          pdfs = await window.pywebview.api.listar_pdfs_recientes();
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        if (api && (typeof api.listar_pdfs_recientes === 'function' || typeof api.listarPdfsRecientes === 'function')) {
+          const fn = api.listar_pdfs_recientes || api.listarPdfsRecientes;
+          pdfs = await fn.call(api);
         } else {
           pdfs = [
             { nombre: 'Consulta_DaniB_25a_04-09-2026.pdf', paciente: 'Dani Baraona', fecha: '04/09/2026 00:38', tamano: '142.5 KB', ruta: '' },
@@ -2124,27 +2133,28 @@
           return;
         }
 
-        cont.innerHTML = pdfs.map((p, idx) => `
+        cont.innerHTML = pdfs.map((p, idx) => {
+          const pacNom = p.paciente && p.paciente !== 'General' ? p.paciente : p.nombre;
+          const cedTxt = p.cedula || 'Sin cédula';
+          const edadTxt = p.edad ? ` • ${p.edad}` : '';
+          return `
           <div onclick="seleccionarPdfItem('${encodeURIComponent(p.ruta)}', this)" class="pdf-list-card p-3 bg-slate-950/70 hover:bg-slate-800/80 rounded-2xl border border-slate-800 hover:border-indigo-500/50 transition-all flex items-center justify-between group cursor-pointer ${idx === 0 ? 'border-indigo-500/80 bg-indigo-950/20' : ''}">
             <div class="flex items-center gap-3 overflow-hidden">
               <div class="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center font-black text-[10px] shrink-0">
                 PDF
               </div>
               <div class="overflow-hidden">
-                <div class="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">${p.nombre}</div>
-                <div class="text-[10px] text-slate-400 mt-0.5 truncate"><b class="text-slate-200">${p.paciente}</b> • ${p.fecha} • <span class="font-mono">${p.tamano}</span></div>
+                <div class="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">${pacNom}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5 truncate"><b class="text-slate-200">CI: ${cedTxt}</b>${edadTxt} • ${p.fecha} • <span class="font-mono">${p.tamano}</span></div>
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0 ml-2">
-              <button onclick="event.stopPropagation(); abrirRutaPdf('${encodeURIComponent(p.ruta)}')" class="p-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs cursor-pointer transition-colors" title="Abrir en Visor">
+              <button onclick="event.stopPropagation(); abrirRutaPdf('${encodeURIComponent(p.ruta)}')" class="p-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs cursor-pointer transition-colors" title="Abrir Documento">
                 ↗
-              </button>
-              <button onclick="event.stopPropagation(); imprimirRutaPdf('${encodeURIComponent(p.ruta)}')" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors" title="Imprimir">
-                🖨️
               </button>
             </div>
           </div>
-        `).join('');
+        `}).join('');
 
         if (pdfs.length > 0 && pdfs[0].ruta) {
           seleccionarPdfItem(encodeURIComponent(pdfs[0].ruta));
@@ -2177,8 +2187,13 @@
             currentPdfPages = preview.paginas;
             currentPdfPageIndex = 0;
 
-            titleEl.innerText = preview.nombre || 'Expediente Clínico';
-            metaEl.innerText = `Páginas: ${preview.total_paginas} • Tamaño: ${preview.tamano}`;
+            const pacNom = preview.paciente || preview.nombre || 'Expediente Clínico';
+            const pacDoc = preview.cedula || 'Sin cédula registrada';
+            const pacEdad = preview.edad ? ` • ${preview.edad}` : '';
+            const docDr = preview.doctor ? ` • ${preview.doctor}` : ' • Dr. Mateo';
+
+            titleEl.innerText = pacNom;
+            metaEl.innerText = `CI: ${pacDoc}${pacEdad}${docDr} • Pág: ${preview.total_paginas} • ${preview.tamano}`;
             pageInd.innerText = `1 / ${preview.total_paginas}`;
 
             imgEl.src = currentPdfPages[0];
@@ -2192,7 +2207,7 @@
       }
 
       titleEl.innerText = ruta.split('\\').pop().split('/').pop() || 'Expediente Clínico';
-      metaEl.innerText = 'Vista previa nativa lista para abrir';
+      metaEl.innerText = 'Documento generado • Listo para abrir';
       pageInd.innerText = '1 / 1';
       imgEl.classList.add('hidden');
       emptyEl.classList.remove('hidden');
@@ -2263,16 +2278,16 @@
     async function cargarInfoMovil() {
       const qrImg = document.getElementById('mobileQrImg');
       const qrLoading = document.getElementById('mobileQrLoading');
-      const urlDisp = document.getElementById('mobileServerUrl');
 
       if (qrLoading) qrLoading.classList.remove('hidden');
 
       try {
-        if (window.pywebview && window.pywebview.api) {
-          const info = await window.pywebview.api.obtener_qr_movil_base64();
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        const fn = api && (api.obtener_qr_movil_base64 || api.obtenerQrMovilBase64);
+        if (fn) {
+          const info = await fn.call(api);
           if (info && info.status === 'ok') {
             if (qrImg && info.qr_b64) qrImg.src = info.qr_b64;
-            if (urlDisp && info.url) urlDisp.innerText = info.url;
           }
         }
       } catch (e) {
@@ -2282,23 +2297,33 @@
       }
     }
 
-    function copiarUrlMovil() {
-      const url = document.getElementById('mobileServerUrl').innerText;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(url).then(() => {
+    async function copiarUrlMovil() {
+      try {
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        const fn = api && (api.obtener_info_movil || api.obtenerInfoMovil);
+        let url = 'https://localhost:8765/';
+        if (fn) {
+          const info = await fn.call(api);
+          if (info && info.url) url = info.url;
+        }
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
           mostrarToast('¡Enlace móvil copiado al portapapeles!');
-        });
-      } else {
-        mostrarToast('URL: ' + url);
+        } else {
+          mostrarToast('URL: ' + url);
+        }
+      } catch(e) {
+        mostrarToast('Enlace móvil preparado');
       }
     }
 
-    function abrirUrlMovilNativo() {
-      if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.abrir_url_movil();
+    async function abrirUrlMovilNativo() {
+      const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+      const fn = api && (api.abrir_url_movil || api.abrirUrlMovil);
+      if (fn) {
+        await fn.call(api);
       } else {
-        const url = document.getElementById('mobileServerUrl').innerText;
-        window.open(url, '_blank');
+        window.open('https://localhost:8765/', '_blank');
       }
     }
 
@@ -2380,8 +2405,63 @@
       }
     }
 
+    // ==========================================
+    // ENLACE UNIVERSAL Y RESOLUCIÓN DE BRIDGE
+    // ==========================================
+    window.pView = window.pView || {};
+
+    function sincronizarBridgeUniversal() {
+      const api = (window.pywebview && window.pywebview.api) || {};
+      window.pView.app = api;
+
+      const aliases = [
+        ['obtenerCitas', 'obtener_citas'],
+        ['obtenerPacientes', 'obtener_pacientes'],
+        ['guardarPaciente', 'guardar_paciente'],
+        ['eliminarPaciente', 'eliminar_paciente'],
+        ['obtenerPacienteDetalle', 'obtener_paciente_detalle'],
+        ['crearCita', 'crear_cita'],
+        ['cancelarCita', 'cancelar_cita'],
+        ['listarPdfsRecientes', 'listar_pdfs_recientes'],
+        ['obtenerPreviewPdf', 'obtener_preview_pdf'],
+        ['abrirPdf', 'abrir_pdf'],
+        ['abrirUltimoPdf', 'abrir_ultimo_pdf'],
+        ['imprimirPdf', 'imprimir_pdf'],
+        ['obtenerInfoMovil', 'obtener_info_movil'],
+        ['obtenerQrMovilBase64', 'obtener_qr_movil_base64'],
+        ['abrirUrlMovil', 'abrir_url_movil'],
+        ['obtenerInfoClinica', 'obtener_info_clinica'],
+        ['guardarConfiguracion', 'guardar_configuracion'],
+        ['obtenerEstadoWidget', 'obtener_estado_widget'],
+        ['toggleWidgetEscritorio', 'toggle_widget_escritorio'],
+        ['obtenerUltimoExpediente', 'obtener_ultimo_expediente'],
+        ['iniciarGrabacion', 'iniciar_grabacion'],
+        ['detenerYProcesar', 'detener_y_procesar'],
+        ['autenticarPin', 'autenticar_pin'],
+        ['autenticar', 'autenticar'],
+        ['cerrarSesion', 'cerrar_sesion'],
+        ['obtenerSesion', 'obtener_sesion']
+      ];
+
+      aliases.forEach(([camel, snake]) => {
+        if (typeof api[camel] === 'function' && typeof api[snake] !== 'function') {
+          api[snake] = api[camel].bind(api);
+        }
+        if (typeof api[snake] === 'function' && typeof api[camel] !== 'function') {
+          api[camel] = api[snake].bind(api);
+        }
+      });
+      window.pView.app = api;
+    }
+
+    window.addEventListener('pywebviewready', () => {
+      sincronizarBridgeUniversal();
+      console.log('[BIMO DESKTOP] pywebviewready sincronizado exitosamente.');
+    });
+
     // INICIALIZADOR GENERAL
     function inicializarDatosApp() {
+      sincronizarBridgeUniversal();
       cargarUltimoExpediente();
       cargarPacientes();
       cargarCitas();
@@ -2393,9 +2473,11 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+      sincronizarBridgeUniversal();
       // Por defecto el modal de Login está visible
-      // Si ya hay sesión en WebView2, podemos auto-desbloquear
+      // Si ya hay sesión en WebView2, auto-desbloquear
       setTimeout(async () => {
+        sincronizarBridgeUniversal();
         if (window.pywebview && window.pywebview.api) {
           try {
             const s = await window.pywebview.api.obtener_sesion();

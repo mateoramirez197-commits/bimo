@@ -294,6 +294,18 @@ class BimoBridge:
             nombre = "Paciente_Consulta"
         filiacion["nombre"] = nombre
 
+        # Verificación obligatoria de cédula (alerta por voz si no fue dictada)
+        doc_crudo = str(filiacion.get("documento") or filiacion.get("cedula") or "").strip()
+        alerta_cedula = False
+        if not doc_crudo or doc_crudo.lower() in ("no especificado", "none", "", "null"):
+            alerta_cedula = True
+            try:
+                from voice_assistant import preguntar_cedula_paciente
+                nombre_doc = self.usuario_actual.get("nombre", "Mateo") if self.usuario_actual else "Mateo"
+                preguntar_cedula_paciente(nombre_paciente=nombre, nombre_doctor=nombre_doc)
+            except Exception as e_vo:
+                print(f"[VOICE ALERT WARN] {e_vo}")
+
         pac_id = registrar_o_actualizar_paciente(filiacion)
 
         consulta_hoy = obtener_consulta_del_dia(pac_id)
@@ -350,7 +362,8 @@ class BimoBridge:
             "texto": texto,
             "resultado": resultado_ia,
             "ruta_pdf": ruta_pdf,
-            "paciente": nombre
+            "paciente": nombre,
+            "alerta_cedula_requerida": alerta_cedula
         }
 
     def procesar_audio_externo(self, ruta_wav):
@@ -555,6 +568,25 @@ class BimoBridge:
     def listar_pdfs_recientes(self):
         try:
             pdfs = []
+            mapa_db = {}
+            try:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT c.id, c.ruta_pdf, c.fecha_hora, p.nombre, p.documento, p.edad
+                        FROM consultas c
+                        JOIN pacientes p ON c.paciente_id = p.id
+                        WHERE c.ruta_pdf IS NOT NULL AND c.ruta_pdf != ''
+                        ORDER BY c.id DESC
+                    """)
+                    for r in cursor.fetchall():
+                        r_dict = dict(r)
+                        if r_dict.get("ruta_pdf"):
+                            norm = os.path.normpath(str(r_dict["ruta_pdf"]))
+                            mapa_db[norm] = r_dict
+            except Exception as e_db:
+                print(f"[LISTAR PDFS DB WARN] {e_db}")
+
             dirs_a_buscar = [BASE_DIR / "Pacientes", BASE_DIR / "historias_clinicas"]
             vistos = set()
             
@@ -572,10 +604,31 @@ class BimoBridge:
                             kb = round(stat.st_size / 1024, 1)
                             nom_carpeta = p.parent.name
                             nom_paciente = nom_carpeta.split("_")[0].replace("-", " ") if "Pacientes" in p_str else "General"
+                            cedula = "Sin cédula"
+                            edad = ""
+
+                            norm_p = os.path.normpath(p_str)
+                            if norm_p in mapa_db:
+                                db_info = mapa_db[norm_p]
+                                nom_paciente = db_info.get("nombre") or nom_paciente
+                                cedula = db_info.get("documento") or "Sin cédula"
+                                if db_info.get("edad"):
+                                    edad = f"{db_info['edad']} años"
+                            else:
+                                for db_norm, db_info in mapa_db.items():
+                                    if os.path.basename(db_norm).lower() == p.name.lower():
+                                        nom_paciente = db_info.get("nombre") or nom_paciente
+                                        cedula = db_info.get("documento") or "Sin cédula"
+                                        if db_info.get("edad"):
+                                            edad = f"{db_info['edad']} años"
+                                        break
+
                             pdfs.append({
                                 "nombre": p.name,
                                 "ruta": p_str,
                                 "paciente": nom_paciente,
+                                "cedula": cedula,
+                                "edad": edad,
                                 "fecha": mtime.strftime("%d/%m/%Y %H:%M"),
                                 "timestamp": stat.st_mtime,
                                 "tamano": f"{kb} KB"
@@ -610,10 +663,58 @@ class BimoBridge:
 
             kb = round(os.path.getsize(target) / 1024, 1)
             self.ultima_ruta_pdf = target
+
+            paciente_nom = "Paciente"
+            paciente_cedula = "Sin cédula registrada"
+            paciente_edad = ""
+            fecha_consulta = datetime.datetime.fromtimestamp(os.path.getmtime(target)).strftime("%d/%m/%Y %H:%M")
+            doctor_nombre = self.usuario_actual.get("nombre", "Dr. Mateo") if self.usuario_actual else "Dr. Mateo"
+
+            try:
+                norm_target = os.path.normpath(target)
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT c.fecha_hora, p.nombre, p.documento, p.edad, u.nombre as doctor
+                        FROM consultas c
+                        JOIN pacientes p ON c.paciente_id = p.id
+                        LEFT JOIN usuarios u ON c.medico_id = u.id
+                        WHERE c.ruta_pdf = ? OR REPLACE(c.ruta_pdf, '/', '\\') = ?
+                        ORDER BY c.id DESC LIMIT 1
+                    """, (target, norm_target))
+                    row = cursor.fetchone()
+                    if not row:
+                        cursor.execute("""
+                            SELECT c.fecha_hora, p.nombre, p.documento, p.edad, u.nombre as doctor
+                            FROM consultas c
+                            JOIN pacientes p ON c.paciente_id = p.id
+                            LEFT JOIN usuarios u ON c.medico_id = u.id
+                            WHERE c.ruta_pdf LIKE ?
+                            ORDER BY c.id DESC LIMIT 1
+                        """, (f"%{os.path.basename(target)}%",))
+                        row = cursor.fetchone()
+
+                    if row:
+                        paciente_nom = row["nombre"] or paciente_nom
+                        paciente_cedula = row["documento"] or paciente_cedula
+                        if row["edad"]:
+                            paciente_edad = f"{row['edad']} años"
+                        if row["doctor"]:
+                            doctor_nombre = f"Dr. {row['doctor'].replace('Dr.', '').strip()}"
+                        if row["fecha_hora"]:
+                            fecha_consulta = str(row["fecha_hora"])[:16]
+            except Exception as e_meta:
+                print(f"[PDF PREVIEW META WARN] {e_meta}")
+
             return {
                 "status": "ok",
                 "ruta": target,
                 "nombre": os.path.basename(target),
+                "paciente": paciente_nom,
+                "cedula": paciente_cedula,
+                "edad": paciente_edad,
+                "doctor": doctor_nombre,
+                "fecha": fecha_consulta,
                 "total_paginas": len(paginas),
                 "paginas": paginas,
                 "tamano": f"{kb} KB"
@@ -797,6 +898,35 @@ class BimoBridge:
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] toggle_widget_escritorio: {e}")
             return {"status": "error", "message": str(e)}
+
+    # ==========================================
+    # ALIAS UNIVERSALES (CAMELCASE Y SNAKE_CASE)
+    # ==========================================
+    autenticarPin = autenticar_pin
+    cerrarSesion = cerrar_sesion
+    obtenerSesion = obtener_sesion
+    iniciarGrabacion = iniciar_grabacion
+    detenerYProcesar = detener_y_procesar
+    obtenerUltimoExpediente = obtener_ultimo_expediente
+    obtenerPacientes = obtener_pacientes
+    guardarPaciente = guardar_paciente
+    eliminarPaciente = eliminar_paciente
+    obtenerPacienteDetalle = obtener_paciente_detalle
+    obtenerCitas = obtener_citas
+    crearCita = crear_cita
+    cancelarCita = cancelar_cita
+    listarPdfsRecientes = listar_pdfs_recientes
+    obtenerPreviewPdf = obtener_preview_pdf
+    abrirPdf = abrir_pdf
+    abrirUltimoPdf = abrir_ultimo_pdf
+    imprimirPdf = imprimir_pdf
+    obtenerInfoMovil = obtener_info_movil
+    obtenerQrMovilBase64 = obtener_qr_movil_base64
+    abrirUrlMovil = abrir_url_movil
+    obtenerInfoClinica = obtener_info_clinica
+    guardarConfiguracion = guardar_configuracion
+    obtenerEstadoWidget = obtener_estado_widget
+    toggleWidgetEscritorio = toggle_widget_escritorio
 
 
 def iniciar_desktop():

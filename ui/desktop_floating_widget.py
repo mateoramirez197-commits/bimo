@@ -78,7 +78,7 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         left_h.bind("<ButtonPress-1>", self._iniciar_arrastre)
         left_h.bind("<B1-Motion>", self._mover_widget)
 
-        lbl_tit = ctk.CTkLabel(left_h, text="⚡ BIMO HUD", font=("Segoe UI", 10, "bold"), text_color="#38bdf8")
+        lbl_tit = ctk.CTkLabel(left_h, text="● BIMO HUD", font=("Segoe UI", 10, "bold"), text_color="#38bdf8")
         lbl_tit.pack(side="left")
         lbl_tit.bind("<ButtonPress-1>", self._iniciar_arrastre)
         lbl_tit.bind("<B1-Motion>", self._mover_widget)
