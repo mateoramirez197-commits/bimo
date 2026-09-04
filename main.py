@@ -41,8 +41,19 @@ def main():
         pass
 
     # 5. Iniciar la aplicación y la interfaz de usuario
-    app = BimoApp()
-    app.mainloop()
+    if "--classic" in sys.argv:
+        print("[MODO CLÁSICO] Iniciando CustomTkinter UI...")
+        app = BimoApp()
+        app.mainloop()
+    else:
+        print("[MODO MODERNO] Iniciando BIMO Modern Desktop UI con WebView2...")
+        try:
+            from desktop_app import iniciar_desktop
+            iniciar_desktop()
+        except Exception as e:
+            print(f"[MODERNO FALLÓ]: {e}. Iniciando modo clásico de respaldo...")
+            app = BimoApp()
+            app.mainloop()
 
 if __name__ == "__main__":
     main()

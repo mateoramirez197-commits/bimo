@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIMO by Matsword</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    /* ANIMACIONES DE FONDO FLUIDAS Y ORGÁNICAS */
+    @keyframes drift-1 {
+      0% { transform: translate(0px, 0px) scale(1); }
+      33% { transform: translate(70px, -50px) scale(1.15); }
+      66% { transform: translate(-40px, 60px) scale(0.92); }
+      100% { transform: translate(0px, 0px) scale(1); }
+    }
+    @keyframes drift-2 {
+      0% { transform: translate(0px, 0px) scale(1.05); }
+      33% { transform: translate(-60px, 70px) scale(0.95); }
+      66% { transform: translate(50px, -40px) scale(1.2); }
+      100% { transform: translate(0px, 0px) scale(1.05); }
+    }
+    @keyframes drift-3 {
+      0% { transform: translate(0px, 0px) scale(0.9); }
+      50% { transform: translate(80px, 40px) scale(1.1); }
+      100% { transform: translate(0px, 0px) scale(0.9); }
+    }
+    .blob-1 { animation: drift-1 18s ease-in-out infinite; }
+    .blob-2 { animation: drift-2 24s ease-in-out infinite reverse; }
+    .blob-3 { animation: drift-3 20s ease-in-out infinite 2s; }
+
+    /* ANILLOS DE PULSO DEL BOTÓN REDONDO */
+    @keyframes pulse-ring-1 {
+      0% { transform: scale(0.96); opacity: 0.75; }
+      50% { transform: scale(1.18); opacity: 0.15; }
+      100% { transform: scale(0.96); opacity: 0.75; }
+    }
+    @keyframes pulse-ring-2 {
+      0% { transform: scale(0.92); opacity: 0.5; }
+      50% { transform: scale(1.32); opacity: 0.08; }
+      100% { transform: scale(0.92); opacity: 0.5; }
+    }
+    @keyframes pulse-subtle {
+      0%, 100% { transform: scale(1.0); opacity: 0.5; }
+      50% { transform: scale(1.06); opacity: 0.2; }
+    }
+    .ring-layer-1 { animation: pulse-ring-1 3.2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    .ring-layer-2 { animation: pulse-ring-2 3.2s cubic-bezier(0.4, 0, 0.6, 1) infinite 0.6s; }
+    .ring-subtle-active { animation: pulse-subtle 2.8s ease-in-out infinite; }
+    
+    @keyframes float-mic {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+    }
+    .mic-floating { animation: float-mic 3.2s ease-in-out infinite; }
+
+    /* ANIMACIÓN FLUIDA DE PESTAÑAS Y NAVEGACIÓN MODERNA */
+    @keyframes tabFadeSlide {
+      from { opacity: 0; transform: translateY(10px) scale(0.996); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .tab-entering {
+      animation: tabFadeSlide 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .nav-btn {
+      transition: all 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .nav-btn:hover:not(.nav-active) {
+      transform: translateX(4px);
+    }
+    .nav-btn.nav-active {
+      transform: translateX(6px);
+    }
+  </style>
+</head>
+<body id="themeBody" class="bg-[#090614] text-slate-100 font-sans antialiased m-0 p-0 overflow-hidden flex h-screen select-none relative transition-colors duration-700">
+
+  <!-- ================= CAPA DE FONDOS AMBIENTALES EN MOVIMIENTO FLUIDO ================= -->
+  <div class="absolute inset-0 overflow-hidden pointer-events-none z-0">
+    <div id="blob1" class="blob-1 absolute -top-20 -left-20 w-[38rem] h-[38rem] bg-indigo-600/15 rounded-full blur-[100px] transition-colors duration-700"></div>
+    <div id="blob2" class="blob-2 absolute top-1/3 -right-20 w-[42rem] h-[42rem] bg-purple-600/12 rounded-full blur-[120px] transition-colors duration-700"></div>
+    <div id="blob3" class="blob-3 absolute -bottom-28 left-1/3 w-[36rem] h-[36rem] bg-blue-600/10 rounded-full blur-[90px] transition-colors duration-700"></div>
+  </div>
+
+  <!-- ================= BARRA LATERAL ================= -->
+  <aside class="w-68 bg-slate-900/80 border-r border-slate-800/80 flex flex-col justify-between relative shadow-2xl backdrop-blur-2xl z-30 transition-all duration-300">
+    
+    <div class="p-6 relative z-10">
+      
+      <!-- LOGO OFICIAL: DOS OCHOS ENTRELAZADOS (INFINITO) + BIMO BY MATSWORD -->
+      <div class="flex items-center gap-3.5 mb-8 px-1 group cursor-pointer" onclick="switchTab('dictado')">
+        
+        <!-- ISOTIPO DE CRISTAL: DOS OCHOS ENTRELAZADOS EN FORMA DE INFINITO (88) -->
+        <div id="logoBadge" class="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/20 p-[1px] shadow-2xl backdrop-blur-md group-hover:scale-105 group-hover:border-white/40 transition-all duration-300 flex items-center justify-center">
+          <div class="w-full h-full bg-black/40 rounded-[14px] flex items-center justify-center relative overflow-hidden">
+            
+            <!-- GLIFO DE PRECISIÓN: DOS OCHOS (88) ENTRELAZADOS FORMANDO UN NUDO INFINITO -->
+            <svg class="w-8 h-8 text-white drop-shadow-md" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- Ocho vertical (8) -->
+              <path d="M20 20C22.2091 20 24 17.5376 24 14.5C24 11.4624 22.2091 9 20 9C17.7909 9 16 11.4624 16 14.5C16 17.5376 17.7909 20 20 20ZM20 20C22.4853 20 24.5 22.4624 24.5 25.5C24.5 28.5376 22.4853 31 20 31C17.5147 31 15.5 28.5376 15.5 25.5C15.5 22.4624 17.5147 20 20 20Z" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Ocho horizontal entrelazado (Infinito ∞) -->
+              <path d="M20 20C20 17.7909 17.5376 16 14.5 16C11.4624 16 9 17.7909 9 20C9 22.2091 11.4624 24 14.5 24C17.5376 24 20 22.2091 20 20ZM20 20C20 17.5147 22.4624 15.5 25.5 15.5C28.5376 15.5 31 17.5147 31 20C31 22.4853 28.5376 24.5 25.5 24.5C22.4624 24.5 20 22.4853 20 20Z" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+              <!-- Nódulo central de convergencia -->
+              <circle cx="20" cy="20" r="1.5" fill="currentColor"/>
+            </svg>
+
+          </div>
+        </div>
+
+        <div>
+          <!-- BIMO by Matsword LIMPIO (SIN 1963) -->
+          <div class="flex items-baseline gap-2">
+            <span class="text-2xl font-black text-white tracking-widest">BIMO</span>
+            <span class="text-[9px] bg-white/10 text-white/80 font-bold px-1.5 py-0.2 rounded border border-white/20">PRO</span>
+          </div>
+          <p class="text-xs text-slate-400 font-medium">by <span class="text-white font-bold">Matsword</span></p>
+        </div>
+      </div>
+
+      <!-- Menú de Navegación -->
+      <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 px-2">Navegación</div>
+      <nav class="space-y-2">
+        
+        <button id="nav-dictado" onclick="switchTab('dictado')" class="nav-btn nav-active group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 cursor-pointer bg-white/10 text-white border border-white/15 shadow-lg backdrop-blur-md">
+          <div class="flex items-center gap-3.5">
+            <div class="nav-icon-box text-indigo-400 transition-all duration-300 group-hover:scale-110">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" /></svg>
+            </div>
+            <span class="nav-label tracking-wide">Dictado Clínico</span>
+          </div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-100 scale-100"></div>
+        </button>
+
+        <button id="nav-agenda" onclick="switchTab('agenda')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center gap-3.5">
+            <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            </div>
+            <span class="nav-label tracking-wide">Agenda & Citas</span>
+          </div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+        </button>
+
+        <button id="nav-pacientes" onclick="switchTab('pacientes')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center gap-3.5">
+            <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+            </div>
+            <span class="nav-label tracking-wide">Fichas de Pacientes</span>
+          </div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+        </button>
+
+        <button id="nav-mobile" onclick="switchTab('mobile')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center gap-3.5">
+            <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+            </div>
+            <span class="nav-label tracking-wide">Móvil & Código QR</span>
+          </div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+        </button>
+
+        <button id="nav-pdf" onclick="switchTab('pdf')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center gap-3.5">
+            <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            </div>
+            <span class="nav-label tracking-wide">Visor de PDF</span>
+          </div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+        </button>
+
+        <button id="nav-widget" onclick="switchTab('widget')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center gap-3.5">
+            <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+            </div>
+            <span class="nav-label tracking-wide">Widget de Escritorio</span>
+          </div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+        </button>
+
+        <button id="nav-config" onclick="switchTab('config')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center gap-3.5">
+            <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </div>
+            <span class="nav-label tracking-wide">Configuración & Temas</span>
+          </div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+        </button>
+
+      </nav>
+    </div>
+
+    <!-- Perfil del Doctor -->
+    <div class="p-5 border-t border-slate-800/80 bg-slate-900/60 relative z-10">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div id="userAvatar" class="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center font-bold text-white text-xs shadow-inner">
+            MR
+          </div>
+          <div>
+            <p class="text-xs font-bold text-white">Dr. Mateo Ramírez</p>
+            <p id="userRole" class="text-[10px] text-indigo-400 font-medium">Odontología</p>
+          </div>
+        </div>
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Sistema activo"></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= CONTENEDOR PRINCIPAL ================= -->
+  <main class="flex-1 flex flex-col p-8 overflow-y-auto relative z-10">
+
+    <!-- ================= PANTALLA 1: DICTADO CLÍNICO ================= -->
+    <div id="tab-dictado" class="tab-content flex-1 flex flex-col">
+      
+      <!-- Cabecera con Botón de Mini Calendario Desplegable -->
+      <header class="flex justify-between items-center mb-6 relative z-20">
+        <div>
+          <h2 class="text-3xl font-black text-white tracking-tight">Dictado Clínico</h2>
+          <p class="text-xs text-slate-400 mt-1">Escucha inteligente manos libres o pulsando el botón central.</p>
+        </div>
+
+        <!-- ACCIONES SUPERIORES & MINI CALENDARIO DESPLEGABLE -->
+        <div class="flex items-center gap-3 relative">
+          
+          <!-- BOTÓN MINI CALENDARIO DESPLEGABLE -->
+          <div class="relative">
+            <button id="btnToggleMiniCal" onclick="toggleMiniCalendar()" class="flex items-center gap-2 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-lg backdrop-blur-md">
+              <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              <span>Mini Calendario</span>
+              <svg id="calChevron" class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+
+            <!-- EL MINI CALENDARIO FLOTANTE DESPLEGABLE -->
+            <div id="miniCalendarDropdown" class="hidden absolute right-0 mt-2 w-72 bg-slate-900/95 border border-slate-700/80 rounded-2xl p-4 shadow-2xl backdrop-blur-2xl z-50 transition-all duration-300">
+              <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                <span class="text-xs font-bold text-white">Septiembre 2026</span>
+                <span class="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded">Hoy: 4 Sep</span>
+              </div>
+              <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-500 mb-1.5">
+                <div>L</div><div>M</div><div>M</div><div>J</div><div>V</div><div>S</div><div>D</div>
+              </div>
+              <div class="grid grid-cols-7 gap-1 text-center text-xs">
+                <div class="p-1.5 text-slate-600">31</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">1</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">2</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">3</div>
+                <div class="p-1.5 bg-indigo-600 border border-indigo-400 text-white font-bold rounded-lg shadow-md">4</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">5</div>
+                <div class="p-1.5 text-slate-500">6</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">7</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">8</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">9</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">10</div>
+                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">11</div>
+                <div class="p-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg font-bold">12</div>
+                <div class="p-1.5 text-slate-500">13</div>
+              </div>
+              <div class="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[10px]">
+                <span class="text-slate-400">3 citas hoy</span>
+                <button onclick="switchTab('agenda')" class="text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer">Ver Agenda ➔</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Indicador de Estado -->
+          <div class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-4 py-2 rounded-full text-xs text-slate-300 shadow-sm">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            Listo para dictar
+          </div>
+        </div>
+      </header>
+
+      <!-- Layout 50 / 50 Espacioso y Limpio -->
+      <div class="flex-1 grid grid-cols-2 gap-8 relative z-10">
+
+        <!-- COLUMNA IZQUIERDA: BOTÓN CIRCULAR DE 160px PULIDO -->
+        <section id="cardCapture" class="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-500">
+          
+          <div class="flex items-center justify-between">
+            <span id="colHeaderLeft" class="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+              Control de Captura
+            </span>
+            <span id="statusIndicatorBadge" class="text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full font-medium">
+              En Reposo
+            </span>
+          </div>
+
+          <!-- BOTÓN REDONDO DE 192px CON MICRÓFONO DE ESTUDIO AMPLIADO -->
+          <div class="my-auto flex flex-col items-center justify-center py-6">
+            
+            <div class="relative flex items-center justify-center">
+              <div id="outerRing2" class="absolute w-76 h-76 rounded-full border border-indigo-500/20 ring-layer-2 pointer-events-none transition-all duration-700"></div>
+              <div id="outerRing1" class="absolute w-60 h-60 rounded-full bg-indigo-500/10 border border-indigo-500/30 ring-layer-1 pointer-events-none transition-all duration-700"></div>
+
+              <button id="mainRecordButton" onclick="toggleRecording()" class="relative z-10 w-48 h-48 rounded-full bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 shadow-2xl shadow-indigo-600/40 border-4 border-slate-900 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 hover:scale-105 active:scale-95 group">
+                
+                <!-- Micrófono de Condensador con Rejilla y Cápsula -->
+                <div class="mic-floating w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-2 backdrop-blur-sm group-hover:scale-110 transition-transform shadow-inner">
+                  <svg id="btnMicIcon" class="w-10 h-10 text-white drop-shadow-md" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/>
+                    <path d="M5 10C5 13.866 8.13401 17 12 17C15.866 17 19 13.866 19 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M12 17V21M8 21H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="9" y1="6" x2="15" y2="6" stroke="#0f172a" stroke-width="0.8"/>
+                    <line x1="9" y1="8" x2="15" y2="8" stroke="#0f172a" stroke-width="0.8"/>
+                  </svg>
+                </div>
+
+                <span id="btnMainLabel" class="text-sm font-black uppercase tracking-widest text-white drop-shadow-md">Dictar</span>
+              </button>
+            </div>
+
+            <!-- ESTADO MINIMALISTA LIMPIO -->
+            <div class="mt-8 text-center">
+              <h4 id="recordStatusTitle" class="text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300">En espera</h4>
+            </div>
+          </div>
+
+          <!-- Acciones Limpias -->
+          <div>
+            <button onclick="abrirUltimoPDF()" class="w-full h-12 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-700/60 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer">
+              <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+              Abrir Último PDF Generado
+            </button>
+          </div>
+
+        </section>
+
+        <!-- COLUMNA DERECHA: EXPEDIENTE CLÍNICO -->
+        <section id="cardRecord" class="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-500">
+          
+          <div>
+            <div class="flex items-center justify-between mb-6">
+              <span id="colHeaderRight" class="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                Expediente Clínico
+              </span>
+              <span class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 font-semibold">
+                Sincronizado
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              
+              <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors relative group">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Paciente</div>
+                <div class="text-base font-bold text-white mt-1">Andrés Felipe Calvache</div>
+                <div class="text-xs text-slate-400 mt-0.5">CI: 1724891203 • 32 años</div>
+              </div>
+
+              <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Diagnóstico</div>
+                <div class="text-base font-bold text-indigo-300 mt-1">Caries Oclusal</div>
+                <div class="text-xs text-slate-400 mt-0.5">Pieza tratada: <span class="text-rose-400 font-bold">36 ★</span></div>
+              </div>
+
+              <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Procedimiento</div>
+                <div class="text-base font-bold text-white mt-1">Curación con Resina</div>
+                <div class="text-xs text-slate-400 mt-0.5">Grabado ácido y fotocurado</div>
+              </div>
+
+              <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cita & Pago</div>
+                <div class="text-base font-bold text-emerald-400 mt-1">Jueves 18 Sep • 16:30</div>
+                <div class="text-xs text-slate-400 mt-0.5">Abonó: $20.00 <span class="text-slate-500">(Saldo: $25)</span></div>
+              </div>
+
+            </div>
+
+            <div class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800/60 flex items-center justify-between">
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">Medicación Prescrita</span>
+                <span class="text-xs text-slate-200 font-medium">Ibuprofeno 400mg cada 8 horas por 2 días si hay dolor.</span>
+              </div>
+              <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg">Receta OK</span>
+            </div>
+          </div>
+
+          <div class="pt-6 border-t border-slate-800">
+            <button id="btnPrintPdfBtn" onclick="switchTab('pdf')" class="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-xl shadow-indigo-600/30 cursor-pointer flex items-center justify-center gap-2.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              Generar Historia Clínica Oficial en PDF
+            </button>
+          </div>
+
+        </section>
+
+      </div>
+    </div>
+
+    <!-- ================= PANTALLA 2: AGENDA DE CITAS ================= -->
+    <div id="tab-agenda" class="tab-content hidden flex-1 flex flex-col">
+      <header class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-3xl font-black text-white tracking-tight">Agenda Médica</h2>
+          <p class="text-xs text-slate-400 mt-1">Citas agendadas por voz y controles periódicos.</p>
+        </div>
+      </header>
+
+      <div class="flex-1 grid grid-cols-3 gap-6">
+        <div class="col-span-2 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+          <div class="flex items-center justify-between mb-6">
+            <span class="text-base font-black text-white">Septiembre 2026</span>
+            <div class="flex items-center gap-2">
+              <button class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">◀</button>
+              <button class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">▶</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-7 gap-3 text-center text-xs font-bold text-slate-500 mb-3">
+            <div>LUN</div><div>MAR</div><div>MIÉ</div><div>JUE</div><div>VIE</div><div>SÁB</div><div>DOM</div>
+          </div>
+          <div class="grid grid-cols-7 gap-3 text-center text-xs">
+            <div class="p-3 text-slate-600">31</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">1</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">2</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">3</div>
+            <div class="p-3 rounded-2xl bg-indigo-600/30 border border-indigo-500 text-indigo-300 font-bold">4</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">5</div>
+            <div class="p-3 rounded-2xl text-slate-500">6</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">7</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">8</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">9</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">10</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">11</div>
+            <div class="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500 text-emerald-300 font-bold">12</div>
+            <div class="p-3 rounded-2xl text-slate-500">13</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">14</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">15</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">16</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">17</div>
+            <div class="p-3 rounded-2xl bg-purple-500/20 border border-purple-500 text-purple-300 font-bold">18</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">19</div>
+            <div class="p-3 rounded-2xl text-slate-500">20</div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Citas del Día</h3>
+            <div class="space-y-3">
+              <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800">
+                <div class="flex justify-between text-xs font-bold text-white">
+                  <span>Andrés Calvache</span>
+                  <span class="text-indigo-400">09:00</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">Curación resina molar 36</p>
+              </div>
+              <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800">
+                <div class="flex justify-between text-xs font-bold text-white">
+                  <span>Karla Morales</span>
+                  <span class="text-indigo-400">11:30</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">Limpieza ultrasónica</p>
+              </div>
+            </div>
+          </div>
+          <button class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer">
+            + Agendar Nueva Cita
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PANTALLA 3: FICHAS DE PACIENTES ================= -->
+    <div id="tab-pacientes" class="tab-content hidden flex-1 flex flex-col">
+      <header class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-3xl font-black text-white tracking-tight">Directorio de Pacientes</h2>
+          <p class="text-xs text-slate-400 mt-1">Fichas clínicas completas con edición instantánea de datos.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <input type="text" placeholder="Buscar nombre o cédula..." class="w-72 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+          <button onclick="alert('Modal de Nuevo Paciente')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer">
+            + Nuevo Paciente
+          </button>
+        </div>
+      </header>
+
+      <div class="flex-1 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl overflow-y-auto">
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-800 pb-3 uppercase text-[10px] tracking-wider">
+              <th class="pb-4">Paciente</th>
+              <th class="pb-4">Cédula</th>
+              <th class="pb-4">Edad</th>
+              <th class="pb-4">Última Visita</th>
+              <th class="pb-4">Saldo</th>
+              <th class="pb-4 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60">
+            <tr class="hover:bg-slate-800/40 transition-colors">
+              <td class="py-4 font-bold text-white flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-[10px]">AC</div>
+                Andrés Felipe Calvache
+              </td>
+              <td class="py-4 text-slate-300 font-mono">1724891203</td>
+              <td class="py-4 text-slate-400">32 años</td>
+              <td class="py-4 text-slate-300">Hoy (4 Sep)</td>
+              <td class="py-4 text-emerald-400 font-bold">$25.00</td>
+              <td class="py-4 text-right space-x-2">
+                <button onclick="alert('Editor de datos de paciente listo en la app')" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">✏️ Editar</button>
+                <button onclick="switchTab('dictado')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer">Ver Historia</button>
+              </td>
+            </tr>
+            <tr class="hover:bg-slate-800/40 transition-colors">
+              <td class="py-4 font-bold text-white flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold text-[10px]">KM</div>
+                Karla Morales Espinoza
+              </td>
+              <td class="py-4 text-slate-300 font-mono">1719842011</td>
+              <td class="py-4 text-slate-400">26 años</td>
+              <td class="py-4 text-slate-300">28 Ago 2026</td>
+              <td class="py-4 text-slate-500 font-bold">$0.00</td>
+              <td class="py-4 text-right space-x-2">
+                <button onclick="alert('Editor de datos de paciente listo en la app')" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">✏️ Editar</button>
+                <button onclick="switchTab('dictado')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer">Ver Historia</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ================= PANTALLA 4: MÓVIL & CÓDIGO QR ================= -->
+    <div id="tab-mobile" class="tab-content hidden flex-1 flex flex-col">
+      <header class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-3xl font-black text-white tracking-tight">Sincronización Móvil & QR</h2>
+          <p class="text-xs text-slate-400 mt-1">Conecta tu smartphone para dictar a distancia o subir fotos clínicas con la cámara.</p>
+        </div>
+        <span class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 font-semibold flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Servidor Móvil Activo en Red Local
+        </span>
+      </header>
+
+      <div class="flex-1 grid grid-cols-2 gap-8">
+        <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-2xl backdrop-blur-xl">
+          <div class="w-56 h-56 bg-white rounded-3xl p-4 shadow-2xl flex items-center justify-center border-4 border-indigo-500/40">
+            <svg class="w-full h-full text-slate-900" viewBox="0 0 100 100" fill="currentColor">
+              <rect x="10" y="10" width="24" height="24" rx="4" fill="#0f172a"/>
+              <rect x="14" y="14" width="16" height="16" rx="2" fill="white"/>
+              <rect x="18" y="18" width="8" height="8" rx="1" fill="#0f172a"/>
+              <rect x="66" y="10" width="24" height="24" rx="4" fill="#0f172a"/>
+              <rect x="70" y="14" width="16" height="16" rx="2" fill="white"/>
+              <rect x="74" y="18" width="8" height="8" rx="1" fill="#0f172a"/>
+              <rect x="10" y="66" width="24" height="24" rx="4" fill="#0f172a"/>
+              <rect x="14" y="70" width="16" height="16" rx="2" fill="white"/>
+              <rect x="18" y="74" width="8" height="8" rx="1" fill="#0f172a"/>
+              <rect x="40" y="12" width="6" height="12" rx="1" fill="#0f172a"/>
+              <rect x="52" y="18" width="8" height="6" rx="1" fill="#0f172a"/>
+              <rect x="40" y="32" width="20" height="6" rx="1" fill="#0f172a"/>
+              <rect x="12" y="44" width="8" height="14" rx="1" fill="#0f172a"/>
+              <rect x="28" y="40" width="6" height="18" rx="1" fill="#0f172a"/>
+              <rect x="40" y="48" width="12" height="12" rx="2" fill="#4f46e5"/>
+              <rect x="58" y="42" width="10" height="6" rx="1" fill="#0f172a"/>
+              <rect x="74" y="40" width="16" height="6" rx="1" fill="#0f172a"/>
+              <rect x="74" y="52" width="8" height="14" rx="1" fill="#0f172a"/>
+              <rect x="40" y="68" width="16" height="6" rx="1" fill="#0f172a"/>
+              <rect x="62" y="68" width="8" height="18" rx="1" fill="#0f172a"/>
+              <rect x="40" y="80" width="16" height="6" rx="1" fill="#0f172a"/>
+              <rect x="76" y="76" width="14" height="10" rx="1" fill="#0f172a"/>
+            </svg>
+          </div>
+          <div class="mt-6">
+            <h4 class="text-base font-bold text-white">Escanea con tu teléfono</h4>
+            <p class="text-xs text-slate-400 mt-1">Conecta tu smartphone sin instalar nada desde la App Store.</p>
+            <div class="mt-3 inline-block bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-mono text-indigo-400">
+              http://192.168.18.11:8000/mobile
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl">
+          <div class="space-y-4">
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Funciones Móviles</h3>
+            <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 flex items-center gap-4">
+              <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-lg">🎙️</div>
+              <div>
+                <h5 class="text-xs font-bold text-white">Dictado Remoto Inalámbrico</h5>
+                <p class="text-[11px] text-slate-400 mt-0.5">Usa el micrófono de tu celular mientras te mueves.</p>
+              </div>
+            </div>
+            <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 flex items-center gap-4">
+              <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center text-lg">📸</div>
+              <div>
+                <h5 class="text-xs font-bold text-white">Cámara Dental Directa</h5>
+                <p class="text-[11px] text-slate-400 mt-0.5">Toma fotos intraorales que se adjuntan a la ficha.</p>
+              </div>
+            </div>
+          </div>
+          <div class="pt-4 border-t border-slate-800 text-xs text-slate-400 flex justify-between items-center">
+            <span>Dispositivo: <b class="text-white">iPhone 14 Pro Conectado</b></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PANTALLA 5: VISOR DE PDF ================= -->
+    <div id="tab-pdf" class="tab-content hidden flex-1 flex flex-col">
+      <header class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-3xl font-black text-white tracking-tight">Visor de PDF Clínico</h2>
+          <p class="text-xs text-slate-400 mt-1">Previsualización de alta definición antes de imprimir.</p>
+        </div>
+        <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer">
+          Imprimir PDF
+        </button>
+      </header>
+
+      <div class="flex-1 bg-slate-900/50 rounded-3xl p-6 border border-slate-800 flex items-center justify-center">
+        <div class="w-[480px] h-[600px] bg-white text-slate-900 rounded-2xl shadow-2xl p-8 flex flex-col justify-between text-xs">
+          <div>
+            <div class="flex justify-between items-start border-b border-slate-200 pb-4 mb-4">
+              <div>
+                <h3 class="text-base font-black text-slate-900">DR. MATEO RAMÍREZ</h3>
+                <p class="text-[10px] text-slate-500 font-semibold">ODONTOLOGÍA ESPECIALIZADA</p>
+              </div>
+              <span class="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">HISTORIA Nº 2026-049</span>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-3 mb-4 grid grid-cols-3 gap-2 text-[11px]">
+              <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Paciente</span><b>Andrés Calvache</b></div>
+              <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Cédula</span>1724891203</div>
+              <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Edad</span>32 años</div>
+            </div>
+            <p class="text-slate-700 leading-relaxed text-[11px] mb-4">
+              <b>Procedimiento:</b> Remoción de lesión cariosa oclusal en pieza 36 y obturación con resina fotopolimerizable. Oclusión ajustada.
+            </p>
+            <div class="border border-slate-200 rounded-xl p-3 text-center text-xs">
+              <span class="text-slate-500 block mb-1">Odontograma: Pieza tratada</span>
+              <span class="text-rose-600 font-black">[36 - Resina Oclusal]</span>
+            </div>
+          </div>
+          <div class="border-t border-slate-200 pt-3 flex justify-between items-center text-[10px] text-slate-400">
+            <span>Firma Profesional</span>
+            <span>BIMO by Matsword</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PANTALLA 6: WIDGET DOCK ================= -->
+    <div id="tab-widget" class="tab-content hidden flex-1 flex flex-col">
+      <header class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-3xl font-black text-white tracking-tight">Widget Flotante de Escritorio</h2>
+          <p class="text-xs text-slate-400 mt-1">Accesorio flotante que acompaña tus consultas sin tapar la pantalla.</p>
+        </div>
+      </header>
+
+      <div class="flex-1 bg-slate-950/80 rounded-3xl border border-slate-800 p-8 flex items-center justify-center">
+        <div id="floatingWidgetCard" class="w-84 bg-slate-900/90 border border-slate-700/80 rounded-3xl p-5 shadow-2xl backdrop-blur-2xl transition-all duration-500">
+          <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-black text-white tracking-widest">BIMO DOCK</span>
+              <span class="text-[9px] text-slate-400">by Matsword</span>
+            </div>
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          </div>
+          <div class="flex items-center gap-4 mb-4">
+            <button id="widgetMicBtn" onclick="toggleWidgetMic()" class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" /></svg>
+            </button>
+            <div>
+              <div id="widgetMicTitle" class="text-xs font-bold text-white">Dictado Rápido</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">Presiona o di "Oye Bimo"</div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <button onclick="switchTab('dictado')" class="p-2 rounded-xl bg-slate-800 text-slate-300 font-semibold cursor-pointer text-center">Abrir App</button>
+            <button onclick="switchTab('pdf')" class="p-2 rounded-xl bg-slate-800 text-slate-300 font-semibold cursor-pointer text-center">PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PANTALLA 7: CONFIGURACIÓN ================= -->
+    <div id="tab-config" class="tab-content hidden flex-1 flex flex-col">
+      <header class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-3xl font-black text-white tracking-tight">Configuración & Temas</h2>
+          <p class="text-xs text-slate-400 mt-1">Elige entre las 4 paletas y observa cómo se transforman los fondos y acentos.</p>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-2 gap-6">
+        <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+          <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Paleta de Colores</h3>
+          <div class="space-y-3">
+            
+            <div onclick="setTheme('cyan')" class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 cursor-pointer flex items-center justify-between transition-all">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-md"></div>
+                <div>
+                  <div class="text-xs font-bold text-white">Cyber Cyan</div>
+                  <div class="text-[11px] text-slate-400">Azul abisal con resplandor cyan</div>
+                </div>
+              </div>
+              <span id="check-cyan" class="text-xs font-bold text-cyan-400 hidden">Activo ✓</span>
+            </div>
+
+            <div onclick="setTheme('violet')" class="p-4 rounded-2xl bg-slate-950/80 border-2 border-indigo-500 cursor-pointer flex items-center justify-between transition-all">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 shadow-md"></div>
+                <div>
+                  <div class="text-xs font-bold text-white">Obsidian Violet (Recomendado)</div>
+                  <div class="text-[11px] text-slate-400">Púrpura noche sobrio de alta gama</div>
+                </div>
+              </div>
+              <span id="check-violet" class="text-xs font-bold text-indigo-400">Activo ✓</span>
+            </div>
+
+            <div onclick="setTheme('emerald')" class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 cursor-pointer flex items-center justify-between transition-all">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 shadow-md"></div>
+                <div>
+                  <div class="text-xs font-bold text-white">Emerald Surgical</div>
+                  <div class="text-[11px] text-slate-400">Verde esmeralda y menta clínica</div>
+                </div>
+              </div>
+              <span id="check-emerald" class="text-xs font-bold text-emerald-400 hidden">Activo ✓</span>
+            </div>
+
+            <div onclick="setTheme('amber')" class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-amber-500/50 cursor-pointer flex items-center justify-between transition-all">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-600 to-yellow-500 shadow-md"></div>
+                <div>
+                  <div class="text-xs font-bold text-white">Titanium Amber</div>
+                  <div class="text-[11px] text-slate-400">Oro titanio cálido de lujo y contraste oscuro</div>
+                </div>
+              </div>
+              <span id="check-amber" class="text-xs font-bold text-amber-400 hidden">Activo ✓</span>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+          <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Información del Consultorio</h3>
+          <div class="space-y-4 text-xs">
+            <div>
+              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Doctor Titular</label>
+              <input type="text" value="Dr. Mateo Ramírez" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Firma de Marca</label>
+              <input type="text" value="BIMO by Matsword" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= SCRIPT DE INTERACTIVIDAD & CONTROL DEL CALENDARIO ================= -->
+  <script>
+    let isRecording = false;
+    let isWidgetRecording = false;
+    let isMiniCalOpen = false;
+
+    function toggleMiniCalendar() {
+      isMiniCalOpen = !isMiniCalOpen;
+      const cal = document.getElementById('miniCalendarDropdown');
+      const chev = document.getElementById('calChevron');
+      if (isMiniCalOpen) {
+        cal.classList.remove('hidden');
+        chev.style.transform = 'rotate(180deg)';
+      } else {
+        cal.classList.add('hidden');
+        chev.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      const btn = document.getElementById('btnToggleMiniCal');
+      const cal = document.getElementById('miniCalendarDropdown');
+      if (btn && cal && !btn.contains(e.target) && !cal.contains(e.target)) {
+        cal.classList.add('hidden');
+        document.getElementById('calChevron').style.transform = 'rotate(0deg)';
+        isMiniCalOpen = false;
+      }
+    });
+
+    const THEMES = {
+      cyan: {
+        name: 'Cyber Cyan',
+        bodyBg: 'bg-[#040d1a]',
+        blob1: 'bg-cyan-600/18',
+        blob2: 'bg-blue-600/15',
+        blob3: 'bg-teal-600/12',
+        accentColor: 'text-cyan-400',
+        btnGrad: 'from-blue-600 via-cyan-600 to-teal-500 hover:from-blue-500 hover:via-cyan-500 hover:to-teal-400 shadow-cyan-600/35',
+        ringColor: 'border-cyan-500/30',
+        ringBg: 'bg-cyan-500/10',
+        waveColor: 'bg-cyan-400',
+        accentDot: 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]',
+      },
+      violet: {
+        name: 'Obsidian Violet',
+        bodyBg: 'bg-[#090614]',
+        blob1: 'bg-indigo-600/18',
+        blob2: 'bg-purple-600/15',
+        blob3: 'bg-pink-600/10',
+        accentColor: 'text-indigo-400',
+        btnGrad: 'from-indigo-600 via-purple-600 to-pink-500 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-400 shadow-indigo-600/40',
+        ringColor: 'border-indigo-500/25',
+        ringBg: 'bg-indigo-500/10',
+        waveColor: 'bg-indigo-400',
+        accentDot: 'bg-indigo-400 shadow-[0_0_8px_#818cf8]',
+      },
+      emerald: {
+        name: 'Emerald Surgical',
+        bodyBg: 'bg-[#04120f]',
+        blob1: 'bg-emerald-600/18',
+        blob2: 'bg-teal-600/15',
+        blob3: 'bg-cyan-600/10',
+        accentColor: 'text-emerald-400',
+        btnGrad: 'from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 shadow-emerald-600/40',
+        ringColor: 'border-emerald-500/25',
+        ringBg: 'bg-emerald-500/10',
+        waveColor: 'bg-emerald-400',
+        accentDot: 'bg-emerald-400 shadow-[0_0_8px_#34d399]',
+      },
+      amber: {
+        name: 'Titanium Amber',
+        bodyBg: 'bg-[#120d05]',
+        blob1: 'bg-amber-600/18',
+        blob2: 'bg-orange-600/15',
+        blob3: 'bg-yellow-600/10',
+        accentColor: 'text-amber-400',
+        btnGrad: 'from-amber-600 via-orange-600 to-yellow-600 hover:from-amber-500 hover:via-orange-500 hover:to-yellow-500 shadow-amber-600/40',
+        ringColor: 'border-amber-500/25',
+        ringBg: 'bg-amber-500/10',
+        waveColor: 'bg-amber-400',
+        accentDot: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]',
+      }
+    };
+
+    let currentThemeKey = 'violet';
+    let currentActiveTab = 'dictado';
+
+    function switchTab(tabId) {
+      currentActiveTab = tabId;
+      document.querySelectorAll('.tab-content').forEach(el => {
+        el.classList.add('hidden');
+        el.classList.remove('tab-entering');
+      });
+      const targetTab = document.getElementById('tab-' + tabId);
+      if (targetTab) {
+        targetTab.classList.remove('hidden');
+        targetTab.classList.add('tab-entering');
+      }
+
+      const t = THEMES[currentThemeKey];
+
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.className = 'nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer';
+        const iconBox = btn.querySelector('.nav-icon-box');
+        if (iconBox) iconBox.className = 'nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110';
+        const dot = btn.querySelector('.nav-dot');
+        if (dot) dot.className = `nav-dot w-1.5 h-3.5 rounded-full ${t.accentDot} transition-all duration-300 opacity-0 scale-50`;
+      });
+
+      const activeBtn = document.getElementById('nav-' + tabId);
+      if (activeBtn) {
+        activeBtn.className = 'nav-btn nav-active group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 cursor-pointer bg-white/10 text-white border border-white/15 shadow-lg backdrop-blur-md';
+        const activeIconBox = activeBtn.querySelector('.nav-icon-box');
+        if (activeIconBox) activeIconBox.className = `nav-icon-box ${t.accentColor} transition-all duration-300 scale-110`;
+        const activeDot = activeBtn.querySelector('.nav-dot');
+        if (activeDot) activeDot.className = `nav-dot w-1.5 h-3.5 rounded-full ${t.accentDot} transition-all duration-300 opacity-100 scale-100`;
+      }
+    }
+
+    function setTheme(key) {
+      currentThemeKey = key;
+      const t = THEMES[key];
+
+      document.getElementById('themeBody').className = `${t.bodyBg} text-slate-100 font-sans antialiased m-0 p-0 overflow-hidden flex h-screen select-none relative transition-colors duration-700`;
+
+      document.getElementById('blob1').className = `blob-1 absolute -top-20 -left-20 w-[38rem] h-[38rem] ${t.blob1} rounded-full blur-[100px] transition-colors duration-700`;
+      document.getElementById('blob2').className = `blob-2 absolute top-1/3 -right-20 w-[42rem] h-[42rem] ${t.blob2} rounded-full blur-[120px] transition-colors duration-700`;
+      document.getElementById('blob3').className = `blob-3 absolute -bottom-28 left-1/3 w-[36rem] h-[36rem] ${t.blob3} rounded-full blur-[90px] transition-colors duration-700`;
+
+      if (!isRecording) {
+        document.getElementById('mainRecordButton').className = `relative z-10 w-48 h-48 rounded-full bg-gradient-to-tr ${t.btnGrad} border-4 border-slate-900 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 hover:scale-105 active:scale-95 group`;
+        document.getElementById('outerRing2').className = `absolute w-76 h-76 rounded-full border ${t.ringColor} ring-layer-2 pointer-events-none transition-all duration-700`;
+        document.getElementById('outerRing1').className = `absolute w-60 h-60 rounded-full ${t.ringBg} border ${t.ringColor} ring-layer-1 pointer-events-none transition-all duration-700`;
+      }
+
+      document.getElementById('widgetMicBtn').className = `w-14 h-14 rounded-2xl bg-gradient-to-tr ${t.btnGrad} text-white flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform`;
+      document.getElementById('btnPrintPdfBtn').className = `w-full py-4 bg-gradient-to-r ${t.btnGrad} text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-xl cursor-pointer flex items-center justify-center gap-2.5`;
+
+      document.getElementById('colHeaderLeft').className = `text-xs font-bold ${t.accentColor} uppercase tracking-wider`;
+      document.getElementById('colHeaderRight').className = `text-xs font-bold ${t.accentColor} uppercase tracking-wider`;
+      
+      switchTab(currentActiveTab);
+
+      ['cyan', 'violet', 'emerald', 'amber'].forEach(k => {
+        const check = document.getElementById('check-' + k);
+        if (check) {
+          if (k === key) check.classList.remove('hidden');
+          else check.classList.add('hidden');
+        }
+      });
+    }
+
+    function abrirUltimoPDF() {
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.abrir_ultimo_pdf();
+      } else {
+        switchTab('pdf');
+      }
+    }
+
+    async function toggleRecording() {
+      isRecording = !isRecording;
+      const btn = document.getElementById('mainRecordButton');
+      const ring1 = document.getElementById('outerRing1');
+      const ring2 = document.getElementById('outerRing2');
+      const title = document.getElementById('recordStatusTitle');
+      const badge = document.getElementById('statusIndicatorBadge');
+      const t = THEMES[currentThemeKey];
+
+      if (isRecording) {
+        // Modo Escuchando: Botón ampliado de 192px, sutil, sereno, SIN rojo de pánico
+        btn.className = `relative z-10 w-48 h-48 rounded-full bg-gradient-to-tr ${t.btnGrad} shadow-2xl shadow-indigo-500/30 border-4 border-slate-900 flex flex-col items-center justify-center cursor-pointer transition-all duration-500 scale-105`;
+        ring1.className = `absolute w-64 h-64 rounded-full ${t.ringBg} border ${t.ringColor} ring-subtle-active pointer-events-none transition-all duration-500`;
+        ring2.className = `absolute w-84 h-84 rounded-full border ${t.ringColor} ring-subtle-active pointer-events-none transition-all duration-500`;
+        
+        document.getElementById('btnMainLabel').innerText = 'Detener';
+        
+        // Exactamente lo que pidió el usuario: "Escuchando al doctor..."
+        title.innerText = 'Escuchando al doctor...';
+        title.className = `text-base font-semibold ${t.accentColor} tracking-wide transition-colors duration-300`;
+        
+        badge.innerText = 'Escuchando';
+        badge.className = `text-xs ${t.ringBg} ${t.accentColor} px-3 py-1 rounded-full border ${t.ringColor} font-medium`;
+
+        // Llamar a Python sounddevice si está en la app de escritorio
+        if (window.pywebview && window.pywebview.api) {
+          try {
+            await window.pywebview.api.iniciar_grabacion();
+          } catch(e) {
+            console.error('Error al iniciar grabación:', e);
+          }
+        }
+
+      } else {
+        setTheme(currentThemeKey);
+        
+        document.getElementById('btnMainLabel').innerText = 'Dictar';
+        
+        title.innerText = 'Procesando con IA...';
+        title.className = `text-base font-semibold ${t.accentColor} tracking-wide transition-colors duration-300 animate-pulse`;
+        badge.innerText = 'Procesando';
+        badge.className = 'text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full font-medium';
+
+        // Detener y procesar en Python con Whisper y Gemini
+        if (window.pywebview && window.pywebview.api) {
+          try {
+            const resp = await window.pywebview.api.detener_y_procesar();
+            if (resp && resp.status === 'ok') {
+              title.innerText = 'En espera';
+              title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
+              badge.innerText = 'Sincronizado';
+
+              if (resp.resultado) {
+                const r = resp.resultado;
+                const cardPac = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(1) .text-base');
+                if (cardPac && r.paciente) cardPac.innerText = r.paciente;
+
+                const cardDiag = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(2) .text-base');
+                if (cardDiag && r.diagnostico) cardDiag.innerText = r.diagnostico;
+
+                const cardPlan = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(3) .text-base');
+                if (cardPlan && r.plan) cardPlan.innerText = r.plan;
+
+                const cardPago = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(4) .text-base');
+                if (cardPago && r.honorarios) {
+                  const pag = r.honorarios;
+                  cardPago.innerText = pag.fecha_cita || 'Próxima cita';
+                }
+              }
+            } else {
+              title.innerText = 'En espera';
+              title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
+              badge.innerText = 'En Reposo';
+            }
+          } catch(e) {
+            console.error('Error al procesar dictado:', e);
+            title.innerText = 'En espera';
+            title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
+            badge.innerText = 'En Reposo';
+          }
+        } else {
+          title.innerText = 'En espera';
+          title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
+          badge.innerText = 'En Reposo';
+        }
+      }
+    }
+
+    function toggleWidgetMic() {
+      isWidgetRecording = !isWidgetRecording;
+      const btn = document.getElementById('widgetMicBtn');
+      const title = document.getElementById('widgetMicTitle');
+
+      if (isWidgetRecording) {
+        btn.className = 'w-14 h-14 rounded-2xl bg-gradient-to-tr from-rose-600 to-pink-500 text-white flex items-center justify-center shadow-lg shadow-rose-600/40 animate-pulse';
+        title.innerText = 'Grabando...';
+        title.className = 'text-xs font-black text-rose-400';
+      } else {
+        btn.className = `w-14 h-14 rounded-2xl bg-gradient-to-tr ${THEMES[currentThemeKey].btnGrad} text-white flex items-center justify-center shadow-lg cursor-pointer`;
+        title.innerText = 'Dictado Rápido';
+        title.className = 'text-xs font-bold text-white';
+      }
+    }
+  </script>
+</body>
+</html>
