@@ -8,13 +8,13 @@ class VentanaCorreccionExpediente(ctk.CTkToplevel):
     (Nombre, Cédula, Edad, Diagnóstico, Plan) en 1 solo clic y regenerar
     el PDF inmediatamente eliminando la versión anterior.
     """
-    def __init__(self, master, datos_consulta: dict, ruta_pdf_actual: str, paciente_id: int, theme: dict = None, on_guardar=None):
+    def __init__(self, master, datos_consulta: dict, ruta_pdf_actual: str, paciente_id: int, theme: dict = None, on_guardar=None, on_save_callback=None):
         super().__init__(master)
         self.datos = datos_consulta
         self.ruta_pdf_actual = ruta_pdf_actual
         self.paciente_id = paciente_id
         self.theme = theme or obtener_tema_activo_dict()
-        self.on_guardar = on_guardar
+        self.on_guardar = on_guardar or on_save_callback
 
         self.title("✏️ Corregir Datos de la Consulta")
         self.geometry("540x680")
@@ -133,6 +133,17 @@ class VentanaCorreccionExpediente(ctk.CTkToplevel):
         self.datos["plan_tratamiento"] = nuevo_plan
 
         if self.on_guardar:
-            self.on_guardar(self.datos, fil, self.ruta_pdf_actual, self.paciente_id)
+            try:
+                import inspect
+                sig = inspect.signature(self.on_guardar)
+                if len(sig.parameters) == 1:
+                    self.on_guardar(self.datos)
+                else:
+                    self.on_guardar(self.datos, fil, self.ruta_pdf_actual, self.paciente_id)
+            except Exception:
+                try:
+                    self.on_guardar(self.datos)
+                except Exception as err_cb:
+                    print(f"[MODAL CORRECCION ERROR CALLBACK]: {err_cb}")
 
         self.destroy()

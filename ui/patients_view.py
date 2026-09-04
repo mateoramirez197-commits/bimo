@@ -246,6 +246,13 @@ class PatientsView(ctk.CTkFrame):
         )
         btn_carpeta.pack(side="right")
 
+        btn_edit_pac = ctk.CTkButton(
+            top_row, text="✏️ Editar Paciente", height=30, font=("Segoe UI", 10, "bold"),
+            fg_color=t["azul_acero"], hover_color=t["azul_pastel"], corner_radius=8,
+            command=lambda pac=paciente: self._abrir_modal_editar_datos_paciente(pac)
+        )
+        btn_edit_pac.pack(side="right", padx=(0, 6))
+
         btn_del_pac = ctk.CTkButton(
             top_row, text="🗑️ Eliminar Paciente", height=30, font=("Segoe UI", 10, "bold"),
             fg_color="transparent", hover_color="#dc2626", text_color="#ef4444", corner_radius=8,
@@ -446,7 +453,7 @@ class PatientsView(ctk.CTkFrame):
                 "odontograma": []
             }
 
-        def al_guardar(datos_nuevos):
+        def al_guardar(datos_nuevos, *args, **kwargs):
             try:
                 # 1. Actualizar datos de filiación del paciente
                 fil_nueva = datos_nuevos.get("datos_filiacion", {})
@@ -471,8 +478,85 @@ class PatientsView(ctk.CTkFrame):
                 self._cargar_pacientes()
                 paciente_actualizado = dict(paciente)
                 paciente_actualizado.update(fil_nueva)
-                self._cargar_detalles_paciente(paciente_actualizado)
+                self._mostrar_consultas(paciente_actualizado)
             except Exception as err_c:
                 print(f"[ERROR CORREGIR PACIENTE] {err_c}")
 
-        VentanaCorreccionExpediente(self, datos, ruta_pdf, paciente_id=paciente["id"], on_save_callback=al_guardar)
+        VentanaCorreccionExpediente(self, datos, ruta_pdf, paciente_id=paciente["id"], on_guardar=al_guardar, on_save_callback=al_guardar)
+
+    def _abrir_modal_editar_datos_paciente(self, paciente):
+        """Permite editar los datos de filiación del paciente directamente."""
+        from database import registrar_o_actualizar_paciente
+        t = self.theme
+        modal = ctk.CTkToplevel(self)
+        modal.title("✏️ Editar Datos del Paciente")
+        modal.geometry("450x420")
+        modal.resizable(False, False)
+        modal.attributes("-topmost", True)
+        modal.configure(fg_color=t["bg_dark"])
+
+        ctk.CTkLabel(modal, text="✏️ EDITAR DATOS DEL PACIENTE", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=(18, 6))
+
+        box = ctk.CTkFrame(modal, fg_color=t["card_dark"], corner_radius=12, border_width=1, border_color=t["border"])
+        box.pack(fill="both", expand=True, padx=20, pady=(0, 16))
+
+        # Nombre
+        ctk.CTkLabel(box, text="Nombre Completo:", font=("Segoe UI", 10, "bold"), text_color=t["text_primary"]).pack(anchor="w", padx=14, pady=(10, 2))
+        ent_nombre = ctk.CTkEntry(box, height=34, font=("Segoe UI", 11))
+        ent_nombre.insert(0, paciente.get("nombre", ""))
+        ent_nombre.pack(fill="x", padx=14, pady=(0, 6))
+
+        # Cédula & Edad
+        row_ce = ctk.CTkFrame(box, fg_color="transparent")
+        row_ce.pack(fill="x", padx=14, pady=(0, 6))
+
+        c1 = ctk.CTkFrame(row_ce, fg_color="transparent")
+        c1.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        ctk.CTkLabel(c1, text="Cédula / Documento:", font=("Segoe UI", 10, "bold"), text_color=t["text_primary"]).pack(anchor="w", pady=(0, 2))
+        ent_doc = ctk.CTkEntry(c1, height=34, font=("Segoe UI", 11))
+        ent_doc.insert(0, str(paciente.get("documento", "") or ""))
+        ent_doc.pack(fill="x")
+
+        c2 = ctk.CTkFrame(row_ce, fg_color="transparent")
+        c2.pack(side="right", fill="x", expand=True, padx=(4, 0))
+        ctk.CTkLabel(c2, text="Edad:", font=("Segoe UI", 10, "bold"), text_color=t["text_primary"]).pack(anchor="w", pady=(0, 2))
+        ent_edad = ctk.CTkEntry(c2, height=34, font=("Segoe UI", 11))
+        ent_edad.insert(0, str(paciente.get("edad", "") or ""))
+        ent_edad.pack(fill="x")
+
+        # Teléfono
+        ctk.CTkLabel(box, text="Teléfono / Contacto:", font=("Segoe UI", 10, "bold"), text_color=t["text_primary"]).pack(anchor="w", padx=14, pady=(0, 2))
+        ent_tel = ctk.CTkEntry(box, height=34, font=("Segoe UI", 11))
+        ent_tel.insert(0, str(paciente.get("telefono", "") or ""))
+        ent_tel.pack(fill="x", padx=14, pady=(0, 10))
+
+        def guardar_cambios():
+            nuevo_nom = ent_nombre.get().strip() or paciente.get("nombre", "Paciente")
+            nuevo_doc = ent_doc.get().strip() or None
+            nueva_edad_str = ent_edad.get().strip()
+            nueva_edad = int(nueva_edad_str) if nueva_edad_str.isdigit() else None
+            nuevo_tel = ent_tel.get().strip() or "No especificado"
+
+            fil = {
+                "id": paciente["id"],
+                "nombre": nuevo_nom,
+                "documento": nuevo_doc,
+                "edad": nueva_edad,
+                "contacto_emergencia": nuevo_tel,
+                "telefono": nuevo_tel,
+                "sexo": paciente.get("sexo", "No especificado"),
+                "direccion": paciente.get("direccion", "No especificado"),
+                "ocupacion": paciente.get("ocupacion", "No especificado"),
+                "medico_cabecera": paciente.get("medico_cabecera", "No especificado")
+            }
+            registrar_o_actualizar_paciente(fil)
+            modal.destroy()
+            self._cargar_pacientes()
+            pac_actualizado = dict(paciente)
+            pac_actualizado.update(fil)
+            self._mostrar_consultas(pac_actualizado)
+
+        b_row = ctk.CTkFrame(modal, fg_color="transparent")
+        b_row.pack(pady=(0, 14))
+        ctk.CTkButton(b_row, text="Cancelar", width=100, height=34, font=("Segoe UI", 11), fg_color="#334155", hover_color="#475569", command=modal.destroy).pack(side="left", padx=8)
+        ctk.CTkButton(b_row, text="💾 Guardar Cambios", width=140, height=34, font=("Segoe UI", 11, "bold"), fg_color=t["aqua"], hover_color=t["azul_acero"], command=guardar_cambios).pack(side="left", padx=8)

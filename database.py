@@ -200,7 +200,7 @@ def registrar_o_actualizar_paciente(datos_filiacion) -> int:
         edad_val = None
 
     sexo = datos_filiacion.get("sexo", "No especificado")
-    telefono = datos_filiacion.get("contacto_emergencia", "No especificado")
+    telefono = datos_filiacion.get("telefono") or datos_filiacion.get("contacto_emergencia") or "No especificado"
     direccion = datos_filiacion.get("direccion", "No especificado")
     ocupacion = datos_filiacion.get("ocupacion", "No especificado")
     medico = datos_filiacion.get("medico_cabecera", "No especificado")
@@ -208,6 +208,18 @@ def registrar_o_actualizar_paciente(datos_filiacion) -> int:
     with get_connection() as conn:
         cursor = conn.cursor()
         
+        # 0. SI SE ESPECIFICA UN ID EXPLÍCITO (EDICIÓN DIRECTA DESDE LA INTERFAZ)
+        p_id_explicit = datos_filiacion.get("id")
+        if p_id_explicit:
+            cursor.execute("""
+                UPDATE pacientes SET
+                    nombre = ?, documento = ?, edad = COALESCE(?, edad), sexo = ?, telefono = ?,
+                    direccion = ?, ocupacion = ?, medico_cabecera = ?
+                WHERE id = ?
+            """, (nombre, doc_limpio, edad_val, sexo, telefono, direccion, ocupacion, medico, p_id_explicit))
+            conn.commit()
+            return p_id_explicit
+
         # 1. SI SE PROPORCIONA CÉDULA VÁLIDA (PRIORIDAD MÁXIMA)
         if doc_limpio:
             # A) Buscar por cédula exacta
