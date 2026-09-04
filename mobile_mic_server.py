@@ -627,6 +627,7 @@ HTML_MOVIL = """<!DOCTYPE html>
 """
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/mobile", response_class=HTMLResponse)
 async def serve_mobile_app():
     from config import obtener_tema_activo_dict
     t = obtener_tema_activo_dict()

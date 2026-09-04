@@ -82,11 +82,11 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         self.lbl_status_dot = ctk.CTkLabel(left_h, text=" ● En Línea", font=("Segoe UI", 9, "bold"), text_color="#10b981")
         self.lbl_status_dot.pack(side="left", padx=(4, 0))
 
-        btn_close = ctk.CTkButton(
-            self.header, text="✕", width=22, height=22, font=("Segoe UI", 9, "bold"),
-            fg_color="transparent", text_color=t["text_muted"], hover_color="#dc2626", command=self.withdraw
+        lbl_pin = ctk.CTkLabel(
+            self.header, text="📌 Anclado", font=("Segoe UI", 9, "bold"),
+            text_color=t["text_muted"]
         )
-        btn_close.pack(side="right", padx=(2, 6))
+        lbl_pin.pack(side="right", padx=(2, 6))
 
         self.btn_collapse = ctk.CTkButton(
             self.header, text="➖", width=22, height=22, font=("Segoe UI", 9, "bold"),
