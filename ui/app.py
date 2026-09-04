@@ -105,8 +105,7 @@ class BimoApp(ctk.CTk):
         splash = ctk.CTkFrame(self.container, fg_color="transparent")
         splash.place(relx=0.5, rely=0.48, anchor="center")
 
-        BimoLogo(splash, font_size=56).pack(pady=(0, 6))
-        ctk.CTkLabel(splash, text="B  I  M  O    P  R  O", font=("Segoe UI", 11, "bold"), text_color=t["aqua"]).pack(pady=(0, 6))
+        BimoLogo(splash, font_size=36, orientation="vertical").pack(pady=(0, 8))
         ctk.CTkLabel(splash, text=f"🏥 {nom_clinica}", font=("Segoe UI", 12), text_color=t["text_muted"]).pack(pady=(0, 24))
 
         pbar = ctk.CTkProgressBar(splash, mode="indeterminate", width=300, height=6, fg_color=t["card_dark"], progress_color=t["aqua"])
@@ -526,8 +525,8 @@ class BimoApp(ctk.CTk):
         # Watermark sutil de autoría
         color_wm = "#94A3B8" if t["mode"] == "light" else "#151D2F"
         self.lbl_watermark = ctk.CTkLabel(
-            self.main_app_card, text="Software by Masword",
-            font=("Segoe UI", 9), text_color=color_wm
+            self.main_app_card, text="BIMO by Matsword",
+            font=("Segoe UI", 9, "bold"), text_color=color_wm
         )
         self.lbl_watermark.place(relx=0.985, rely=0.988, anchor="se")
 
