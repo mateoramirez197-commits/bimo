@@ -1,15 +1,7 @@
 {
+  "nombre_doctor": "Dr. Mateo Ramírez",
   "nombre_clinica": "BIMO Dental Clinic",
-  "nombre_doctor": "Dr. Mateo",
   "registro_profesional": "RP-ODONT-2026",
   "telefono_contacto": "+57 300 123 4567",
-  "pin_rapido": "1234",
-  "ultimo_usuario_recordado": {
-    "id": 1,
-    "nombre": "Dr. Mateo Ramírez",
-    "email": "mateo@bimo.com",
-    "rol": "medico"
-  },
-  "tema_visual": "Skeuomorphism Stereo (Dark)",
-  "onboarding_completado": true
+  "pin_rapido": "1234"
 }

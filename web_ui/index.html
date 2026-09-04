@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BIMO by Matsword</title>
+  <title>BIMO - Asistente Clínico Inteligente</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     /* ANIMACIONES DE FONDO FLUIDAS Y ORGÁNICAS */
@@ -70,6 +70,31 @@
     .nav-btn.nav-active {
       transform: translateX(6px);
     }
+
+    /* ANIMACIÓN DE MODALES */
+    @keyframes modalPop {
+      from { opacity: 0; transform: scale(0.94) translateY(12px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-pop {
+      animation: modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Scrollbar estilizada */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.7);
+    }
   </style>
 </head>
 <body id="themeBody" class="bg-[#090614] text-slate-100 font-sans antialiased m-0 p-0 overflow-hidden flex h-screen select-none relative transition-colors duration-700">
@@ -79,6 +104,85 @@
     <div id="blob1" class="blob-1 absolute -top-20 -left-20 w-[38rem] h-[38rem] bg-indigo-600/15 rounded-full blur-[100px] transition-colors duration-700"></div>
     <div id="blob2" class="blob-2 absolute top-1/3 -right-20 w-[42rem] h-[42rem] bg-purple-600/12 rounded-full blur-[120px] transition-colors duration-700"></div>
     <div id="blob3" class="blob-3 absolute -bottom-28 left-1/3 w-[36rem] h-[36rem] bg-blue-600/10 rounded-full blur-[90px] transition-colors duration-700"></div>
+  </div>
+
+  <!-- ================= PANTALLA DE BLOQUEO / INICIO DE SESIÓN CON PIN ================= -->
+  <div id="loginScreen" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-3xl transition-all duration-500">
+    <div class="relative w-full max-w-md p-8 bg-slate-900/85 border border-slate-700/80 rounded-3xl shadow-2xl backdrop-blur-2xl modal-pop flex flex-col items-center">
+      
+      <!-- Logo 88 Infinito -->
+      <div class="relative w-16 h-16 rounded-2xl bg-white/10 border border-white/20 p-[1px] shadow-2xl backdrop-blur-md flex items-center justify-center mb-4">
+        <div class="w-full h-full bg-black/40 rounded-[14px] flex items-center justify-center">
+          <svg class="w-10 h-10 text-white drop-shadow-md" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 20C22.2091 20 24 17.5376 24 14.5C24 11.4624 22.2091 9 20 9C17.7909 9 16 11.4624 16 14.5C16 17.5376 17.7909 20 20 20ZM20 20C22.4853 20 24.5 22.4624 24.5 25.5C24.5 28.5376 22.4853 31 20 31C17.5147 31 15.5 28.5376 15.5 25.5C15.5 22.4624 17.5147 20 20 20Z" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M20 20C20 17.7909 17.5376 16 14.5 16C11.4624 16 9 17.7909 9 20C9 22.2091 11.4624 24 14.5 24C17.5376 24 20 22.2091 20 20ZM20 20C20 17.5147 22.4624 15.5 25.5 15.5C28.5376 15.5 31 17.5147 31 20C31 22.4853 28.5376 24.5 25.5 24.5C22.4624 24.5 20 22.4853 20 20Z" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+            <circle cx="20" cy="20" r="1.5" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="text-center mb-6">
+        <h3 class="text-2xl font-black text-white tracking-wider flex items-center justify-center gap-2">
+          BIMO <span class="text-[10px] bg-white/10 text-white/90 font-bold px-2 py-0.5 rounded border border-white/20">PRO</span>
+        </h3>
+        <p class="text-xs text-slate-400 mt-1">Acceso Clínico Seguro • <span class="text-white font-semibold">by Matsword</span></p>
+      </div>
+
+      <!-- Pestañas de Login: PIN Rápido vs Credenciales -->
+      <div class="w-full flex rounded-xl bg-slate-950/70 p-1 border border-slate-800 mb-6 text-xs font-semibold">
+        <button id="tabBtnPin" onclick="setLoginMode('pin')" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white transition-all">PIN Maestro</button>
+        <button id="tabBtnCreds" onclick="setLoginMode('creds')" class="flex-1 py-2 rounded-lg text-slate-400 hover:text-white transition-all">Correo y Contraseña</button>
+      </div>
+
+      <!-- VISTA PIN -->
+      <div id="viewLoginPin" class="w-full flex flex-col items-center">
+        <p class="text-xs text-slate-300 mb-3">Ingrese su PIN de 4 dígitos</p>
+        
+        <!-- Indicador de Dígitos -->
+        <div class="flex gap-4 mb-6">
+          <div id="pinDot0" class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-200"></div>
+          <div id="pinDot1" class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-200"></div>
+          <div id="pinDot2" class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-200"></div>
+          <div id="pinDot3" class="w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-200"></div>
+        </div>
+
+        <!-- Teclado Numérico de Cristal -->
+        <div class="grid grid-cols-3 gap-3 w-64 mb-4">
+          <button onclick="pressPin('1')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">1</button>
+          <button onclick="pressPin('2')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">2</button>
+          <button onclick="pressPin('3')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">3</button>
+          <button onclick="pressPin('4')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">4</button>
+          <button onclick="pressPin('5')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">5</button>
+          <button onclick="pressPin('6')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">6</button>
+          <button onclick="pressPin('7')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">7</button>
+          <button onclick="pressPin('8')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">8</button>
+          <button onclick="pressPin('9')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">9</button>
+          <button onclick="clearPin()" class="h-12 rounded-2xl bg-slate-800/40 hover:bg-rose-950/40 border border-slate-700/60 text-xs font-bold text-rose-400 transition-all active:scale-95">C</button>
+          <button onclick="pressPin('0')" class="h-12 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-lg font-bold text-white transition-all active:scale-95">0</button>
+          <button onclick="backspacePin()" class="h-12 rounded-2xl bg-slate-800/40 hover:bg-slate-700 border border-slate-700/60 text-sm font-bold text-slate-300 transition-all active:scale-95">⌫</button>
+        </div>
+        <p class="text-[11px] text-slate-500">PIN por defecto: <span class="font-mono text-indigo-400">1234</span></p>
+      </div>
+
+      <!-- VISTA CREDENCIALES -->
+      <div id="viewLoginCreds" class="w-full hidden space-y-3">
+        <div>
+          <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Correo Electrónico</label>
+          <input id="loginEmail" type="email" value="admin@bimo.local" class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Contraseña</label>
+          <input id="loginPassword" type="password" value="admin123" class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+        </div>
+        <button onclick="submitLoginCreds()" class="w-full py-3 mt-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-indigo-600/30">
+          Iniciar Sesión
+        </button>
+      </div>
+
+      <!-- Mensaje de Error -->
+      <div id="loginErrorMsg" class="mt-4 text-xs font-medium text-rose-400 hidden text-center"></div>
+
+    </div>
   </div>
 
   <!-- ================= BARRA LATERAL ================= -->
@@ -92,22 +196,15 @@
         <!-- ISOTIPO DE CRISTAL: DOS OCHOS ENTRELAZADOS EN FORMA DE INFINITO (88) -->
         <div id="logoBadge" class="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/20 p-[1px] shadow-2xl backdrop-blur-md group-hover:scale-105 group-hover:border-white/40 transition-all duration-300 flex items-center justify-center">
           <div class="w-full h-full bg-black/40 rounded-[14px] flex items-center justify-center relative overflow-hidden">
-            
-            <!-- GLIFO DE PRECISIÓN: DOS OCHOS (88) ENTRELAZADOS FORMANDO UN NUDO INFINITO -->
             <svg class="w-8 h-8 text-white drop-shadow-md" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Ocho vertical (8) -->
               <path d="M20 20C22.2091 20 24 17.5376 24 14.5C24 11.4624 22.2091 9 20 9C17.7909 9 16 11.4624 16 14.5C16 17.5376 17.7909 20 20 20ZM20 20C22.4853 20 24.5 22.4624 24.5 25.5C24.5 28.5376 22.4853 31 20 31C17.5147 31 15.5 28.5376 15.5 25.5C15.5 22.4624 17.5147 20 20 20Z" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-              <!-- Ocho horizontal entrelazado (Infinito ∞) -->
               <path d="M20 20C20 17.7909 17.5376 16 14.5 16C11.4624 16 9 17.7909 9 20C9 22.2091 11.4624 24 14.5 24C17.5376 24 20 22.2091 20 20ZM20 20C20 17.5147 22.4624 15.5 25.5 15.5C28.5376 15.5 31 17.5147 31 20C31 22.4853 28.5376 24.5 25.5 24.5C22.4624 24.5 20 22.4853 20 20Z" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
-              <!-- Nódulo central de convergencia -->
               <circle cx="20" cy="20" r="1.5" fill="currentColor"/>
             </svg>
-
           </div>
         </div>
 
         <div>
-          <!-- BIMO by Matsword LIMPIO (SIN 1963) -->
           <div class="flex items-baseline gap-2">
             <span class="text-2xl font-black text-white tracking-widest">BIMO</span>
             <span class="text-[9px] bg-white/10 text-white/80 font-bold px-1.5 py-0.2 rounded border border-white/20">PRO</span>
@@ -193,19 +290,21 @@
       </nav>
     </div>
 
-    <!-- Perfil del Doctor -->
+    <!-- Perfil del Doctor con botón de bloqueo/logout -->
     <div class="p-5 border-t border-slate-800/80 bg-slate-900/60 relative z-10">
       <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('config')">
           <div id="userAvatar" class="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center font-bold text-white text-xs shadow-inner">
             MR
           </div>
           <div>
-            <p class="text-xs font-bold text-white">Dr. Mateo Ramírez</p>
+            <p id="userDocName" class="text-xs font-bold text-white">Dr. Mateo Ramírez</p>
             <p id="userRole" class="text-[10px] text-indigo-400 font-medium">Odontología</p>
           </div>
         </div>
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Sistema activo"></span>
+        <button onclick="bloquearPantalla()" title="Bloquear / Cerrar Sesión" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </button>
       </div>
     </div>
   </aside>
@@ -237,30 +336,30 @@
             <!-- EL MINI CALENDARIO FLOTANTE DESPLEGABLE -->
             <div id="miniCalendarDropdown" class="hidden absolute right-0 mt-2 w-72 bg-slate-900/95 border border-slate-700/80 rounded-2xl p-4 shadow-2xl backdrop-blur-2xl z-50 transition-all duration-300">
               <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
-                <span class="text-xs font-bold text-white">Septiembre 2026</span>
-                <span class="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded">Hoy: 4 Sep</span>
+                <span id="miniCalTitle" class="text-xs font-bold text-white">Septiembre 2026</span>
+                <span id="miniCalHoyBadge" class="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded">Hoy</span>
               </div>
               <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-500 mb-1.5">
                 <div>L</div><div>M</div><div>M</div><div>J</div><div>V</div><div>S</div><div>D</div>
               </div>
               <div class="grid grid-cols-7 gap-1 text-center text-xs">
                 <div class="p-1.5 text-slate-600">31</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">1</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">2</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">3</div>
-                <div class="p-1.5 bg-indigo-600 border border-indigo-400 text-white font-bold rounded-lg shadow-md">4</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">5</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">1</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">2</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">3</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 bg-indigo-600 border border-indigo-400 text-white font-bold rounded-lg shadow-md cursor-pointer">4</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">5</div>
                 <div class="p-1.5 text-slate-500">6</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">7</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">8</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">9</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">10</div>
-                <div class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">11</div>
-                <div class="p-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg font-bold">12</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">7</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">8</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">9</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">10</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer">11</div>
+                <div onclick="switchTab('agenda')" class="p-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg font-bold cursor-pointer">12</div>
                 <div class="p-1.5 text-slate-500">13</div>
               </div>
               <div class="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[10px]">
-                <span class="text-slate-400">3 citas hoy</span>
+                <span id="miniCalCitasCount" class="text-slate-400">6 citas registradas</span>
                 <button onclick="switchTab('agenda')" class="text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer">Ver Agenda ➔</button>
               </div>
             </div>
@@ -268,7 +367,7 @@
 
           <!-- Indicador de Estado -->
           <div class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-4 py-2 rounded-full text-xs text-slate-300 shadow-sm">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             Listo para dictar
           </div>
         </div>
@@ -277,7 +376,7 @@
       <!-- Layout 50 / 50 Espacioso y Limpio -->
       <div class="flex-1 grid grid-cols-2 gap-8 relative z-10">
 
-        <!-- COLUMNA IZQUIERDA: BOTÓN CIRCULAR DE 160px PULIDO -->
+        <!-- COLUMNA IZQUIERDA: BOTÓN CIRCULAR DE 192px PULIDO -->
         <section id="cardCapture" class="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-500">
           
           <div class="flex items-center justify-between">
@@ -337,7 +436,7 @@
               <span id="colHeaderRight" class="text-xs font-bold text-indigo-400 uppercase tracking-wider">
                 Expediente Clínico
               </span>
-              <span class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 font-semibold">
+              <span id="expBadgeSinc" class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 font-semibold">
                 Sincronizado
               </span>
             </div>
@@ -346,26 +445,26 @@
               
               <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors relative group">
                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Paciente</div>
-                <div class="text-base font-bold text-white mt-1">Andrés Felipe Calvache</div>
-                <div class="text-xs text-slate-400 mt-0.5">CI: 1724891203 • 32 años</div>
+                <div id="cardPacNombre" class="text-base font-bold text-white mt-1">Dani Baraona</div>
+                <div id="cardPacDoc" class="text-xs text-slate-400 mt-0.5">CI: No registrada • 25 años</div>
               </div>
 
               <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors">
                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Diagnóstico</div>
-                <div class="text-base font-bold text-indigo-300 mt-1">Caries Oclusal</div>
-                <div class="text-xs text-slate-400 mt-0.5">Pieza tratada: <span class="text-rose-400 font-bold">36 ★</span></div>
+                <div id="cardPacDiag" class="text-base font-bold text-indigo-300 mt-1">Caries en premolar</div>
+                <div id="cardPacPieza" class="text-xs text-slate-400 mt-0.5">Piezas tratadas: <span class="text-rose-400 font-bold">14, 24 ★</span></div>
               </div>
 
               <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors">
-                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Procedimiento</div>
-                <div class="text-base font-bold text-white mt-1">Curación con Resina</div>
-                <div class="text-xs text-slate-400 mt-0.5">Grabado ácido y fotocurado</div>
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Procedimiento / Plan</div>
+                <div id="cardPacPlan" class="text-base font-bold text-white mt-1">Curación y Reconstrucción</div>
+                <div id="cardPacSubplan" class="text-xs text-slate-400 mt-0.5">Resina fotocurada estética</div>
               </div>
 
               <div class="p-5 bg-slate-950/70 rounded-2xl border border-slate-800/80 hover:border-slate-700 transition-colors">
                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cita & Pago</div>
-                <div class="text-base font-bold text-emerald-400 mt-1">Jueves 18 Sep • 16:30</div>
-                <div class="text-xs text-slate-400 mt-0.5">Abonó: $20.00 <span class="text-slate-500">(Saldo: $25)</span></div>
+                <div id="cardPacCitaPago" class="text-base font-bold text-emerald-400 mt-1">05 Sep • 19:00</div>
+                <div id="cardPacSaldo" class="text-xs text-slate-400 mt-0.5">Estado: <span class="text-emerald-300 font-bold">Al día</span></div>
               </div>
 
             </div>
@@ -373,7 +472,7 @@
             <div class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800/60 flex items-center justify-between">
               <div>
                 <span class="text-[10px] uppercase font-bold text-slate-400 block">Medicación Prescrita</span>
-                <span class="text-xs text-slate-200 font-medium">Ibuprofeno 400mg cada 8 horas por 2 días si hay dolor.</span>
+                <span id="cardPacMed" class="text-xs text-slate-200 font-medium">Ibuprofeno 400mg cada 8 horas por 2 días si hay dolor.</span>
               </div>
               <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg">Receta OK</span>
             </div>
@@ -396,29 +495,32 @@
       <header class="flex justify-between items-center mb-6">
         <div>
           <h2 class="text-3xl font-black text-white tracking-tight">Agenda Médica</h2>
-          <p class="text-xs text-slate-400 mt-1">Citas agendadas por voz y controles periódicos.</p>
+          <p class="text-xs text-slate-400 mt-1">Citas agendadas por voz y controles periódicos en tiempo real.</p>
         </div>
+        <button onclick="abrirModalNuevaCita()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-indigo-600/30 transition-all">
+          + Agendar Nueva Cita
+        </button>
       </header>
 
       <div class="flex-1 grid grid-cols-3 gap-6">
-        <div class="col-span-2 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+        <div class="col-span-2 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl flex flex-col">
           <div class="flex items-center justify-between mb-6">
             <span class="text-base font-black text-white">Septiembre 2026</span>
             <div class="flex items-center gap-2">
-              <button class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">◀</button>
-              <button class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">▶</button>
+              <button onclick="mostrarToast('Navegando mes anterior')" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer">◀</button>
+              <button onclick="mostrarToast('Navegando mes siguiente')" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer">▶</button>
             </div>
           </div>
           <div class="grid grid-cols-7 gap-3 text-center text-xs font-bold text-slate-500 mb-3">
             <div>LUN</div><div>MAR</div><div>MIÉ</div><div>JUE</div><div>VIE</div><div>SÁB</div><div>DOM</div>
           </div>
-          <div class="grid grid-cols-7 gap-3 text-center text-xs">
+          <div class="grid grid-cols-7 gap-3 text-center text-xs flex-1">
             <div class="p-3 text-slate-600">31</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">1</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">2</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">3</div>
             <div class="p-3 rounded-2xl bg-indigo-600/30 border border-indigo-500 text-indigo-300 font-bold">4</div>
-            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">5</div>
+            <div class="p-3 rounded-2xl bg-purple-500/20 border border-purple-500 text-purple-300 font-bold hover:bg-slate-800 cursor-pointer">5</div>
             <div class="p-3 rounded-2xl text-slate-500">6</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">7</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">8</div>
@@ -431,33 +533,26 @@
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">15</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">16</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">17</div>
-            <div class="p-3 rounded-2xl bg-purple-500/20 border border-purple-500 text-purple-300 font-bold">18</div>
+            <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">18</div>
             <div class="p-3 rounded-2xl hover:bg-slate-800 cursor-pointer">19</div>
             <div class="p-3 rounded-2xl text-slate-500">20</div>
           </div>
         </div>
 
         <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between">
-          <div>
-            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Citas del Día</h3>
-            <div class="space-y-3">
-              <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800">
-                <div class="flex justify-between text-xs font-bold text-white">
-                  <span>Andrés Calvache</span>
-                  <span class="text-indigo-400">09:00</span>
-                </div>
-                <p class="text-xs text-slate-400 mt-1">Curación resina molar 36</p>
-              </div>
-              <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800">
-                <div class="flex justify-between text-xs font-bold text-white">
-                  <span>Karla Morales</span>
-                  <span class="text-indigo-400">11:30</span>
-                </div>
-                <p class="text-xs text-slate-400 mt-1">Limpieza ultrasónica</p>
-              </div>
+          <div class="overflow-y-auto pr-1">
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+              <span>Citas Registradas</span>
+              <span id="badgeTotalCitas" class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold">0</span>
+            </h3>
+            
+            <!-- LISTA DINÁMICA DE CITAS -->
+            <div id="listaCitasContenedor" class="space-y-3">
+              <div class="text-xs text-slate-500 text-center py-8">Cargando citas...</div>
             </div>
           </div>
-          <button class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer">
+
+          <button onclick="abrirModalNuevaCita()" class="w-full py-3 mt-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/20">
             + Agendar Nueva Cita
           </button>
         </div>
@@ -469,11 +564,14 @@
       <header class="flex justify-between items-center mb-6">
         <div>
           <h2 class="text-3xl font-black text-white tracking-tight">Directorio de Pacientes</h2>
-          <p class="text-xs text-slate-400 mt-1">Fichas clínicas completas con edición instantánea de datos.</p>
+          <p class="text-xs text-slate-400 mt-1">Fichas clínicas completas con edición instantánea y saldos.</p>
         </div>
         <div class="flex items-center gap-3">
-          <input type="text" placeholder="Buscar nombre o cédula..." class="w-72 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
-          <button onclick="alert('Modal de Nuevo Paciente')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer">
+          <div class="relative">
+            <input id="inputBuscarPaciente" oninput="buscarPacientesEnVivo(this.value)" type="text" placeholder="Buscar nombre o cédula..." class="w-72 pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+            <svg class="w-4 h-4 text-slate-500 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </div>
+          <button onclick="abrirModalNuevoPaciente()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-indigo-600/30 transition-all">
             + Nuevo Paciente
           </button>
         </div>
@@ -491,35 +589,8 @@
               <th class="pb-4 text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-800/60">
-            <tr class="hover:bg-slate-800/40 transition-colors">
-              <td class="py-4 font-bold text-white flex items-center gap-2">
-                <div class="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-[10px]">AC</div>
-                Andrés Felipe Calvache
-              </td>
-              <td class="py-4 text-slate-300 font-mono">1724891203</td>
-              <td class="py-4 text-slate-400">32 años</td>
-              <td class="py-4 text-slate-300">Hoy (4 Sep)</td>
-              <td class="py-4 text-emerald-400 font-bold">$25.00</td>
-              <td class="py-4 text-right space-x-2">
-                <button onclick="alert('Editor de datos de paciente listo en la app')" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">✏️ Editar</button>
-                <button onclick="switchTab('dictado')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer">Ver Historia</button>
-              </td>
-            </tr>
-            <tr class="hover:bg-slate-800/40 transition-colors">
-              <td class="py-4 font-bold text-white flex items-center gap-2">
-                <div class="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold text-[10px]">KM</div>
-                Karla Morales Espinoza
-              </td>
-              <td class="py-4 text-slate-300 font-mono">1719842011</td>
-              <td class="py-4 text-slate-400">26 años</td>
-              <td class="py-4 text-slate-300">28 Ago 2026</td>
-              <td class="py-4 text-slate-500 font-bold">$0.00</td>
-              <td class="py-4 text-right space-x-2">
-                <button onclick="alert('Editor de datos de paciente listo en la app')" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">✏️ Editar</button>
-                <button onclick="switchTab('dictado')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer">Ver Historia</button>
-              </td>
-            </tr>
+          <tbody id="tablaPacientesBody" class="divide-y divide-slate-800/60">
+            <tr><td colspan="6" class="text-center py-8 text-slate-500">Cargando pacientes desde la base de datos...</td></tr>
           </tbody>
         </table>
       </div>
@@ -567,34 +638,47 @@
             </svg>
           </div>
           <div class="mt-6">
-            <h4 class="text-base font-bold text-white">Escanea con tu teléfono</h4>
-            <p class="text-xs text-slate-400 mt-1">Conecta tu smartphone sin instalar nada desde la App Store.</p>
-            <div class="mt-3 inline-block bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-mono text-indigo-400">
-              http://192.168.18.11:8000/mobile
+            <h4 class="text-base font-bold text-white">Escanea con la cámara de tu teléfono</h4>
+            <p class="text-xs text-slate-400 mt-1">Conecta cualquier smartphone iOS o Android sin instalar apps.</p>
+            <div id="mobileUrlDisplay" class="mt-3 inline-block bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-xs font-mono text-indigo-400 select-all">
+              http://127.0.0.1:8765/mobile
+            </div>
+            <div class="mt-3">
+              <button onclick="abrirUrlMovilNativo()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer transition-colors">
+                Abrir en Navegador Web ↗
+              </button>
             </div>
           </div>
         </div>
 
         <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl">
           <div class="space-y-4">
-            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Funciones Móviles</h3>
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Funciones Inalámbricas</h3>
             <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 flex items-center gap-4">
               <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-lg">🎙️</div>
               <div>
-                <h5 class="text-xs font-bold text-white">Dictado Remoto Inalámbrico</h5>
-                <p class="text-[11px] text-slate-400 mt-0.5">Usa el micrófono de tu celular mientras te mueves.</p>
+                <h5 class="text-xs font-bold text-white">Micrófono Clínico Inalámbrico</h5>
+                <p class="text-[11px] text-slate-400 mt-0.5">Usa tu celular como micrófono de solapa mientras atiendes al paciente.</p>
               </div>
             </div>
             <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 flex items-center gap-4">
               <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center text-lg">📸</div>
               <div>
-                <h5 class="text-xs font-bold text-white">Cámara Dental Directa</h5>
-                <p class="text-[11px] text-slate-400 mt-0.5">Toma fotos intraorales que se adjuntan a la ficha.</p>
+                <h5 class="text-xs font-bold text-white">Cámara Fotográfica Intraoral</h5>
+                <p class="text-[11px] text-slate-400 mt-0.5">Toma fotografías de diagnóstico dental que se adjuntan automáticamente a la ficha.</p>
+              </div>
+            </div>
+            <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 flex items-center gap-4">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-lg">📄</div>
+              <div>
+                <h5 class="text-xs font-bold text-white">Expedientes en PDF en Tiempo Real</h5>
+                <p class="text-[11px] text-slate-400 mt-0.5">Visualiza historias clínicas y recetas médicas desde tu smartphone.</p>
               </div>
             </div>
           </div>
           <div class="pt-4 border-t border-slate-800 text-xs text-slate-400 flex justify-between items-center">
-            <span>Dispositivo: <b class="text-white">iPhone 14 Pro Conectado</b></span>
+            <span>Protocolo de Transmisión: <b class="text-white">WebSockets / REST</b></span>
+            <span class="text-emerald-400 font-semibold">Listo</span>
           </div>
         </div>
       </div>
@@ -604,40 +688,59 @@
     <div id="tab-pdf" class="tab-content hidden flex-1 flex flex-col">
       <header class="flex justify-between items-center mb-6">
         <div>
-          <h2 class="text-3xl font-black text-white tracking-tight">Visor de PDF Clínico</h2>
-          <p class="text-xs text-slate-400 mt-1">Previsualización de alta definición antes de imprimir.</p>
+          <h2 class="text-3xl font-black text-white tracking-tight">Visor de Historias Clínicas en PDF</h2>
+          <p class="text-xs text-slate-400 mt-1">Directorio de documentos generados listos para visualización e impresión.</p>
         </div>
-        <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer">
-          Imprimir PDF
-        </button>
+        <div class="flex items-center gap-3">
+          <button onclick="imprimirPdfUltimo()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-indigo-600/30">
+            Imprimir Último PDF
+          </button>
+        </div>
       </header>
 
-      <div class="flex-1 bg-slate-900/50 rounded-3xl p-6 border border-slate-800 flex items-center justify-center">
-        <div class="w-[480px] h-[600px] bg-white text-slate-900 rounded-2xl shadow-2xl p-8 flex flex-col justify-between text-xs">
+      <div class="flex-1 grid grid-cols-3 gap-6 overflow-hidden">
+        <!-- Lista de Documentos Recientes -->
+        <div class="col-span-2 bg-slate-900/60 rounded-3xl p-6 border border-slate-800 flex flex-col shadow-2xl backdrop-blur-xl overflow-hidden">
+          <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+            <span>Historias Clínicas Disponibles</span>
+            <span id="badgeTotalPdfs" class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold">0</span>
+          </h3>
+
+          <div id="listaPdfsContenedor" class="flex-1 overflow-y-auto space-y-2 pr-1">
+            <div class="text-xs text-slate-500 text-center py-12">Buscando PDFs en el sistema...</div>
+          </div>
+        </div>
+
+        <!-- Tarjeta de Previsualización Rápida -->
+        <div class="bg-slate-900/60 rounded-3xl p-6 border border-slate-800 flex flex-col justify-between shadow-2xl backdrop-blur-xl">
           <div>
-            <div class="flex justify-between items-start border-b border-slate-200 pb-4 mb-4">
-              <div>
-                <h3 class="text-base font-black text-slate-900">DR. MATEO RAMÍREZ</h3>
-                <p class="text-[10px] text-slate-500 font-semibold">ODONTOLOGÍA ESPECIALIZADA</p>
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Acceso Rápido</h3>
+            <div class="p-5 bg-white text-slate-900 rounded-2xl shadow-xl flex flex-col justify-between text-xs space-y-3">
+              <div class="flex justify-between items-start border-b border-slate-200 pb-3">
+                <div>
+                  <h4 class="text-sm font-black text-slate-900" id="previewDoctorName">DR. MATEO RAMÍREZ</h4>
+                  <p class="text-[9px] text-slate-500 font-semibold">ODONTOLOGÍA ESPECIALIZADA</p>
+                </div>
+                <span class="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">HISTORIA PDF</span>
               </div>
-              <span class="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">HISTORIA Nº 2026-049</span>
-            </div>
-            <div class="bg-slate-50 rounded-xl p-3 mb-4 grid grid-cols-3 gap-2 text-[11px]">
-              <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Paciente</span><b>Andrés Calvache</b></div>
-              <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Cédula</span>1724891203</div>
-              <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Edad</span>32 años</div>
-            </div>
-            <p class="text-slate-700 leading-relaxed text-[11px] mb-4">
-              <b>Procedimiento:</b> Remoción de lesión cariosa oclusal en pieza 36 y obturación con resina fotopolimerizable. Oclusión ajustada.
-            </p>
-            <div class="border border-slate-200 rounded-xl p-3 text-center text-xs">
-              <span class="text-slate-500 block mb-1">Odontograma: Pieza tratada</span>
-              <span class="text-rose-600 font-black">[36 - Resina Oclusal]</span>
+              <div class="bg-slate-50 rounded-xl p-3 text-[11px] space-y-1">
+                <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Último Expediente</span><b id="previewPacName">Dani Baraona</b></div>
+                <div><span class="text-slate-400 text-[9px] uppercase font-bold block">Tratamiento</span>Reconstrucción dental y resina</div>
+              </div>
+              <div class="border border-slate-200 rounded-xl p-2.5 text-center text-xs">
+                <span class="text-slate-500 text-[10px] block">Odontograma Unificado</span>
+                <span class="text-rose-600 font-bold text-xs">[FDI 14, 24 Resina]</span>
+              </div>
             </div>
           </div>
-          <div class="border-t border-slate-200 pt-3 flex justify-between items-center text-[10px] text-slate-400">
-            <span>Firma Profesional</span>
-            <span>BIMO by Matsword</span>
+
+          <div class="pt-4 space-y-2">
+            <button onclick="abrirUltimoPDF()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/20">
+              Abrir en Visor de Windows
+            </button>
+            <button onclick="imprimirPdfUltimo()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors">
+              Mandar a Imprimir
+            </button>
           </div>
         </div>
       </div>
@@ -648,12 +751,12 @@
       <header class="flex justify-between items-center mb-6">
         <div>
           <h2 class="text-3xl font-black text-white tracking-tight">Widget Flotante de Escritorio</h2>
-          <p class="text-xs text-slate-400 mt-1">Accesorio flotante que acompaña tus consultas sin tapar la pantalla.</p>
+          <p class="text-xs text-slate-400 mt-1">Accesorio Always-on-Desk que acompaña tus consultas sin tapar la pantalla de trabajo.</p>
         </div>
       </header>
 
       <div class="flex-1 bg-slate-950/80 rounded-3xl border border-slate-800 p-8 flex items-center justify-center">
-        <div id="floatingWidgetCard" class="w-84 bg-slate-900/90 border border-slate-700/80 rounded-3xl p-5 shadow-2xl backdrop-blur-2xl transition-all duration-500">
+        <div id="floatingWidgetCard" class="w-96 bg-slate-900/90 border border-slate-700/80 rounded-3xl p-6 shadow-2xl backdrop-blur-2xl transition-all duration-500">
           <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
             <div class="flex items-center gap-2">
               <span class="text-xs font-black text-white tracking-widest">BIMO DOCK</span>
@@ -661,18 +764,18 @@
             </div>
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
-          <div class="flex items-center gap-4 mb-4">
-            <button id="widgetMicBtn" onclick="toggleWidgetMic()" class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform">
-              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" /></svg>
+          <div class="flex items-center gap-4 mb-5">
+            <button id="widgetMicBtn" onclick="toggleWidgetMic()" class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" /></svg>
             </button>
             <div>
-              <div id="widgetMicTitle" class="text-xs font-bold text-white">Dictado Rápido</div>
-              <div class="text-[11px] text-slate-400 mt-0.5">Presiona o di "Oye Bimo"</div>
+              <div id="widgetMicTitle" class="text-sm font-bold text-white">Dictado Rápido</div>
+              <div class="text-xs text-slate-400 mt-0.5">Presiona o di "Oye Bimo"</div>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <button onclick="switchTab('dictado')" class="p-2 rounded-xl bg-slate-800 text-slate-300 font-semibold cursor-pointer text-center">Abrir App</button>
-            <button onclick="switchTab('pdf')" class="p-2 rounded-xl bg-slate-800 text-slate-300 font-semibold cursor-pointer text-center">PDF</button>
+          <div class="grid grid-cols-2 gap-2.5 text-xs">
+            <button onclick="switchTab('dictado')" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer text-center transition-colors">Abrir App</button>
+            <button onclick="switchTab('pdf')" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer text-center transition-colors">Ver PDF</button>
           </div>
         </div>
       </div>
@@ -683,11 +786,14 @@
       <header class="flex justify-between items-center mb-6">
         <div>
           <h2 class="text-3xl font-black text-white tracking-tight">Configuración & Temas</h2>
-          <p class="text-xs text-slate-400 mt-1">Elige entre las 4 paletas y observa cómo se transforman los fondos y acentos.</p>
+          <p class="text-xs text-slate-400 mt-1">Personaliza el consultorio médico y elige entre las 4 paletas de color.</p>
         </div>
+        <button onclick="guardarConfiguracionClinica()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-indigo-600/30 transition-all">
+          Guardar Cambios
+        </button>
       </header>
 
-      <div class="grid grid-cols-2 gap-6">
+      <div class="grid grid-cols-2 gap-6 overflow-y-auto">
         <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
           <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4">Paleta de Colores</h3>
           <div class="space-y-3">
@@ -744,11 +850,28 @@
           <div class="space-y-4 text-xs">
             <div>
               <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Doctor Titular</label>
-              <input type="text" value="Dr. Mateo Ramírez" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+              <input id="confDoctor" type="text" value="Dr. Mateo Ramírez" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
             </div>
             <div>
-              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Firma de Marca</label>
-              <input type="text" value="BIMO by Matsword" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nombre de la Clínica</label>
+              <input id="confClinica" type="text" value="BIMO Dental Clinic" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Especialidad / Registro</label>
+              <input id="confFirma" type="text" value="RP-ODONT-2026" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Teléfono de Contacto</label>
+              <input id="confTelefono" type="text" value="+57 300 123 4567" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">PIN Maestro Rápido</label>
+              <input id="confPin" type="text" value="1234" maxlength="6" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-mono tracking-widest" />
+            </div>
+            <div class="pt-2">
+              <button onclick="guardarConfiguracionClinica()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/20">
+                Guardar Configuración
+              </button>
             </div>
           </div>
         </div>
@@ -757,35 +880,117 @@
 
   </main>
 
-  <!-- ================= SCRIPT DE INTERACTIVIDAD & CONTROL DEL CALENDARIO ================= -->
+  <!-- ================= MODAL DE PACIENTE (NUEVO / EDITAR) ================= -->
+  <div id="modalPaciente" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-slate-950/80 backdrop-blur-xl">
+    <div class="w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl modal-pop">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+        <h3 id="modalPacienteTitulo" class="text-base font-black text-white">Nuevo Paciente</h3>
+        <button onclick="cerrarModalPaciente()" class="p-1 rounded-lg text-slate-400 hover:text-white">✕</button>
+      </div>
+      
+      <input type="hidden" id="pacienteId">
+      
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nombre Completo *</label>
+          <input id="pacienteNombre" type="text" placeholder="Ej. Andrés Felipe Calvache" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Cédula / Documento</label>
+            <input id="pacienteDoc" type="text" placeholder="Ej. 1724891203" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Edad</label>
+            <input id="pacienteEdad" type="number" placeholder="Ej. 32" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Teléfono</label>
+            <input id="pacienteTelefono" type="text" placeholder="Ej. 0991234567" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Sexo</label>
+            <select id="pacienteSexo" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500">
+              <option value="No especificado">No especificado</option>
+              <option value="Masculino">Masculino</option>
+              <option value="Femenino">Femenino</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Dirección</label>
+          <input id="pacienteDireccion" type="text" placeholder="Ej. Av. Amazonas y República" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-5 mt-4 border-t border-slate-800">
+        <button onclick="cerrarModalPaciente()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer">Cancelar</button>
+        <button onclick="guardarPacienteForm()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-md shadow-indigo-600/30">Guardar Paciente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DE NUEVA CITA ================= -->
+  <div id="modalCita" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-slate-950/80 backdrop-blur-xl">
+    <div class="w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl modal-pop">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+        <h3 class="text-base font-black text-white">Agendar Nueva Cita</h3>
+        <button onclick="cerrarModalCita()" class="p-1 rounded-lg text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nombre del Paciente *</label>
+          <input id="citaPacienteNombre" type="text" placeholder="Nombre completo" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Teléfono</label>
+          <input id="citaTelefono" type="text" placeholder="Ej. 0991234567" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Fecha *</label>
+            <input id="citaFecha" type="date" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Hora *</label>
+            <input id="citaHora" type="time" value="09:00" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+          </div>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Motivo / Tratamiento</label>
+          <input id="citaDescripcion" type="text" placeholder="Ej. Curación con resina molar 36" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-5 mt-4 border-t border-slate-800">
+        <button onclick="cerrarModalCita()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer">Cancelar</button>
+        <button onclick="guardarCitaForm()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-md shadow-indigo-600/30">Agendar Cita</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= NOTIFICACIÓN TOAST FLOTANTE ================= -->
+  <div id="toastNotification" class="fixed bottom-6 right-6 z-50 hidden transition-all duration-300 transform translate-y-4">
+    <div id="toastContent" class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl text-xs font-semibold text-white backdrop-blur-xl">
+      <span id="toastIcon">✨</span>
+      <span id="toastMessage">Operación exitosa</span>
+    </div>
+  </div>
+
+  <!-- ================= SCRIPTS DE CONTROL & INTERACTIVIDAD ================= -->
   <script>
     let isRecording = false;
     let isWidgetRecording = false;
     let isMiniCalOpen = false;
+    let pinBuffer = "";
+    let pacientesCache = [];
+    let citasCache = [];
+    let pdfsCache = [];
 
-    function toggleMiniCalendar() {
-      isMiniCalOpen = !isMiniCalOpen;
-      const cal = document.getElementById('miniCalendarDropdown');
-      const chev = document.getElementById('calChevron');
-      if (isMiniCalOpen) {
-        cal.classList.remove('hidden');
-        chev.style.transform = 'rotate(180deg)';
-      } else {
-        cal.classList.add('hidden');
-        chev.style.transform = 'rotate(0deg)';
-      }
-    }
-
-    document.addEventListener('click', (e) => {
-      const btn = document.getElementById('btnToggleMiniCal');
-      const cal = document.getElementById('miniCalendarDropdown');
-      if (btn && cal && !btn.contains(e.target) && !cal.contains(e.target)) {
-        cal.classList.add('hidden');
-        document.getElementById('calChevron').style.transform = 'rotate(0deg)';
-        isMiniCalOpen = false;
-      }
-    });
-
+    // TEMAS Y COLORES
     const THEMES = {
       cyan: {
         name: 'Cyber Cyan',
@@ -844,6 +1049,193 @@
     let currentThemeKey = 'violet';
     let currentActiveTab = 'dictado';
 
+    // SISTEMA DE TOASTS
+    function mostrarToast(mensaje, tipo = 'success') {
+      const toast = document.getElementById('toastNotification');
+      const msg = document.getElementById('toastMessage');
+      const icon = document.getElementById('toastIcon');
+      const content = document.getElementById('toastContent');
+
+      msg.innerText = mensaje;
+      if (tipo === 'success') {
+        icon.innerText = '✅';
+        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/40 shadow-2xl text-xs font-semibold text-emerald-300 backdrop-blur-xl';
+      } else if (tipo === 'error') {
+        icon.innerText = '⚠️';
+        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-rose-500/40 shadow-2xl text-xs font-semibold text-rose-300 backdrop-blur-xl';
+      } else {
+        icon.innerText = 'ℹ️';
+        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-indigo-500/40 shadow-2xl text-xs font-semibold text-indigo-300 backdrop-blur-xl';
+      }
+
+      toast.classList.remove('hidden');
+      toast.classList.remove('translate-y-4');
+      toast.classList.add('translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.add('translate-y-4');
+        setTimeout(() => toast.classList.add('hidden'), 300);
+      }, 3000);
+    }
+
+    // ==========================================
+    // INICIO DE SESIÓN & CONTROL DE PIN
+    // ==========================================
+    function setLoginMode(mode) {
+      const vPin = document.getElementById('viewLoginPin');
+      const vCreds = document.getElementById('viewLoginCreds');
+      const btnP = document.getElementById('tabBtnPin');
+      const btnC = document.getElementById('tabBtnCreds');
+      const err = document.getElementById('loginErrorMsg');
+      err.classList.add('hidden');
+
+      if (mode === 'pin') {
+        vPin.classList.remove('hidden');
+        vCreds.classList.add('hidden');
+        btnP.className = 'flex-1 py-2 rounded-lg bg-indigo-600 text-white transition-all';
+        btnC.className = 'flex-1 py-2 rounded-lg text-slate-400 hover:text-white transition-all';
+      } else {
+        vPin.classList.add('hidden');
+        vCreds.classList.remove('hidden');
+        btnC.className = 'flex-1 py-2 rounded-lg bg-indigo-600 text-white transition-all';
+        btnP.className = 'flex-1 py-2 rounded-lg text-slate-400 hover:text-white transition-all';
+      }
+    }
+
+    function pressPin(digit) {
+      if (pinBuffer.length < 4) {
+        pinBuffer += digit;
+        updatePinDots();
+        if (pinBuffer.length === 4) {
+          setTimeout(submitPin, 120);
+        }
+      }
+    }
+
+    function clearPin() {
+      pinBuffer = "";
+      updatePinDots();
+    }
+
+    function backspacePin() {
+      if (pinBuffer.length > 0) {
+        pinBuffer = pinBuffer.slice(0, -1);
+        updatePinDots();
+      }
+    }
+
+    function updatePinDots() {
+      for (let i = 0; i < 4; i++) {
+        const dot = document.getElementById('pinDot' + i);
+        if (i < pinBuffer.length) {
+          dot.className = 'w-4 h-4 rounded-full border-2 border-indigo-400 bg-indigo-500 shadow-[0_0_8px_#818cf8] scale-110 transition-all duration-200';
+        } else {
+          dot.className = 'w-4 h-4 rounded-full border-2 border-slate-600 bg-slate-800 transition-all duration-200';
+        }
+      }
+    }
+
+    // Soporte teclado físico en Login
+    document.addEventListener('keydown', (e) => {
+      const login = document.getElementById('loginScreen');
+      if (!login.classList.contains('hidden') && !document.getElementById('viewLoginPin').classList.contains('hidden')) {
+        if (e.key >= '0' && e.key <= '9') {
+          pressPin(e.key);
+        } else if (e.key === 'Backspace') {
+          backspacePin();
+        } else if (e.key === 'Escape') {
+          clearPin();
+        }
+      }
+    });
+
+    async function submitPin() {
+      const err = document.getElementById('loginErrorMsg');
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const resp = await window.pywebview.api.autenticar_pin(pinBuffer);
+          if (resp && resp.status === 'ok') {
+            desbloquearApp(resp.usuario);
+          } else {
+            err.innerText = (resp && resp.message) || 'PIN incorrecto.';
+            err.classList.remove('hidden');
+            clearPin();
+          }
+        } else {
+          // Modo simulado para vista previa en navegador
+          if (pinBuffer === '1234') {
+            desbloquearApp({ nombre: 'Dr. Mateo Ramírez', rol: 'medico' });
+          } else {
+            err.innerText = 'PIN incorrecto. Usa 1234.';
+            err.classList.remove('hidden');
+            clearPin();
+          }
+        }
+      } catch (e) {
+        err.innerText = 'Error al validar PIN: ' + e;
+        err.classList.remove('hidden');
+        clearPin();
+      }
+    }
+
+    async function submitLoginCreds() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const pwd = document.getElementById('loginPassword').value.trim();
+      const err = document.getElementById('loginErrorMsg');
+
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const resp = await window.pywebview.api.autenticar(email, pwd);
+          if (resp && resp.status === 'ok') {
+            desbloquearApp(resp.usuario);
+          } else {
+            err.innerText = (resp && resp.message) || 'Credenciales incorrectas.';
+            err.classList.remove('hidden');
+          }
+        } else {
+          if (email && pwd) {
+            desbloquearApp({ nombre: 'Dr. Mateo Ramírez', rol: 'medico' });
+          } else {
+            err.innerText = 'Completa todos los campos.';
+            err.classList.remove('hidden');
+          }
+        }
+      } catch (e) {
+        err.innerText = 'Error de conexión: ' + e;
+        err.classList.remove('hidden');
+      }
+    }
+
+    function desbloquearApp(usuario) {
+      const login = document.getElementById('loginScreen');
+      login.classList.add('opacity-0', 'pointer-events-none');
+      setTimeout(() => login.classList.add('hidden'), 500);
+
+      if (usuario && usuario.nombre) {
+        document.getElementById('userDocName').innerText = usuario.nombre;
+        const initials = usuario.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        document.getElementById('userAvatar').innerText = initials || 'DR';
+      }
+
+      mostrarToast(`Bienvenido, ${usuario.nombre || 'Doctor'}`, 'info');
+      inicializarDatosApp();
+    }
+
+    function bloquearPantalla() {
+      clearPin();
+      const login = document.getElementById('loginScreen');
+      login.classList.remove('hidden');
+      setTimeout(() => {
+        login.classList.remove('opacity-0', 'pointer-events-none');
+      }, 10);
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.cerrar_sesion();
+      }
+    }
+
+    // ==========================================
+    // NAVEGACIÓN Y PESTAÑAS
+    // ==========================================
     function switchTab(tabId) {
       currentActiveTab = tabId;
       document.querySelectorAll('.tab-content').forEach(el => {
@@ -874,6 +1266,13 @@
         const activeDot = activeBtn.querySelector('.nav-dot');
         if (activeDot) activeDot.className = `nav-dot w-1.5 h-3.5 rounded-full ${t.accentDot} transition-all duration-300 opacity-100 scale-100`;
       }
+
+      // Carga perezosa de datos al cambiar a la pestaña
+      if (tabId === 'pacientes') cargarPacientes();
+      else if (tabId === 'agenda') cargarCitas();
+      else if (tabId === 'pdf') cargarPdfs();
+      else if (tabId === 'mobile') cargarInfoMovil();
+      else if (tabId === 'config') cargarConfiguracion();
     }
 
     function setTheme(key) {
@@ -892,7 +1291,7 @@
         document.getElementById('outerRing1').className = `absolute w-60 h-60 rounded-full ${t.ringBg} border ${t.ringColor} ring-layer-1 pointer-events-none transition-all duration-700`;
       }
 
-      document.getElementById('widgetMicBtn').className = `w-14 h-14 rounded-2xl bg-gradient-to-tr ${t.btnGrad} text-white flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform`;
+      document.getElementById('widgetMicBtn').className = `w-16 h-16 rounded-2xl bg-gradient-to-tr ${t.btnGrad} text-white flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform`;
       document.getElementById('btnPrintPdfBtn').className = `w-full py-4 bg-gradient-to-r ${t.btnGrad} text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-xl cursor-pointer flex items-center justify-center gap-2.5`;
 
       document.getElementById('colHeaderLeft').className = `text-xs font-bold ${t.accentColor} uppercase tracking-wider`;
@@ -909,14 +1308,35 @@
       });
     }
 
-    function abrirUltimoPDF() {
-      if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.abrir_ultimo_pdf();
+    // ==========================================
+    // MINI CALENDARIO DESPLEGABLE
+    // ==========================================
+    function toggleMiniCalendar() {
+      isMiniCalOpen = !isMiniCalOpen;
+      const cal = document.getElementById('miniCalendarDropdown');
+      const chev = document.getElementById('calChevron');
+      if (isMiniCalOpen) {
+        cal.classList.remove('hidden');
+        chev.style.transform = 'rotate(180deg)';
       } else {
-        switchTab('pdf');
+        cal.classList.add('hidden');
+        chev.style.transform = 'rotate(0deg)';
       }
     }
 
+    document.addEventListener('click', (e) => {
+      const btn = document.getElementById('btnToggleMiniCal');
+      const cal = document.getElementById('miniCalendarDropdown');
+      if (btn && cal && !btn.contains(e.target) && !cal.contains(e.target)) {
+        cal.classList.add('hidden');
+        document.getElementById('calChevron').style.transform = 'rotate(0deg)';
+        isMiniCalOpen = false;
+      }
+    });
+
+    // ==========================================
+    // DICTADO Y PROCESAMIENTO IA
+    // ==========================================
     async function toggleRecording() {
       isRecording = !isRecording;
       const btn = document.getElementById('mainRecordButton');
@@ -927,21 +1347,16 @@
       const t = THEMES[currentThemeKey];
 
       if (isRecording) {
-        // Modo Escuchando: Botón ampliado de 192px, sutil, sereno, SIN rojo de pánico
         btn.className = `relative z-10 w-48 h-48 rounded-full bg-gradient-to-tr ${t.btnGrad} shadow-2xl shadow-indigo-500/30 border-4 border-slate-900 flex flex-col items-center justify-center cursor-pointer transition-all duration-500 scale-105`;
         ring1.className = `absolute w-64 h-64 rounded-full ${t.ringBg} border ${t.ringColor} ring-subtle-active pointer-events-none transition-all duration-500`;
         ring2.className = `absolute w-84 h-84 rounded-full border ${t.ringColor} ring-subtle-active pointer-events-none transition-all duration-500`;
         
         document.getElementById('btnMainLabel').innerText = 'Detener';
-        
-        // Exactamente lo que pidió el usuario: "Escuchando al doctor..."
         title.innerText = 'Escuchando al doctor...';
         title.className = `text-base font-semibold ${t.accentColor} tracking-wide transition-colors duration-300`;
-        
         badge.innerText = 'Escuchando';
         badge.className = `text-xs ${t.ringBg} ${t.accentColor} px-3 py-1 rounded-full border ${t.ringColor} font-medium`;
 
-        // Llamar a Python sounddevice si está en la app de escritorio
         if (window.pywebview && window.pywebview.api) {
           try {
             await window.pywebview.api.iniciar_grabacion();
@@ -949,18 +1364,14 @@
             console.error('Error al iniciar grabación:', e);
           }
         }
-
       } else {
         setTheme(currentThemeKey);
-        
         document.getElementById('btnMainLabel').innerText = 'Dictar';
-        
         title.innerText = 'Procesando con IA...';
         title.className = `text-base font-semibold ${t.accentColor} tracking-wide transition-colors duration-300 animate-pulse`;
         badge.innerText = 'Procesando';
         badge.className = 'text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full font-medium';
 
-        // Detener y procesar en Python con Whisper y Gemini
         if (window.pywebview && window.pywebview.api) {
           try {
             const resp = await window.pywebview.api.detener_y_procesar();
@@ -969,27 +1380,16 @@
               title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
               badge.innerText = 'Sincronizado';
 
-              if (resp.resultado) {
-                const r = resp.resultado;
-                const cardPac = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(1) .text-base');
-                if (cardPac && r.paciente) cardPac.innerText = r.paciente;
-
-                const cardDiag = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(2) .text-base');
-                if (cardDiag && r.diagnostico) cardDiag.innerText = r.diagnostico;
-
-                const cardPlan = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(3) .text-base');
-                if (cardPlan && r.plan) cardPlan.innerText = r.plan;
-
-                const cardPago = document.querySelector('#cardRecord div:nth-child(2) div:nth-child(4) .text-base');
-                if (cardPago && r.honorarios) {
-                  const pag = r.honorarios;
-                  cardPago.innerText = pag.fecha_cita || 'Próxima cita';
-                }
-              }
+              mostrarToast('¡Consulta clínica procesada con éxito!');
+              cargarUltimoExpediente();
+              cargarPacientes();
+              cargarCitas();
+              cargarPdfs();
             } else {
               title.innerText = 'En espera';
               title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
               badge.innerText = 'En Reposo';
+              if (resp && resp.message) mostrarToast(resp.message, 'error');
             }
           } catch(e) {
             console.error('Error al procesar dictado:', e);
@@ -998,9 +1398,12 @@
             badge.innerText = 'En Reposo';
           }
         } else {
-          title.innerText = 'En espera';
-          title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
-          badge.innerText = 'En Reposo';
+          setTimeout(() => {
+            title.innerText = 'En espera';
+            title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
+            badge.innerText = 'En Reposo';
+            mostrarToast('Dictado simulado completado');
+          }, 1500);
         }
       }
     }
@@ -1011,15 +1414,498 @@
       const title = document.getElementById('widgetMicTitle');
 
       if (isWidgetRecording) {
-        btn.className = 'w-14 h-14 rounded-2xl bg-gradient-to-tr from-rose-600 to-pink-500 text-white flex items-center justify-center shadow-lg shadow-rose-600/40 animate-pulse';
+        btn.className = 'w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-600 to-pink-500 text-white flex items-center justify-center shadow-lg shadow-rose-600/40 animate-pulse';
         title.innerText = 'Grabando...';
         title.className = 'text-xs font-black text-rose-400';
       } else {
-        btn.className = `w-14 h-14 rounded-2xl bg-gradient-to-tr ${THEMES[currentThemeKey].btnGrad} text-white flex items-center justify-center shadow-lg cursor-pointer`;
+        btn.className = `w-16 h-16 rounded-2xl bg-gradient-to-tr ${THEMES[currentThemeKey].btnGrad} text-white flex items-center justify-center shadow-lg cursor-pointer`;
         title.innerText = 'Dictado Rápido';
         title.className = 'text-xs font-bold text-white';
       }
     }
+
+    // ==========================================
+    // CARGAR EXPEDIENTE CLÍNICO
+    // ==========================================
+    async function cargarUltimoExpediente() {
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const exp = await window.pywebview.api.obtener_ultimo_expediente();
+          if (exp && exp.status === 'ok') {
+            document.getElementById('cardPacNombre').innerText = exp.paciente || 'Paciente';
+            document.getElementById('cardPacDoc').innerText = `CI: ${exp.documento || 'No registrada'} • ${exp.edad || ''}`;
+            document.getElementById('cardPacDiag').innerText = exp.diagnostico || 'No especificado';
+            document.getElementById('cardPacPlan').innerText = exp.plan || 'No especificado';
+            document.getElementById('cardPacCitaPago').innerText = exp.proxima_cita || 'Control regular';
+            document.getElementById('cardPacSaldo').innerText = exp.pago || 'Al día';
+            document.getElementById('cardPacMed').innerText = exp.receta || 'Sin medicación prescrita';
+            
+            document.getElementById('previewPacName').innerText = exp.paciente || 'Paciente';
+          }
+        }
+      } catch (e) {
+        console.warn('cargarUltimoExpediente:', e);
+      }
+    }
+
+    // ==========================================
+    // GESTIÓN DE PACIENTES
+    // ==========================================
+    async function cargarPacientes(filtro = "") {
+      const tbody = document.getElementById('tablaPacientesBody');
+      try {
+        let lista = [];
+        if (window.pywebview && window.pywebview.api) {
+          lista = await window.pywebview.api.obtener_pacientes(filtro);
+        } else {
+          // Datos para navegador
+          lista = [
+            { id: 59, nombre: 'Dani Baraona', documento: 'No registrada', edad: 25, ultima_visita: '04 Sep 2026', saldo: '$0.00' },
+            { id: 58, nombre: 'Gente Gandhi López', documento: 'No registrada', edad: 95, ultima_visita: '03 Sep 2026', saldo: '$0.00' },
+            { id: 53, nombre: 'Jacline Villacreses', documento: 'No registrada', edad: 20, ultima_visita: '03 Sep 2026', saldo: '$0.00' },
+            { id: 51, nombre: 'Solange Cuadrado Test', documento: '100146844', edad: 14, ultima_visita: '02 Sep 2026', saldo: '$25.00' },
+            { id: 50, nombre: 'Brian Benitez', documento: 'No registrada', edad: 25, ultima_visita: '02 Sep 2026', saldo: '$0.00' }
+          ];
+        }
+
+        pacientesCache = lista;
+        renderTablaPacientes(lista);
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-rose-400">Error al cargar pacientes: ${e}</td></tr>`;
+      }
+    }
+
+    function renderTablaPacientes(lista) {
+      const tbody = document.getElementById('tablaPacientesBody');
+      if (!lista || lista.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-500">No se encontraron pacientes registrados.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = lista.map(p => {
+        const initials = p.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'P';
+        const doc = p.documento && p.documento !== 'None' ? p.documento : 'Sin cédula';
+        const edad = p.edad ? `${p.edad} años` : '---';
+        const saldoColor = p.saldo && p.saldo !== '$0.00' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition-colors">
+            <td class="py-4 font-bold text-white flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-xs shadow-inner">
+                ${initials}
+              </div>
+              <div>
+                <div>${p.nombre}</div>
+                <div class="text-[10px] text-slate-500 font-normal">ID: #${p.id}</div>
+              </div>
+            </td>
+            <td class="py-4 text-slate-300 font-mono">${doc}</td>
+            <td class="py-4 text-slate-400">${edad}</td>
+            <td class="py-4 text-slate-300">${p.ultima_visita || 'Sin registros'}</td>
+            <td class="py-4 ${saldoColor}">${p.saldo || '$0.00'}</td>
+            <td class="py-4 text-right space-x-2">
+              <button onclick="editarPaciente(${p.id})" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">✏️ Editar</button>
+              <button onclick="seleccionarPacienteVer(${p.id}, '${p.nombre}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors">Ver Historia</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function buscarPacientesEnVivo(val) {
+      if (window.pywebview && window.pywebview.api) {
+        cargarPacientes(val);
+      } else {
+        const filtrados = pacientesCache.filter(p => 
+          p.nombre.toLowerCase().includes(val.toLowerCase()) || 
+          (p.documento && p.documento.includes(val))
+        );
+        renderTablaPacientes(filtrados);
+      }
+    }
+
+    function abrirModalNuevoPaciente() {
+      document.getElementById('modalPacienteTitulo').innerText = 'Nuevo Paciente';
+      document.getElementById('pacienteId').value = '';
+      document.getElementById('pacienteNombre').value = '';
+      document.getElementById('pacienteDoc').value = '';
+      document.getElementById('pacienteEdad').value = '';
+      document.getElementById('pacienteTelefono').value = '';
+      document.getElementById('pacienteDireccion').value = '';
+      document.getElementById('modalPaciente').classList.remove('hidden');
+    }
+
+    function editarPaciente(id) {
+      const p = pacientesCache.find(x => x.id === id);
+      if (!p) return;
+
+      document.getElementById('modalPacienteTitulo').innerText = 'Editar Paciente #' + id;
+      document.getElementById('pacienteId').value = p.id;
+      document.getElementById('pacienteNombre').value = p.nombre || '';
+      document.getElementById('pacienteDoc').value = p.documento && p.documento !== 'None' ? p.documento : '';
+      document.getElementById('pacienteEdad').value = p.edad || '';
+      document.getElementById('pacienteTelefono').value = p.telefono && p.telefono !== 'No especificado' ? p.telefono : '';
+      document.getElementById('pacienteDireccion').value = p.direccion && p.direccion !== 'No especificado' ? p.direccion : '';
+      document.getElementById('modalPaciente').classList.remove('hidden');
+    }
+
+    function cerrarModalPaciente() {
+      document.getElementById('modalPaciente').classList.add('hidden');
+    }
+
+    async function guardarPacienteForm() {
+      const id = document.getElementById('pacienteId').value;
+      const nombre = document.getElementById('pacienteNombre').value.trim();
+      const doc = document.getElementById('pacienteDoc').value.trim();
+      const edad = document.getElementById('pacienteEdad').value.trim();
+      const tel = document.getElementById('pacienteTelefono').value.trim();
+      const dir = document.getElementById('pacienteDireccion').value.trim();
+      const sexo = document.getElementById('pacienteSexo').value;
+
+      if (!nombre) {
+        mostrarToast('El nombre completo es obligatorio', 'error');
+        return;
+      }
+
+      const payload = {
+        id: id ? parseInt(id) : null,
+        nombre: nombre,
+        documento: doc || null,
+        edad: edad ? parseInt(edad) : null,
+        telefono: tel || 'No especificado',
+        direccion: dir || 'No especificado',
+        sexo: sexo
+      };
+
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const resp = await window.pywebview.api.guardar_paciente(payload);
+          if (resp && resp.status === 'ok') {
+            mostrarToast('Paciente guardado exitosamente');
+            cerrarModalPaciente();
+            cargarPacientes();
+          } else {
+            mostrarToast('Error al guardar: ' + ((resp && resp.message) || ''), 'error');
+          }
+        } else {
+          mostrarToast('Paciente guardado (Modo local)');
+          cerrarModalPaciente();
+        }
+      } catch (e) {
+        mostrarToast('Error: ' + e, 'error');
+      }
+    }
+
+    function seleccionarPacienteVer(id, nombre) {
+      document.getElementById('cardPacNombre').innerText = nombre;
+      document.getElementById('previewPacName').innerText = nombre;
+      switchTab('dictado');
+      mostrarToast(`Visualizando expediente de ${nombre}`, 'info');
+    }
+
+    // ==========================================
+    // AGENDA Y CITAS
+    // ==========================================
+    async function cargarCitas() {
+      const cont = document.getElementById('listaCitasContenedor');
+      try {
+        let citas = [];
+        if (window.pywebview && window.pywebview.api) {
+          citas = await window.pywebview.api.obtener_citas();
+        } else {
+          citas = [
+            { id: 41, nombre_paciente: 'Brian Benítez', fecha_hora_inicio: '2026-09-04 09:00', descripcion: 'Dolor y caries en premolar superior' },
+            { id: 45, nombre_paciente: 'Gente Gandhi López', fecha_hora_inicio: '2026-09-04 11:30', descripcion: 'Control post-tratamiento' },
+            { id: 46, nombre_paciente: 'Dani Baraona', fecha_hora_inicio: '2026-09-05 19:00', descripcion: 'Cita de seguimiento' }
+          ];
+        }
+
+        citasCache = citas;
+        document.getElementById('badgeTotalCitas').innerText = citas.length;
+        document.getElementById('miniCalCitasCount').innerText = `${citas.length} citas registradas`;
+
+        if (!citas || citas.length === 0) {
+          cont.innerHTML = '<div class="text-xs text-slate-500 text-center py-8">No hay citas pendientes agendadas.</div>';
+          return;
+        }
+
+        cont.innerHTML = citas.map(c => {
+          const f = c.fecha_hora_inicio || '';
+          const hora = f.includes(' ') ? f.split(' ')[1] : f;
+          const fechaCorta = f.includes(' ') ? f.split(' ')[0] : '';
+          return `
+            <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors flex justify-between items-center group">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-white">${c.nombre_paciente}</span>
+                  <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-mono font-bold">${hora}</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">${c.descripcion || 'Consulta odontológica'}</p>
+                <div class="text-[10px] text-slate-500 mt-0.5 font-mono">${fechaCorta}</div>
+              </div>
+              <button onclick="cancelarCitaId(${c.id})" title="Cancelar cita" class="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 transition-all cursor-pointer">
+                ✕
+              </button>
+            </div>
+          `;
+        }).join('');
+
+      } catch (e) {
+        cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-6">Error al cargar citas: ${e}</div>`;
+      }
+    }
+
+    function abrirModalNuevaCita() {
+      const hoy = new Date().toISOString().split('T')[0];
+      document.getElementById('citaFecha').value = hoy;
+      document.getElementById('citaPacienteNombre').value = '';
+      document.getElementById('citaTelefono').value = '';
+      document.getElementById('citaDescripcion').value = '';
+      document.getElementById('modalCita').classList.remove('hidden');
+    }
+
+    function cerrarModalCita() {
+      document.getElementById('modalCita').classList.add('hidden');
+    }
+
+    async function guardarCitaForm() {
+      const nombre = document.getElementById('citaPacienteNombre').value.trim();
+      const tel = document.getElementById('citaTelefono').value.trim();
+      const fecha = document.getElementById('citaFecha').value;
+      const hora = document.getElementById('citaHora').value;
+      const desc = document.getElementById('citaDescripcion').value.trim();
+
+      if (!nombre || !fecha || !hora) {
+        mostrarToast('Nombre, fecha y hora son obligatorios', 'error');
+        return;
+      }
+
+      const f_inicio = `${fecha} ${hora}`;
+      const payload = {
+        nombre: nombre,
+        telefono: tel,
+        fecha_inicio: f_inicio,
+        descripcion: desc || 'Consulta odontológica'
+      };
+
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const resp = await window.pywebview.api.crear_cita(payload);
+          if (resp && resp.status === 'ok') {
+            mostrarToast('Cita agendada exitosamente');
+            cerrarModalCita();
+            cargarCitas();
+          } else {
+            mostrarToast('Error al agendar cita', 'error');
+          }
+        } else {
+          mostrarToast('Cita agendada (Simulado)');
+          cerrarModalCita();
+        }
+      } catch (e) {
+        mostrarToast('Error: ' + e, 'error');
+      }
+    }
+
+    async function cancelarCitaId(id) {
+      if (!confirm('¿Desea cancelar esta cita agendada?')) return;
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          await window.pywebview.api.cancelar_cita(id);
+          mostrarToast('Cita cancelada');
+          cargarCitas();
+        } else {
+          mostrarToast('Cita cancelada (Simulado)');
+        }
+      } catch (e) {
+        mostrarToast('Error: ' + e, 'error');
+      }
+    }
+
+    // ==========================================
+    // VISOR DE PDF
+    // ==========================================
+    async function cargarPdfs() {
+      const cont = document.getElementById('listaPdfsContenedor');
+      try {
+        let pdfs = [];
+        if (window.pywebview && window.pywebview.api) {
+          pdfs = await window.pywebview.api.listar_pdfs_recientes();
+        } else {
+          pdfs = [
+            { nombre: 'Consulta_DaniB_25a_04-09-2026.pdf', paciente: 'Dani Baraona', fecha: '04/09/2026 00:38', tamano: '142.5 KB', ruta: '' },
+            { nombre: 'Consulta_JaclineV_20a_03-09-2026.pdf', paciente: 'Jacline Villacreses', fecha: '03/09/2026 21:15', tamano: '138.2 KB', ruta: '' },
+            { nombre: 'Consulta_GenteL_95a_03-09-2026.pdf', paciente: 'Gente Gandhi López', fecha: '03/09/2026 19:40', tamano: '140.1 KB', ruta: '' },
+            { nombre: 'Consulta_BrianB_25a_02-09-2026.pdf', paciente: 'Brian Benitez', fecha: '02/09/2026 18:20', tamano: '135.0 KB', ruta: '' }
+          ];
+        }
+
+        pdfsCache = pdfs;
+        document.getElementById('badgeTotalPdfs').innerText = pdfs.length;
+
+        if (!pdfs || pdfs.length === 0) {
+          cont.innerHTML = '<div class="text-xs text-slate-500 text-center py-12">Aún no hay historias clínicas en PDF generadas.</div>';
+          return;
+        }
+
+        cont.innerHTML = pdfs.map(p => `
+          <div class="p-3.5 bg-slate-950/70 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors flex items-center justify-between group">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center font-bold text-xs">
+                PDF
+              </div>
+              <div>
+                <div class="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors">${p.nombre}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">Paciente: <b class="text-slate-200">${p.paciente}</b> • ${p.fecha} • <span class="font-mono">${p.tamano}</span></div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="abrirRutaPdf('${encodeURIComponent(p.ruta)}')" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">
+                Abrir 📄
+              </button>
+              <button onclick="imprimirRutaPdf('${encodeURIComponent(p.ruta)}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors" title="Imprimir">
+                🖨️
+              </button>
+            </div>
+          </div>
+        `).join('');
+
+      } catch (e) {
+        cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-8">Error al listar PDFs: ${e}</div>`;
+      }
+    }
+
+    function abrirUltimoPDF() {
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.abrir_ultimo_pdf();
+      } else {
+        mostrarToast('Abriendo visor de PDF');
+        switchTab('pdf');
+      }
+    }
+
+    function abrirRutaPdf(rutaEnc) {
+      const ruta = decodeURIComponent(rutaEnc);
+      if (window.pywebview && window.pywebview.api && ruta) {
+        window.pywebview.api.abrir_pdf(ruta);
+      } else {
+        mostrarToast('Abriendo PDF: ' + ruta);
+      }
+    }
+
+    function imprimirRutaPdf(rutaEnc) {
+      const ruta = decodeURIComponent(rutaEnc);
+      if (window.pywebview && window.pywebview.api && ruta) {
+        window.pywebview.api.imprimir_pdf(ruta);
+      } else {
+        mostrarToast('Enviando documento a la impresora');
+      }
+    }
+
+    function imprimirPdfUltimo() {
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.imprimir_pdf();
+      } else {
+        mostrarToast('Enviando a imprimir último PDF...');
+      }
+    }
+
+    // ==========================================
+    // MÓVIL Y RED LOCAL
+    // ==========================================
+    async function cargarInfoMovil() {
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const info = await window.pywebview.api.obtener_info_movil();
+          if (info && info.url) {
+            document.getElementById('mobileUrlDisplay').innerText = info.url;
+          }
+        }
+      } catch (e) {
+        console.warn('cargarInfoMovil:', e);
+      }
+    }
+
+    function abrirUrlMovilNativo() {
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.abrir_url_movil();
+      } else {
+        const url = document.getElementById('mobileUrlDisplay').innerText;
+        window.open(url, '_blank');
+      }
+    }
+
+    // ==========================================
+    // CONFIGURACIÓN DE LA CLÍNICA
+    // ==========================================
+    async function cargarConfiguracion() {
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const conf = await window.pywebview.api.obtener_info_clinica();
+          if (conf) {
+            if (conf.nombre_doctor) document.getElementById('confDoctor').value = conf.nombre_doctor;
+            if (conf.nombre_clinica) document.getElementById('confClinica').value = conf.nombre_clinica;
+            if (conf.registro_profesional) document.getElementById('confFirma').value = conf.registro_profesional;
+            if (conf.telefono_contacto) document.getElementById('confTelefono').value = conf.telefono_contacto;
+            if (conf.pin_rapido) document.getElementById('confPin').value = conf.pin_rapido;
+          }
+        }
+      } catch (e) {
+        console.warn('cargarConfiguracion:', e);
+      }
+    }
+
+    async function guardarConfiguracionClinica() {
+      const payload = {
+        nombre_doctor: document.getElementById('confDoctor').value.trim(),
+        nombre_clinica: document.getElementById('confClinica').value.trim(),
+        registro_profesional: document.getElementById('confFirma').value.trim(),
+        telefono_contacto: document.getElementById('confTelefono').value.trim(),
+        pin_rapido: document.getElementById('confPin').value.trim() || '1234'
+      };
+
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const resp = await window.pywebview.api.guardar_configuracion(payload);
+          if (resp && resp.status === 'ok') {
+            mostrarToast('Configuración guardada exitosamente');
+            document.getElementById('userDocName').innerText = payload.nombre_doctor;
+            document.getElementById('previewDoctorName').innerText = payload.nombre_doctor.toUpperCase();
+          } else {
+            mostrarToast('Error al guardar configuración', 'error');
+          }
+        } else {
+          mostrarToast('Configuración guardada (Simulado)');
+        }
+      } catch (e) {
+        mostrarToast('Error: ' + e, 'error');
+      }
+    }
+
+    // INICIALIZADOR GENERAL
+    function inicializarDatosApp() {
+      cargarUltimoExpediente();
+      cargarPacientes();
+      cargarCitas();
+      cargarPdfs();
+      cargarInfoMovil();
+      cargarConfiguracion();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      // Por defecto el modal de Login está visible
+      // Si ya hay sesión en WebView2, podemos auto-desbloquear
+      setTimeout(async () => {
+        if (window.pywebview && window.pywebview.api) {
+          try {
+            const s = await window.pywebview.api.obtener_sesion();
+            if (s && s.status === 'ok') {
+              desbloquearApp(s.usuario);
+            }
+          } catch (e) {}
+        }
+      }, 300);
+    });
   </script>
 </body>
 </html>
