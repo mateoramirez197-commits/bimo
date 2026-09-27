@@ -39,8 +39,15 @@ def buscar_y_copiar_credentials():
 
 def init_google_calendar(email_doctor=None):
     global _CALENDAR_SERVICE, _DOCTOR_EMAIL
+    if not email_doctor:
+        try:
+            from config import cargar_datos_clinica
+            conf = cargar_datos_clinica()
+            email_doctor = conf.get("email_google") or conf.get("email_doctor")
+        except Exception:
+            pass
     if email_doctor:
-        _DOCTOR_EMAIL = email_doctor
+        _DOCTOR_EMAIL = str(email_doctor).strip()
 
     buscar_y_copiar_credentials()
 
@@ -113,6 +120,14 @@ def generar_url_evento_google(titulo, fecha_inicio_str, fecha_fin_str=None, deta
         "details": detalles,
         "ctz": "America/Bogota"
     }
+    try:
+        from config import cargar_datos_clinica
+        conf = cargar_datos_clinica()
+        email_g = str(conf.get("email_google", "") or _DOCTOR_EMAIL or "").strip()
+        if email_g and "@" in email_g:
+            params["authuser"] = email_g
+    except Exception:
+        pass
     return f"https://calendar.google.com/calendar/render?{urllib.parse.urlencode(params)}"
 
 def exportar_calendario_ics(ruta_salida=None):
@@ -203,6 +218,19 @@ def agendar_cita(nombre_paciente="", telefono="", fecha_hora_inicio="", fecha_ho
         google_event_id=None
     )
 
+    # Si telefono vino vacio, recuperar el telefono heredado por la base de datos
+    if not telefono and cita_id:
+        try:
+            from database import get_connection
+            with get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT telefono FROM citas_agenda WHERE id = ?", (cita_id,))
+                r_c = cur.fetchone()
+                if r_c and r_c["telefono"]:
+                    telefono = r_c["telefono"]
+        except Exception:
+            pass
+
     # 2. Actualizar archivo iCalendar (.ics) local
     exportar_calendario_ics()
 
@@ -275,7 +303,7 @@ def eliminar_cita(nombre_paciente=None, cita_id=None, fecha=None):
     exportar_calendario_ics()
     return citas_borradas
 
-def reprogramar_cita(nombre_paciente, nueva_fecha_hora_inicio, nueva_fecha_hora_fin=None, nuevo_motivo="Consulta Odontológica", paciente_id=None, abrir_en_navegador=True):
+def reprogramar_cita(nombre_paciente, nueva_fecha_hora_inicio, nueva_fecha_hora_fin=None, nuevo_motivo="Consulta Odontológica", paciente_id=None, abrir_en_navegador=True, telefono=None):
     """
     Elimina la cita previa del paciente de la base de datos y Google Calendar,
     y agenda la nueva cita en la fecha solicitada, garantizando que la cita previa sea borrada.
@@ -283,6 +311,13 @@ def reprogramar_cita(nombre_paciente, nueva_fecha_hora_inicio, nueva_fecha_hora_
     from database import cancelar_o_eliminar_cita_db
     citas_borradas = cancelar_o_eliminar_cita_db(nombre_paciente=nombre_paciente)
     print(f"[CALENDAR REPROGRAMAR] {len(citas_borradas)} cita(s) previas eliminadas para {nombre_paciente}")
+
+    tel_heredado = (telefono or "").strip()
+    if not tel_heredado:
+        for c in citas_borradas:
+            if c.get("telefono"):
+                tel_heredado = str(c.get("telefono")).strip()
+                break
 
     if _CALENDAR_SERVICE:
         for c in citas_borradas:
@@ -295,7 +330,7 @@ def reprogramar_cita(nombre_paciente, nueva_fecha_hora_inicio, nueva_fecha_hora_
 
     return agendar_cita(
         nombre_paciente=nombre_paciente,
-        telefono="",
+        telefono=tel_heredado,
         fecha_hora_inicio=nueva_fecha_hora_inicio,
         fecha_hora_fin=nueva_fecha_hora_fin,
         descripcion=nuevo_motivo,

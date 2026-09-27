@@ -151,16 +151,78 @@ def exportar_a_excel(ruta_salida=None) -> str:
         df_agenda.to_excel(writer, sheet_name="Agenda de Citas", index=False)
         df_metricas.to_excel(writer, sheet_name="Métricas y Resumen", index=False)
 
-    # Exportar simultáneamente CSVs estándar con codificación UTF-8-SIG para Excel
+    # Estilizar profesionalmente el libro de Excel (.xlsx) con openpyxl
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.load_workbook(ruta_salida)
+        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+        cell_font = Font(name="Segoe UI", size=10)
+        zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        for ws in wb.worksheets:
+            ws.views.sheetView[0].showGridLines = True
+            ws.row_dimensions[1].height = 28
+
+            # Formatear encabezados de columna
+            for col_idx in range(1, ws.max_column + 1):
+                cell = ws.cell(row=1, column=col_idx)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                cell.border = thin_border
+
+            # Formatear datos y auto-ajustar ancho de columnas
+            for col in ws.columns:
+                max_len = 0
+                col_letter = get_column_letter(col[0].column)
+                header_val = str(ws.cell(row=1, column=col[0].column).value or "")
+
+                for cell in col:
+                    if cell.row > 1:
+                        cell.font = cell_font
+                        cell.border = thin_border
+                        if cell.row % 2 == 0:
+                            cell.fill = zebra_fill
+                        # Formatear montos en dólares
+                        if ("($)" in header_val or "Valor" in header_val or "Costo" in header_val or "Abono" in header_val or "Saldo" in header_val) and isinstance(cell.value, (int, float)):
+                            cell.number_format = '$#,##0.00'
+                    val_str = str(cell.value or "")
+                    max_len = max(max_len, len(val_str))
+
+                ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
+        wb.save(ruta_salida)
+        print(f"[EXCEL] Libro estilizado con éxito con OpenPyXL: {ruta_salida}")
+    except Exception as e_style:
+        print(f"[EXCEL WARN] No se pudo aplicar estilos OpenPyXL: {e_style}")
+
+    # Exportar simultáneamente CSVs estándar con separador ';' y codificación UTF-8-SIG para Excel en español (sin datos amontonados)
     ruta_csv_pacientes = carpeta_export / f"BIMO_Pacientes_Directorio_{fecha_str}.csv"
     ruta_csv_consultas = carpeta_export / f"BIMO_Historias_Clinicas_{fecha_str}.csv"
     ruta_csv_pagos = carpeta_export / f"BIMO_Control_Pagos_{fecha_str}.csv"
     ruta_csv_agenda = carpeta_export / f"BIMO_Agenda_Citas_{fecha_str}.csv"
 
-    df_pacientes.to_csv(ruta_csv_pacientes, index=False, encoding="utf-8-sig")
-    df_consultas.to_csv(ruta_csv_consultas, index=False, encoding="utf-8-sig")
-    df_pagos.to_csv(ruta_csv_pagos, index=False, encoding="utf-8-sig")
-    df_agenda.to_csv(ruta_csv_agenda, index=False, encoding="utf-8-sig")
+    df_pacientes.to_csv(ruta_csv_pacientes, sep=';', index=False, encoding="utf-8-sig")
+    df_consultas.to_csv(ruta_csv_consultas, sep=';', index=False, encoding="utf-8-sig")
+    df_pagos.to_csv(ruta_csv_pagos, sep=';', index=False, encoding="utf-8-sig")
+    df_agenda.to_csv(ruta_csv_agenda, sep=';', index=False, encoding="utf-8-sig")
 
     print(f"[EXCEL] Reportes XLSX y CSV generados con éxito en: {carpeta_export}")
+
+    # Auto-abrir archivo Excel en Windows para visualización inmediata
+    try:
+        os.startfile(str(ruta_salida))
+    except Exception:
+        pass
+
     return str(carpeta_export)

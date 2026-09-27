@@ -17,38 +17,48 @@ def bimo_esta_hablando() -> bool:
     """Devuelve True si Bimo está emitiendo voz por los altavoces o en el tiempo de disipación de eco."""
     return _BIMO_HABLANDO
 
+import tempfile
+import uuid
+
 async def _generar_audio_edge(texto: str, ruta_mp3: str):
     communicate = edge_tts.Communicate(texto, VOZ_FEMENINA, rate="+22%")
-    await communicate.save(ruta_mp3)
+    await asyncio.wait_for(communicate.save(ruta_mp3), timeout=2.2)
 
 def _reproducir_audio(texto: str):
     global _BIMO_HABLANDO
     with _tts_lock:
-        _BIMO_HABLANDO = True
-        ruta_mp3 = "temp_bimo_voice.mp3"
+        ruta_mp3 = os.path.join(tempfile.gettempdir(), f"bimo_voice_{uuid.uuid4().hex[:8]}.mp3")
         exito = False
         try:
             asyncio.run(_generar_audio_edge(texto, ruta_mp3))
-            if os.path.exists(ruta_mp3):
+            if os.path.exists(ruta_mp3) and os.path.getsize(ruta_mp3) > 0:
                 data, fs = sf.read(ruta_mp3)
-                sd.play(data, fs)
-                sd.wait()
-                exito = True
+                try:
+                    _BIMO_HABLANDO = True
+                    sd.play(data, fs)
+                    sd.wait()
+                    exito = True
+                finally:
+                    time.sleep(0.4)
+                    _BIMO_HABLANDO = False
+        except Exception:
+            exito = False
+        finally:
+            if os.path.exists(ruta_mp3):
                 try:
                     os.remove(ruta_mp3)
                 except Exception:
                     pass
-        except Exception:
-            exito = False
 
         if not exito:
             try:
+                _BIMO_HABLANDO = True
                 engine = pyttsx3.init()
                 engine.setProperty("rate", 190)
                 engine.setProperty("volume", 1.0)
                 voces = engine.getProperty("voices")
                 for v in voces:
-                    if "zira" in v.name.lower() or "sabina" in v.name.lower() or "female" in v.name.lower():
+                    if any(k in v.name.lower() for k in ("zira", "sabina", "female", "helena", "monica", "laura")):
                         engine.setProperty("voice", v.id)
                         break
                 engine.say(texto)
@@ -56,48 +66,47 @@ def _reproducir_audio(texto: str):
                 engine.stop()
             except Exception as err:
                 print(f"[VOICE] Error en fallback TTS: {err}")
-        
-        # Pausa acústica de seguridad para que los ecos en la sala no reactiven el micrófono
-        time.sleep(0.7)
-        _BIMO_HABLANDO = False
+            finally:
+                time.sleep(0.4)
+                _BIMO_HABLANDO = False
 
 def hablar_asincrono(texto: str):
     threading.Thread(target=_reproducir_audio, args=(texto,), daemon=True).start()
 
 def decir_escuchando(nombre_doctor: str = "Mateo"):
-    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Doctor"
-    mensaje = f"Sí, Doctor {nombre_limpio}, lo escucho."
+    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Mateo"
+    mensaje = f"Sí, {nombre_limpio}, te escucho."
     hablar_asincrono(mensaje)
 
 def decir_confirmacion_cita(nombre_doctor: str = "Mateo", nombre_paciente: str = ""):
-    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Doctor"
+    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Mateo"
     if nombre_paciente and nombre_paciente.lower() != "no especificado":
-        mensaje = f"Doctor {nombre_limpio}, cita agendada y sincronizada para {nombre_paciente}."
+        mensaje = f"{nombre_limpio}, cita agendada y sincronizada para {nombre_paciente}."
     else:
-        mensaje = f"Doctor {nombre_limpio}, su cita ha sido agendada y sincronizada correctamente."
+        mensaje = f"{nombre_limpio}, la cita ha sido agendada y sincronizada correctamente."
     hablar_asincrono(mensaje)
 
 def decir_cancelacion_cita(nombre_doctor: str = "Mateo", nombre_paciente: str = ""):
-    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Doctor"
+    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Mateo"
     if nombre_paciente and nombre_paciente.lower() != "no especificado":
-        mensaje = f"Doctor {nombre_limpio}, la cita de {nombre_paciente} ha sido cancelada y eliminada del calendario."
+        mensaje = f"{nombre_limpio}, la cita de {nombre_paciente} ha sido cancelada y eliminada del calendario."
     else:
-        mensaje = f"Doctor {nombre_limpio}, la cita ha sido cancelada y eliminada de su agenda."
+        mensaje = f"{nombre_limpio}, la cita ha sido cancelada y eliminada de tu agenda."
     hablar_asincrono(mensaje)
 
 def decir_reprogramacion_cita(nombre_doctor: str = "Mateo", nombre_paciente: str = "", nueva_fecha: str = ""):
-    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Doctor"
+    nombre_limpio = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Mateo"
     if nombre_paciente and nombre_paciente.lower() != "no especificado":
-        mensaje = f"Doctor {nombre_limpio}, la cita de {nombre_paciente} ha sido cambiada para la nueva fecha y la cita anterior fue eliminada."
+        mensaje = f"{nombre_limpio}, la cita de {nombre_paciente} ha sido cambiada para la nueva fecha y la anterior fue eliminada."
     else:
-        mensaje = f"Doctor {nombre_limpio}, la cita ha sido reprogramada y actualizada en su agenda."
+        mensaje = f"{nombre_limpio}, la cita ha sido reprogramada y actualizada en tu agenda."
     hablar_asincrono(mensaje)
 
+def decir_hora(frase_hora: str):
+    """Pronuncia de inmediato la hora actual solicitada por voz."""
+    hablar_asincrono(frase_hora)
+
 def preguntar_desambiguacion_homonimos_detallada(nombre_paciente: str, lista_pacientes: list):
-    """
-    Formato solicitado por el doctor:
-    '¿Es para Mateo Ramírez con esta edad y esta cédula o para Mateo Ramírez con esta edad y esta cédula?'
-    """
     partes = []
     for p in lista_pacientes[:2]:
         edad_str = f" de {p.get('edad')} años" if p.get('edad') else ""
@@ -109,13 +118,20 @@ def preguntar_desambiguacion_homonimos_detallada(nombre_paciente: str, lista_pac
     hablar_asincrono(mensaje)
 
 def preguntar_paciente_cita():
-    mensaje = "¿Para qué paciente desea agendar la cita?"
+    mensaje = "¿Para qué paciente deseas agendar la cita?"
+    hablar_asincrono(mensaje)
+
+def preguntar_fecha_hora_cita(nombre_paciente: str = ""):
+    if nombre_paciente and nombre_paciente.lower() not in ("no especificado", "el último paciente", "paciente"):
+        mensaje = f"Mateo, ¿para qué fecha y hora deseas la cita para {nombre_paciente}?"
+    else:
+        mensaje = "Mateo, ¿para qué fecha y hora deseas agendar la cita?"
     hablar_asincrono(mensaje)
 
 def preguntar_cedula_paciente(nombre_paciente: str = "", nombre_doctor: str = "Mateo"):
-    nombre_doc = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Doctor"
+    nombre_doc = nombre_doctor.replace("Dr.", "").replace("Dra.", "").strip() or "Mateo"
     if nombre_paciente and nombre_paciente.lower() != "no especificado":
-        mensaje = f"Doctor {nombre_doc}, por favor ingrese o dicte el número de cédula de {nombre_paciente} para archivar su historia clínica."
+        mensaje = f"{nombre_doc}, por favor ingresa o dicta el número de cédula de {nombre_paciente} para archivar su historia clínica."
     else:
-        mensaje = f"Doctor {nombre_doc}, por favor ingrese el número de cédula del paciente para archivar su historia clínica."
+        mensaje = f"{nombre_doc}, por favor ingresa el número de cédula del paciente para archivar su historia clínica."
     hablar_asincrono(mensaje)

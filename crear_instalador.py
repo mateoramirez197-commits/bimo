@@ -15,13 +15,13 @@ def compilar_instalador():
         print("[ERROR] base_odontograma.png no encontrada en el directorio raíz.")
         return False
 
-    # 2. Ejecutar PyInstaller con bimo.spec
-    comando = [sys.executable, "-m", "PyInstaller", "--noconfirm", "bimo.spec"]
+    # 2. Ejecutar PyInstaller con BIMO_Pro.spec
+    comando = [sys.executable, "-m", "PyInstaller", "--noconfirm", "BIMO_Pro.spec"]
     print(f"Ejecutando: {' '.join(comando)}")
     resultado = subprocess.run(comando, cwd=str(BASE_DIR))
 
     if resultado.returncode == 0:
-        dist_exe = BASE_DIR / "dist" / "BIMO_Clinico" / "BIMO_Clinico.exe"
+        dist_exe = BASE_DIR / "dist" / "BIMO_Pro" / "BIMO_Pro.exe"
         print("\n" + "=" * 60)
         print("✅ COMPILACIÓN EXITOSA")
         print(f"Ejecutable generado en: {dist_exe}")

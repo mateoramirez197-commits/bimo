@@ -1,0 +1,51 @@
+======================================================================
+      GUIA RAPIDA DE INSTALACION Y PRUEBA EN OTRA PC - BIMO PRO
+======================================================================
+
+Para probar BIMO Pro en otra computadora, el proceso esta automatizado
+al 100%. Solo sigue estos sencillos pasos:
+
+----------------------------------------------------------------------
+PASO 1: COPIAR LA CARPETA
+----------------------------------------------------------------------
+- Pasa toda la carpeta "Bimo_Project" a la otra PC (mediante memoria USB,
+  disco externo, Google Drive, OneDrive, etc.).
+- Puedes colocar la carpeta en el Escritorio o en cualquier disco (C:\, D:\).
+
+----------------------------------------------------------------------
+PASO 2: EJECUTAR EL INSTALADOR AUTOMATICO
+----------------------------------------------------------------------
+- Entra en la carpeta "Bimo_Project" en la nueva PC.
+- Haz doble clic en el archivo:
+      
+      INSTALAR_BIMO.bat
+
+- El instalador realizara todo de forma automatica:
+  1. Detecta si Python esta instalado.
+     * Si no esta instalado, abrira la pagina oficial de descarga.
+     * IMPORTANTE: Si instalas Python, recuerda marcar la casilla:
+       [X] "Add python.exe to PATH"
+  2. Actualiza pip e instala todas las librerias (faster-whisper, groq,
+     pywebview, etc.).
+  3. Inicializa la base de datos clinica SQLite en modo seguro.
+  4. Auto-activa la licencia PRO y la boveda segura para ese equipo.
+  5. Crea el Acceso Directo oficial "BIMO Pro" en el Escritorio con su icono.
+
+----------------------------------------------------------------------
+PASO 3: INICIAR Y PROBAR
+----------------------------------------------------------------------
+- Para abrir el programa:
+  * Opcion A: Haz doble clic en el icono "BIMO Pro" de tu Escritorio.
+  * Opcion B: Haz doble clic en "ejecutar_bimo.bat" dentro de la carpeta.
+
+----------------------------------------------------------------------
+RECOMENDACIONES PARA LA PRUEBA EN CLINICA / CONSULTORIO:
+----------------------------------------------------------------------
+1. Microfono: Asegurate de que la PC tenga microfono habilitado en
+   Windows (Configuracion -> Privacidad -> Microfono).
+2. Escucha Activa: Al decir "Bimo" (ej: "Bimo, hora actual", "Bimo, genera una
+   cita para el ultimo paciente", o dictar la evolucion clinica), el sistema
+   captura con ganancia automatica y responde.
+3. Diccionario Andino: La IA ya viene precargada con fonetica y apellidos
+   de la region (Otavalo, Ibarra, etc.) y auto-aprende nombres nuevos.
+======================================================================

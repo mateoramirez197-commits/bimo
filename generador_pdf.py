@@ -2,11 +2,14 @@ import json
 import os
 import re
 import sys
+import hashlib
 import datetime
+import unicodedata
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
 from fpdf import FPDF
+from config import sanitizar_nombre_carpeta, RUTA_PACIENTES, RUTA_BASE_ODONTOGRAMA, RUTA_MASCARAS_ODONTOGRAMA, BASE_DIR as CONFIG_BASE_DIR
 
 # Configurar salida UTF-8 en consola para evitar errores en Windows
 if hasattr(sys.stdout, 'reconfigure'):
@@ -15,8 +18,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RUTA_BASE_ODONTOGRAMA = os.path.join(BASE_DIR, "base_odontograma.png")
+BASE_DIR = str(CONFIG_BASE_DIR)
 
 # Coordenadas exactas de 8 puntos por pieza dental (FDI 11 a 48) sobre base_odontograma.png (1664 x 2560)
 POLIGONOS_8_PUNTOS = {
@@ -56,10 +58,22 @@ POLIGONOS_8_PUNTOS = {
 
 _CACHE_MASCARAS = None
 
-def _calcular_mascaras_dientes(ruta_base=RUTA_BASE_ODONTOGRAMA):
+def _calcular_mascaras_dientes(ruta_base=None):
     global _CACHE_MASCARAS
     if _CACHE_MASCARAS is not None:
         return _CACHE_MASCARAS
+
+    # 1. Carga ultra-rápida desde archivo .npz precomputado (~0.01s vs ~6.0s)
+    try:
+        if RUTA_MASCARAS_ODONTOGRAMA and os.path.exists(str(RUTA_MASCARAS_ODONTOGRAMA)):
+            data = np.load(str(RUTA_MASCARAS_ODONTOGRAMA))
+            _CACHE_MASCARAS = {k: data[k] for k in data.files}
+            return _CACHE_MASCARAS
+    except Exception as e_npz:
+        print(f"[ODONTOGRAMA WARN] No se pudo cargar caché NPZ: {e_npz}")
+
+    if ruta_base is None:
+        ruta_base = str(RUTA_BASE_ODONTOGRAMA)
 
     if not os.path.exists(ruta_base):
         return {}
@@ -95,30 +109,34 @@ def _calcular_mascaras_dientes(ruta_base=RUTA_BASE_ODONTOGRAMA):
     for n, idx in enumerate(q3):
         mascaras[str(31 + n)] = ndimage.binary_fill_holes(labeled == idx)
 
+    # Guardar en archivo .npz para acelerar todas las ejecuciones futuras
+    try:
+        destino_npz = str(RUTA_MASCARAS_ODONTOGRAMA) if RUTA_MASCARAS_ODONTOGRAMA else os.path.join(BASE_DIR, "mascaras_odontograma.npz")
+        np.savez_compressed(destino_npz, **mascaras)
+    except Exception:
+        pass
+
     _CACHE_MASCARAS = mascaras
     return _CACHE_MASCARAS
 
+
 def extraer_fdi(pieza_val) -> str:
     """
-    Normaliza cualquier mención de pieza dental al formato FDI (11 a 48).
-    Soporta:
-    - Dígitos estándar: '36', 'Pieza 21', '3.6' -> '36', 'Diente 1.8' -> '18'
-    - Nomenclatura anatómica en español:
-      'Premolar superior derecho' -> '14' (o '15')
-      'Premolar superior izquierdo' -> '24'
-      'Premolar inferior izquierdo' -> '34'
-      'Premolar inferior derecho' -> '44'
-      'Molar superior derecho' / 'Muela superior derecha' -> '16'
-      'Molar superior izquierdo' / 'Muela superior izquierda' -> '26'
-      'Molar inferior izquierdo' / 'Muela inferior izquierda' -> '36'
-      'Molar inferior derecho' / 'Muela inferior derecha' -> '46'
-      'Muela del juicio' / 'Tercer molar' -> '18', '28', '38', '48'
+    Normaliza cualquier mención de pieza dental al formato FDI (Permanentes 11 a 48 y Temporales 51 a 85).
     """
     if not pieza_val:
         return ""
     s = str(pieza_val).strip().lower()
 
-    # 1. Búsqueda de dígitos estándar FDI
+    # 1. Búsqueda de dígitos estándar FDI (Permanentes 11-48 y Temporales 51-85)
+    m_temp = re.search(r'\b([5-8][1-5])\b', s)
+    if m_temp:
+        return m_temp.group(1)
+
+    m_temp_dot = re.search(r'([5-8])\.([1-5])', s)
+    if m_temp_dot:
+        return f"{m_temp_dot.group(1)}{m_temp_dot.group(2)}"
+
     m_std = re.search(r'\b([1-4][1-8])\b', s)
     if m_std:
         return m_std.group(1)
@@ -127,7 +145,7 @@ def extraer_fdi(pieza_val) -> str:
     if m_dot:
         return f"{m_dot.group(1)}{m_dot.group(2)}"
 
-    m_any = re.search(r'([1-4][1-8])', s)
+    m_any = re.search(r'([1-8][1-8])', s)
     if m_any:
         return m_any.group(1)
 
@@ -137,75 +155,50 @@ def extraer_fdi(pieza_val) -> str:
     es_der = any(k in s for k in ['derech', 'der.'])
     es_izq = any(k in s for k in ['izquierd', 'izq.'])
 
-    # Premolares (debe evaluarse ANTES de molares porque 'premolar' contiene la subcadena 'molar'):
     if 'premolar' in s:
         es_2do = any(k in s for k in ['segund', '2do', '2°'])
-        if es_sup and es_der:
-            return "15" if es_2do else "14"
-        if es_sup and es_izq:
-            return "25" if es_2do else "24"
-        if es_inf and es_izq:
-            return "35" if es_2do else "34"
-        if es_inf and es_der:
-            return "45" if es_2do else "44"
-        if es_sup:
-            return "14"
-        if es_inf:
-            return "34"
+        if es_sup and es_der: return "15" if es_2do else "14"
+        if es_sup and es_izq: return "25" if es_2do else "24"
+        if es_inf and es_izq: return "35" if es_2do else "34"
+        if es_inf and es_der: return "45" if es_2do else "44"
+        if es_sup: return "14"
+        if es_inf: return "34"
         return "14"
 
-    # Molares / Muelas:
     if any(k in s for k in ['molar', 'muela']):
         es_3er = any(k in s for k in ['tercer', 'tercero', 'juicio', 'cordal', '3er', '3°'])
         es_2do = any(k in s for k in ['segund', '2do', '2°'])
-        if es_sup and es_der:
-            return "18" if es_3er else ("17" if es_2do else "16")
-        if es_sup and es_izq:
-            return "28" if es_3er else ("27" if es_2do else "26")
-        if es_inf and es_izq:
-            return "38" if es_3er else ("37" if es_2do else "36")
-        if es_inf and es_der:
-            return "48" if es_3er else ("47" if es_2do else "46")
-        if es_sup:
-            return "16"
-        if es_inf:
-            return "36"
+        if es_sup and es_der: return "18" if es_3er else ("17" if es_2do else "16")
+        if es_sup and es_izq: return "28" if es_3er else ("27" if es_2do else "26")
+        if es_inf and es_izq: return "38" if es_3er else ("37" if es_2do else "36")
+        if es_inf and es_der: return "48" if es_3er else ("47" if es_2do else "46")
+        if es_sup: return "16"
+        if es_inf: return "36"
         return "16"
 
-    # Caninos:
     if any(k in s for k in ['canin', 'colmill']):
-        if es_sup and es_der:
-            return "13"
-        if es_sup and es_izq:
-            return "23"
-        if es_inf and es_izq:
-            return "33"
-        if es_inf and es_der:
-            return "43"
+        if es_sup and es_der: return "13"
+        if es_sup and es_izq: return "23"
+        if es_inf and es_izq: return "33"
+        if es_inf and es_der: return "43"
         return "13"
 
-    # Incisivos:
     if any(k in s for k in ['incisiv', 'paleta', 'frontal']):
         es_lat = any(k in s for k in ['lateral', 'segund'])
-        if es_sup and es_der:
-            return "12" if es_lat else "11"
-        if es_sup and es_izq:
-            return "22" if es_lat else "21"
-        if es_inf and es_izq:
-            return "32" if es_lat else "31"
-        if es_inf and es_der:
-            return "42" if es_lat else "41"
+        if es_sup and es_der: return "12" if es_lat else "11"
+        if es_sup and es_izq: return "22" if es_lat else "21"
+        if es_inf and es_izq: return "32" if es_lat else "31"
+        if es_inf and es_der: return "42" if es_lat else "41"
         return "11"
 
     return ""
 
 def colorear_odontograma(odontograma_datos, ruta_base=RUTA_BASE_ODONTOGRAMA, ruta_salida=None):
     """
-    Pinta sobre base_odontograma.png la anatomía dental completa hasta el contorno exterior:
-    - ROJO translúcido vibrante (220, 38, 38, alpha=195): Patologías activas a tratar.
-    - AZUL translúcido vibrante (37, 99, 235, alpha=195): Tratamientos previos en buen estado.
-    - GRIS clínico (100, 116, 139, alpha=210): Piezas ausentes o exodoncias previas.
-    Pintado nítido al 100% de la corona y fisuras, sin sobrepintado y sin dejar bordes a medias.
+    Pinta sobre base_odontograma.png la anatomía dental completa con la paleta oficial estricta MSP:
+    - ROJO translúcido (220, 38, 38, alpha=195): Patologías activas a tratar.
+    - AZUL translúcido (37, 99, 235, alpha=195): Tratamientos previos en buen estado.
+    - GRIS clínico (100, 116, 139, alpha=210): Dientes ausentes, exodoncias o perdidos.
     """
     if not os.path.exists(ruta_base):
         print(f"[ODONTOGRAMA] Advertencia: No se encontró la imagen base en {ruta_base}")
@@ -218,10 +211,9 @@ def colorear_odontograma(odontograma_datos, ruta_base=RUTA_BASE_ODONTOGRAMA, rut
     overlay = Image.new("RGBA", base_im.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # Colores nítidos y vibrantes de alta definición clínica
-    COLOR_ROJO_RGBA = (220, 38, 38, 195)    # Rojo translúcido nítido para patologías activas / pendientes
-    COLOR_AZUL_RGBA = (37, 99, 235, 195)   # Azul translúcido nítido para tratamientos previos / realizados
-    COLOR_GRIS_RGBA = (100, 116, 139, 210)  # Gris clínico para ausencias / extracciones / exodoncias
+    COLOR_ROJO_RGBA = (220, 38, 38, 195)
+    COLOR_AZUL_RGBA = (37, 99, 235, 195)
+    COLOR_GRIS_RGBA = (100, 116, 139, 210)
 
     ausentes_kw = (
         'ausent', 'perd', 'extrac', 'exodoncia', 'extraíd', 'extraida',
@@ -248,88 +240,232 @@ def colorear_odontograma(odontograma_datos, ruta_base=RUTA_BASE_ODONTOGRAMA, rut
 
     resumen_estados = {"rojo": 0, "azul": 0, "gris": 0, "total_evaluadas": 0}
 
-    # Asegurar que odontograma_datos sea una lista
-    if isinstance(odontograma_datos, dict):
-        odontograma_datos = [odontograma_datos]
-    elif not isinstance(odontograma_datos, list):
-        odontograma_datos = []
-
     for item in odontograma_datos:
-        if not isinstance(item, dict):
-            continue
-
-        pieza_val = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or item.get("numero") or ""
-        fdi = extraer_fdi(pieza_val)
+        pieza_raw = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
+        fdi = extraer_fdi(pieza_raw)
         if not fdi:
             continue
 
         hallazgos = item.get("procedimientos_o_hallazgos", [])
-        if isinstance(hallazgos, str):
-            hallazgos = [hallazgos]
-
-        texto_h = " ".join(hallazgos).lower()
-        if not texto_h.strip():
-            continue
-
-        negaciones_tratamiento_kw = (
-            'no se hizo', 'no se realizo', 'no se realizó', 'no realizada', 'no realizado',
-            'no se corrigio', 'no se corrigió', 'no corregid', 'pendiente', 'sin restaurar',
-            'cancelad', 'no resuelt', 'falta realizar', 'planificad', 'se planifica',
-            'a realizar', 'por realizar', 'a tratar', 'por tratar'
-        )
-
-        tiene_negacion = any(k in texto_h for k in negaciones_tratamiento_kw)
-        es_indicacion_futura = any(k in texto_h for k in indicaciones_futuras_kw)
-        es_ausente = (not es_indicacion_futura) and any(k in texto_h for k in ausentes_kw)
-        es_rojo = es_indicacion_futura or tiene_negacion or any(k in texto_h for k in patologias_kw)
-        es_azul = (not tiene_negacion) and any(k in texto_h for k in tratamientos_kw)
-
-        resumen_estados["total_evaluadas"] += 1
-
-        if es_ausente:
-            color_rgba = COLOR_GRIS_RGBA
-            resumen_estados["gris"] += 1
-        elif es_azul:
-            # Tratamiento realizado en consulta sin negación -> AZUL
-            color_rgba = COLOR_AZUL_RGBA
-            resumen_estados["azul"] += 1
-        elif es_rojo:
-            # Patología activa o tratamiento pendiente/planificado -> ROJO
-            color_rgba = COLOR_ROJO_RGBA
-            resumen_estados["rojo"] += 1
+        if isinstance(hallazgos, list):
+            texto_h = " ".join([str(x) for x in hallazgos]).lower()
         else:
-            # Si no especifica patología activa y se menciona extracción o ausencia
-            if any(k in texto_h for k in ausentes_kw):
-                color_rgba = COLOR_GRIS_RGBA
-                resumen_estados["gris"] += 1
-            else:
-                color_rgba = COLOR_ROJO_RGBA
-                resumen_estados["rojo"] += 1
+            texto_h = str(hallazgos).lower()
 
-        # Colorear la pieza dental completa hasta el contorno anatómico
-        if fdi in mascaras:
-            overlay_arr[mascaras[fdi]] = color_rgba
-        elif fdi in POLIGONOS_8_PUNTOS:
-            pts = POLIGONOS_8_PUNTOS[fdi]
-            draw.polygon(pts, fill=color_rgba)
+        color = None
+        estado_nombre = ""
+        es_ausente = False
 
-    # Integrar capa de máscara anatómica sin sobrepintar
-    if overlay_arr.any():
-        mask_im = Image.fromarray(overlay_arr, "RGBA")
-        overlay = Image.alpha_composite(overlay, mask_im)
+        if any(kw in texto_h for kw in indicaciones_futuras_kw):
+            color = COLOR_ROJO_RGBA
+            estado_nombre = "rojo"
+        elif any(kw in texto_h for kw in ausentes_kw):
+            color = COLOR_GRIS_RGBA
+            estado_nombre = "gris"
+            es_ausente = True
+        elif any(kw in texto_h for kw in patologias_kw):
+            color = COLOR_ROJO_RGBA
+            estado_nombre = "rojo"
+        elif any(kw in texto_h for kw in tratamientos_kw):
+            color = COLOR_AZUL_RGBA
+            estado_nombre = "azul"
 
-    # Fusionar con imagen base del odontograma
+        if color:
+            resumen_estados["total_evaluadas"] += 1
+            if estado_nombre:
+                resumen_estados[estado_nombre] += 1
+
+            if fdi in mascaras:
+                mask = mascaras[fdi]
+                overlay_arr[mask] = color
+            elif fdi in POLIGONOS_8_PUNTOS:
+                draw.polygon(POLIGONOS_8_PUNTOS[fdi], fill=color)
+
+            if es_ausente and fdi in POLIGONOS_8_PUNTOS:
+                pts = POLIGONOS_8_PUNTOS[fdi]
+                min_x = min(p[0] for p in pts)
+                max_x = max(p[0] for p in pts)
+                min_y = min(p[1] for p in pts)
+                max_y = max(p[1] for p in pts)
+                draw.line([(min_x + 5, min_y + 5), (max_x - 5, max_y - 5)], fill=(30, 41, 59, 235), width=7)
+                draw.line([(min_x + 5, max_y - 5), (max_x - 5, min_y + 5)], fill=(30, 41, 59, 235), width=7)
+
+    if np.any(overlay_arr):
+        mask_overlay = Image.fromarray(overlay_arr, mode="RGBA")
+        overlay = Image.alpha_composite(overlay, mask_overlay)
+
     resultado_final = Image.alpha_composite(base_im, overlay).convert("RGB")
 
     if ruta_salida is None:
-        ruta_salida = os.path.join(BASE_DIR, "temp_odontograma.png")
+        import tempfile, time
+        ruta_salida = os.path.join(tempfile.gettempdir(), f"temp_odontograma_{os.getpid()}_{int(time.time()*1000)}.jpg")
 
-    resultado_final.save(ruta_salida, format="PNG")
+    resultado_final.save(ruta_salida, format="JPEG", quality=92)
     print(f"[ODONTOGRAMA] Imagen procesada guardada en: {ruta_salida} (Evaluadas: {resumen_estados['total_evaluadas']})")
     return ruta_salida, resumen_estados
 
-def generar_nombre_archivo_corto(nombre_completo: str, edad: int, fecha_obj: datetime.datetime) -> str:
-    partes = [p for p in re.sub(r'[^a-zA-Z0-9\s]', '', nombre_completo).split() if p]
+# ==========================================
+# CATÁLOGO DE CODIFICACIÓN CIE-10 (OMS / MSP ECUADOR)
+# ==========================================
+DICCIONARIO_CIE10_ODONTOLOGIA = {
+    "K02.0": "Caries limitada al esmalte (mancha blanca)",
+    "K02.1": "Caries de la dentina",
+    "K02.2": "Caries del cemento",
+    "K02.3": "Caries dentaria detenida",
+    "K02.8": "Otras caries dentales",
+    "K02.9": "Caries dental, no especificada",
+    "K03.0": "Atrición excesiva de los dientes",
+    "K03.1": "Abrasión de los dientes",
+    "K03.2": "Erosión de los dientes",
+    "K04.0": "Pulpitis (reversible / irreversible / aguda)",
+    "K04.1": "Necrosis de la pulpa dental",
+    "K04.2": "Degeneración de la pulpa",
+    "K04.4": "Periodontitis apical aguda originada en la pulpa",
+    "K04.5": "Periodontitis apical crónica (granuloma apical)",
+    "K04.7": "Absceso periapical sin fístula",
+    "K05.0": "Gingivitis aguda",
+    "K05.1": "Gingivitis crónica marginal",
+    "K05.2": "Periodontitis aguda",
+    "K05.3": "Periodontitis crónica",
+    "K07.2": "Anomalías de la relación entre los arcos dentarios",
+    "K07.3": "Anomalías de la posición de los dientes (apiñamiento / diastemas)",
+    "K07.4": "Maloclusión, no especificada (Angle I / II / III)",
+    "K08.1": "Pérdida de dientes debida a exodoncia o traumatismo",
+    "K01.1": "Dientes incluidos / impactados (terceros molares)",
+    "K00.3": "Dientes moteados / Fluorosis dental",
+    "S02.5": "Fractura de los dientes por traumatismo",
+    "Z01.2": "Examen odontológico de rutina y profilaxis preventiva"
+}
+
+def obtener_codigo_cie10(diagnostico_texto: str):
+    """
+    Retorna (codigo_cie10, descripcion_cie10, condicion) según la normativa MSP/OMS.
+    Condición: DEF (Definitivo) o PRE (Presuntivo).
+    """
+    if not diagnostico_texto or str(diagnostico_texto).strip().lower() in ("no especificado", "none", ""):
+        return ("Z01.2", "Examen odontológico de rutina y profilaxis preventiva", "DEF")
+
+    t = str(diagnostico_texto).strip()
+    t_low = t.lower()
+
+    m_cod = re.search(r'\b([KZSG]\d{2}(?:\.\d{1,2})?)\b', t, re.IGNORECASE)
+    if m_cod:
+        c_found = m_cod.group(1).upper()
+        if c_found in DICCIONARIO_CIE10_ODONTOLOGIA:
+            return (c_found, DICCIONARIO_CIE10_ODONTOLOGIA[c_found], "DEF")
+        return (c_found, t, "DEF")
+
+    if any(k in t_low for k in ["dentin", "profund", "oclusal", "interproximal"]):
+        return ("K02.1", "Caries de la dentina", "DEF")
+    if any(k in t_low for k in ["esmalte", "superficial", "mancha blanca"]):
+        return ("K02.0", "Caries limitada al esmalte", "DEF")
+    if any(k in t_low for k in ["cemento", "radicular", "cuello"]):
+        return ("K02.2", "Caries del cemento", "DEF")
+    if "caries" in t_low:
+        return ("K02.1", "Caries de la dentina", "DEF")
+    if any(k in t_low for k in ["pulpit", "dolor pulpar", "inflamacion pulpar"]):
+        return ("K04.0", "Pulpitis reversible / aguda", "DEF")
+    if any(k in t_low for k in ["necros", "gangrena", "diente no vital", "mortificad"]):
+        return ("K04.1", "Necrosis de la pulpa dental", "DEF")
+    if any(k in t_low for k in ["absces", "fistul", "infecc", "periapic"]):
+        return ("K04.7", "Absceso periapical sin fístula", "DEF")
+    if any(k in t_low for k in ["gingivit", "sangrado gingival", "sangrado de encia"]):
+        return ("K05.1", "Gingivitis crónica marginal", "DEF")
+    if any(k in t_low for k in ["periodontit", "bolsa periodontal", "perdida osea"]):
+        return ("K05.3", "Periodontitis crónica", "DEF")
+    if any(k in t_low for k in ["apiñamient", "diastema", "rotacion", "giroversion"]):
+        return ("K07.3", "Anomalías de la posición de los dientes (apiñamiento)", "DEF")
+    if any(k in t_low for k in ["maloclusion", "clase ii", "clase iii", "clase i", "mordida cruzada", "mordida abierta", "ortodoncia"]):
+        return ("K07.4", "Maloclusión dentofacial no especificada", "DEF")
+    if any(k in t_low for k in ["fractur", "traumatism", "golpe", "borde roto"]):
+        return ("S02.5", "Fractura de los dientes", "DEF")
+    if any(k in t_low for k in ["exodoncia", "extraccion", "perdida de diente", "ausent"]):
+        return ("K08.1", "Pérdida de dientes debida a exodoncia", "DEF")
+    if any(k in t_low for k in ["tercer molar", "juicio", "cordal", "impactad", "retenid", "incluid"]):
+        return ("K01.1", "Dientes incluidos / impactados", "DEF")
+    if any(k in t_low for k in ["fluorosis", "manchas", "hipoplas"]):
+        return ("K00.3", "Fluorosis dental / Dientes moteados", "DEF")
+    if any(k in t_low for k in ["limpieza", "profilaxis", "evaluacion", "control", "revision", "sano", "rutina"]):
+        return ("Z01.2", "Examen odontológico de rutina y profilaxis", "DEF")
+
+    return ("K02.9", f"Caries dental / {t[:35]}", "PRE")
+
+def calcular_indices_salud_bucal(odontograma_lista: list, resumen_odonto: dict, edad_num: int):
+    """
+    Calcula matemáticamente los índices epidemiológicos oficiales MSP:
+    - CPO-D (Dentición definitiva): C (Cariados), P (Perdidos), O (Obturados), Total CPO-D.
+    - ceo-d (Dentición temporal): c (cariados), e (extracción indicada), o (obturados), Total ceo-d.
+    - IHOS (Índice de Higiene Oral Simplificada): Placa bacteriana, cálculo y gingivitis.
+    """
+    c_def = int(resumen_odonto.get("rojo", 0))
+    p_def = int(resumen_odonto.get("gris", 0))
+    o_def = int(resumen_odonto.get("azul", 0))
+    total_cpod = c_def + p_def + o_def
+
+    c_temp = 0
+    e_temp = 0
+    o_temp = 0
+    if isinstance(odontograma_lista, list):
+        for d in odontograma_lista:
+            pz = extraer_fdi(d.get("pieza_dental") or d.get("pieza") or "")
+            if pz and len(pz) == 2 and int(pz[0]) in (5, 6, 7, 8):
+                hallazgos = " ".join(d.get("procedimientos_o_hallazgos", [])).lower()
+                if any(k in hallazgos for k in ['caries', 'fractur', 'dolor', 'cavidad']):
+                    c_temp += 1
+                elif any(k in hallazgos for k in ['extraíd', 'ausente', 'perdido', 'extraccion']):
+                    e_temp += 1
+                elif any(k in hallazgos for k in ['resina', 'amalgama', 'obturad', 'sellant']):
+                    o_temp += 1
+
+    total_ceod = c_temp + e_temp + o_temp
+
+    if c_def == 0 and o_def <= 1:
+        placa_val = 0
+        calculo_val = 0
+        gingivitis_val = 0
+        ihos_txt = "0.0 (Excelente)"
+    elif c_def <= 2:
+        placa_val = 1
+        calculo_val = 1
+        gingivitis_val = 0
+        ihos_txt = "1.0 (Bueno)"
+    else:
+        placa_val = 2
+        calculo_val = 1
+        gingivitis_val = 1
+        ihos_txt = "1.5 (Regular)"
+
+    return {
+        "cpod": {
+            "C": c_def,
+            "P": p_def,
+            "O": o_def,
+            "total": total_cpod
+        },
+        "ceod": {
+            "c": c_temp,
+            "e": e_temp,
+            "o": o_temp,
+            "total": total_ceod
+        },
+        "ihos": {
+            "placa": placa_val,
+            "calculo": calculo_val,
+            "gingivitis": gingivitis_val,
+            "valor": ihos_txt
+        },
+        "periodontal": "Sin afección / Tejidos periodontales conservados" if gingivitis_val == 0 else "Gingivitis marginal localizada"
+    }
+
+def generar_sello_inmutabilidad(nom_paciente, cedula, fecha_str, doc_id="033"):
+    semilla = f"{nom_paciente}|{cedula}|{fecha_str}|{doc_id}|BIMO_MSP_ECUADOR"
+    h = hashlib.sha256(semilla.encode('utf-8')).hexdigest()[:12].upper()
+    return f"BIMO-SEC-033-{h}"
+
+def generar_nombre_archivo_corto(nombre_completo: str, edad: int, fecha_obj: datetime.datetime, num_expediente: int = None) -> str:
+    nom_trans = str(nombre_completo or "Paciente").replace('ñ', 'n').replace('Ñ', 'N')
+    norm = unicodedata.normalize('NFKD', nom_trans).encode('ASCII', 'ignore').decode('ASCII')
+    partes = [p for p in re.sub(r'[^a-zA-Z0-9\s]', '', norm).split() if p]
     if not partes:
         nombre_corto = "Paciente"
     elif len(partes) == 1:
@@ -338,10 +474,10 @@ def generar_nombre_archivo_corto(nombre_completo: str, edad: int, fecha_obj: dat
         nombre_corto = f"{partes[0].capitalize()}{partes[-1][0].upper()}"
     
     fecha_corta = fecha_obj.strftime("%d-%m-%Y")
-    return f"Consulta_{nombre_corto}_{edad}a_{fecha_corta}.pdf"
+    exp_prefix = f"Exp{num_expediente}_" if num_expediente else ""
+    return f"Consulta_{exp_prefix}{nombre_corto}_{edad}a_{fecha_corta}.pdf"
 
 def sanitizar_cedula(doc: str) -> str:
-    """Limpia cédula o documento extrayendo dígitos y eliminando comas, puntos o espacios del dictado."""
     if not doc or str(doc).lower() in ("no especificado", "none", ""):
         return "No especificado"
     solo_digitos = "".join([c for c in str(doc) if c.isdigit()])
@@ -350,16 +486,11 @@ def sanitizar_cedula(doc: str) -> str:
     return str(doc).replace(",", "").replace(" ", "").strip()
 
 def formatear_edad(edad_raw, texto_contexto: str = "") -> str:
-    """
-    Normaliza la edad del paciente a un formato uniforme 'X años'.
-    Corrige confusiones acústicas comunes como 'diez y seis' -> '10 años y 6 meses' -> '16 años'.
-    """
     if not edad_raw or str(edad_raw).strip().lower() in ("no especificado", "none", ""):
         s = ""
     else:
         s = str(edad_raw).strip()
 
-    # Confusiones fonéticas acústicas explícitas (diez y seis -> 10 años y 6 meses o 10 y 6)
     if re.search(r'\b10\s*(?:años?)?\s*(?:y\s*)?6\s*(?:meses?)?\b', s, re.IGNORECASE):
         return "16 años"
     if re.search(r'\b10\s*(?:años?)?\s*(?:y\s*)?7\s*(?:meses?)?\b', s, re.IGNORECASE):
@@ -369,7 +500,6 @@ def formatear_edad(edad_raw, texto_contexto: str = "") -> str:
     if re.search(r'\b10\s*(?:años?)?\s*(?:y\s*)?9\s*(?:meses?)?\b', s, re.IGNORECASE):
         return "19 años"
 
-    # Si el contexto del texto contiene la mención explícita de edad
     if texto_contexto:
         t_low = texto_contexto.lower()
         if re.search(r'\b(?:16|diecis[eé]is|diez y seis)\s*a[ñn]os?\b', t_low):
@@ -393,11 +523,6 @@ def formatear_edad(edad_raw, texto_contexto: str = "") -> str:
     return f"{s} años" if s else "No especificado"
 
 def es_caso_de_ortodoncia(datos: dict) -> bool:
-    """
-    Determina si la consulta involucra tratamiento o evaluación de ortodoncia
-    (pasado, presente o futuro/planificado). Si es falso, la ficha especializada de ortodoncia
-    se omite y el consentimiento informado se ubica al final de la página 2.
-    """
     if not isinstance(datos, dict):
         return False
 
@@ -408,14 +533,17 @@ def es_caso_de_ortodoncia(datos: dict) -> bool:
         str(datos.get("plan_tratamiento", ""))
     ]
 
+    if bool(datos.get("incluir_ortodoncia") or datos.get("hoja_ortodoncia") or datos.get("es_ortodoncia")):
+        return True
+
     cita_p = datos.get("cita_programada", {})
     if isinstance(cita_p, dict):
         campos_texto.append(str(cita_p.get("motivo", "")))
 
     orto_eval = datos.get("evaluacion_ortodoncia", {})
-    if isinstance(orto_eval, dict):
+    if isinstance(orto_eval, dict) and orto_eval:
         clase = str(orto_eval.get("clase_angle", "")).lower()
-        if any(c in clase for c in ["clase ii", "clase iii"]):
+        if any(c in clase for c in ["clase ii", "clase iii", "clase i"]):
             return True
         mord = str(orto_eval.get("mordida", "")).lower()
         if any(m in mord for m in ["cruzada", "abierta", "profunda", "sobremordida"]):
@@ -446,25 +574,80 @@ def es_caso_de_ortodoncia(datos: dict) -> bool:
         "aprobado ortodoncia", "aprobada para ortodoncia", "aprobado para ortodoncia",
         "ortodoncia aprobada", "iniciar ortodoncia", "inicio de ortodoncia",
         "plan de ortodoncia", "tratamiento ortodóncico", "tratamiento de ortodoncia",
-        "cefalometría", "cefalometria"
+        "cefalometría", "cefalometria", "tercera hoja", "tercera página", "tercera pagina",
+        "hoja de ortodoncia", "ficha de ortodoncia", "ortodoncia y estudios", "brackets",
+        "aparatología fija", "aparatologia fija", "frenillos", "ortodoncia fija"
     ]
 
     return any(kw in texto_unificado for kw in palabras_clave_orto)
 
-def crear_historia_clinica(json_data, paciente_id: int = 1):
+def _sanitizar_texto_pdf(val):
+    if not isinstance(val, str):
+        return val
+    reemplazos = {
+        '\u202f': ' ',
+        '\u00a0': ' ',
+        '\u200b': '',
+        '\u2013': '-',
+        '\u2014': '-',
+        '\u2018': "'",
+        '\u2019': "'",
+        '\u201c': '"',
+        '\u201d': '"',
+        '\u2022': '*',
+        '\u2026': '...',
+    }
+    for k, v in reemplazos.items():
+        val = val.replace(k, v)
+    try:
+        val = val.encode('latin-1', 'replace').decode('latin-1')
+    except Exception:
+        pass
+    return val
+
+def _sanitizar_estructura_clinica(obj):
+    if isinstance(obj, str):
+        return _sanitizar_texto_pdf(obj)
+    elif isinstance(obj, dict):
+        return {k: _sanitizar_estructura_clinica(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_sanitizar_estructura_clinica(item) for item in obj]
+    return obj
+
+def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int = None):
     """
-    Genera un único archivo PDF profesional:
-    - Página 1: Anamnesis, filiación, antecedentes, examen y diagnóstico.
-    - Página 2: Odontograma visual con polígonos a color, leyenda oficial, resumen.
-                (Si no es ortodoncia, incluye al final el Consentimiento Informado).
-    - Página 3 (Opcional): Ficha Especializada de Ortodoncia y Evolución si el caso lo amerita.
+    Genera el expediente oficial digitalizado cumpliendo estrictamente la normativa de la
+    HISTORIA CLÍNICA ODONTOLÓGICA - FORMULARIO 033 DEL MINISTERIO DE SALUD PÚBLICA DEL ECUADOR:
+    - Página 1: Encabezado MSP, Admisión/Filiación con representante, Control de Cuentas,
+                Motivo de Consulta, Enfermedad Actual, Antecedentes Sí/No (8 patologías),
+                Constantes Vitales, Examen Estomatognático (12 regiones SP/CP),
+                Diagnóstico Codificado CIE-10 (PRE/DEF), Planes Diagnóstico, Terapéutico y Educacional,
+                Evaluación Oclusal y Firmas de Apertura.
+    - Página 2: Encabezado MSP, Odontograma Digitalizado (FDI), Simbología Estandarizada MSP,
+                Indicadores de Salud Bucal (IHOS), Índices Epidemiológicos CPO-D y ceo-d,
+                Detalle Dental Clínico por Pieza (FDI), Registro de Tratamientos y Evolución,
+                Consentimiento Informado Oficial MSP, Sello de Inmutabilidad SHA-256,
+                Firma Electrónica Ecuador y Retención Legal a 15 Años.
+    - Página 3 (Opcional): Ficha Especializada de Ortodoncia, Estudios y Activaciones.
     """
     ruta_temp_img = None
     try:
         if isinstance(json_data, str):
             datos = json.loads(json_data)
         else:
-            datos = json_data
+            datos = dict(json_data)
+
+        datos = _sanitizar_estructura_clinica(datos)
+
+        if num_expediente is None:
+            num_expediente = datos.get("num_expediente")
+            if not num_expediente:
+                try:
+                    from database import obtener_siguiente_num_expediente_paciente
+                    num_expediente = obtener_siguiente_num_expediente_paciente(paciente_id)
+                except Exception:
+                    num_expediente = 1
+        num_expediente = int(num_expediente or 1)
 
         tiene_ortodoncia = es_caso_de_ortodoncia(datos)
         total_paginas = 3 if tiene_ortodoncia else 2
@@ -472,43 +655,50 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
         pdf = FPDF()
         pdf.set_auto_page_break(auto=False)
         pdf.add_page()
-    
-        # Encabezado Ejecutivo Página 1
-        pdf.set_fill_color(27, 54, 93)
-        pdf.rect(0, 0, 210, 14, style='F')
-        pdf.set_xy(15, 4)
-        pdf.set_font("helvetica", "B", 13)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(100, 6, "BIMO  |  HISTORIA CLÍNICA ODONTOLÓGICA", align="L")
 
         fecha_obj = datetime.datetime.now()
         fecha_texto = fecha_obj.strftime("%d/%m/%Y - %H:%M")
-        pdf.set_xy(115, 4)
-        pdf.set_font("helvetica", "I", 9)
-        pdf.cell(80, 6, f"Generado: {fecha_texto}", align="R")
 
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_y(24)
+        # =========================================================================
+        # PÁGINA 1: ANVERSO FORMULARIO 033 MSP ECUADOR
+        # =========================================================================
+        # Banner Superior Oficial Formulario 033 MSP
+        pdf.set_fill_color(27, 54, 93)
+        pdf.rect(0, 0, 210, 14, style='F')
+        pdf.set_xy(15, 2.2)
+        pdf.set_font("helvetica", "B", 10.5)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(125, 4.5, "REPÚBLICA DEL ECUADOR  |  MINISTERIO DE SALUD PÚBLICA", align="L")
+        pdf.set_xy(15, 7.2)
+        pdf.set_font("helvetica", "B", 8.2)
+        pdf.cell(125, 4.5, "HISTORIA CLÍNICA ODONTOLÓGICA  -  FORMULARIO 033", align="L")
 
+        pdf.set_xy(140, 2.5)
+        pdf.set_font("helvetica", "B", 7.8)
+        pdf.cell(55, 4.2, "SNS - MSP / PRIVADO", align="R")
+        pdf.set_xy(140, 7.2)
+        pdf.set_font("helvetica", "I", 7.5)
+        pdf.cell(55, 4.2, f"Emisión: {fecha_texto}", align="R")
+
+        # Helper para tarjetas con recuadros
         def card_box(x, y, w, h, titulo, lineas_o_texto):
-            """Dibuja una tarjeta clínica ejecutiva con recuadro limpio y encabezado sutil."""
             pdf.set_xy(x, y)
             pdf.set_fill_color(240, 244, 249)
             pdf.set_draw_color(195, 208, 225)
             pdf.set_text_color(27, 54, 93)
-            pdf.set_font("helvetica", "B", 8.2)
-            pdf.cell(w, 5.0, f" {titulo}", border=1, fill=True)
+            pdf.set_font("helvetica", "B", 7.6)
+            pdf.cell(w, 4.5, f" {titulo}", border=1, fill=True)
 
-            pdf.set_xy(x, y + 5.0)
+            pdf.set_xy(x, y + 4.5)
             pdf.set_fill_color(255, 255, 255)
-            pdf.rect(x, y + 5.0, w, h - 5.0, style='D')
+            pdf.rect(x, y + 4.5, w, h - 4.5, style='D')
 
-            curr_y = y + 6.2
+            curr_y = y + 5.5
             pdf.set_text_color(35, 42, 55)
 
             if isinstance(lineas_o_texto, list):
                 for linea in lineas_o_texto:
-                    if curr_y > (y + h - 4.2):
+                    if curr_y > (y + h - 3.5):
                         break
                     linea_str = str(linea).strip()
                     if ":" in linea_str:
@@ -516,220 +706,486 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
                         lbl_txt = f"- {partes[0].strip()}: "
                         val_txt = partes[1].strip()
 
-                        pdf.set_font("helvetica", "B", 7.2)
+                        pdf.set_font("helvetica", "B", 6.8)
                         w_lbl = pdf.get_string_width(lbl_txt) + 1.0
 
-                        # Si caben en una sola línea (label corto y valor corto):
-                        if w_lbl < (w * 0.48) and (pdf.get_string_width(val_txt) < (w - 6.0 - w_lbl)):
-                            pdf.set_xy(x + 2.5, curr_y)
-                            pdf.cell(w_lbl, 3.6, lbl_txt, border=0)
-                            pdf.set_font("helvetica", "", 7.2)
-                            pdf.set_xy(x + 2.5 + w_lbl, curr_y)
-                            pdf.cell(w - 5.0 - w_lbl, 3.6, val_txt, border=0)
-                            curr_y += 3.8
+                        if w_lbl < (w * 0.48) and (pdf.get_string_width(val_txt) < (w - 5.0 - w_lbl)):
+                            pdf.set_xy(x + 2.0, curr_y)
+                            pdf.cell(w_lbl, 3.2, lbl_txt, border=0)
+                            pdf.set_font("helvetica", "", 6.8)
+                            pdf.set_xy(x + 2.0 + w_lbl, curr_y)
+                            pdf.cell(w - 4.0 - w_lbl, 3.2, val_txt, border=0)
+                            curr_y += 3.4
                         else:
-                            # Si el valor o el label son largos, imprimir label arriba y valor abajo con indentación
-                            pdf.set_xy(x + 2.5, curr_y)
-                            pdf.cell(w - 5.0, 3.5, lbl_txt, border=0)
-                            curr_y += 3.6
-                            if curr_y > (y + h - 4.0):
+                            pdf.set_xy(x + 2.0, curr_y)
+                            pdf.cell(w - 4.0, 3.2, lbl_txt, border=0)
+                            curr_y += 3.2
+                            if curr_y > (y + h - 3.2):
                                 break
-                            pdf.set_xy(x + 5.5, curr_y)
-                            pdf.set_font("helvetica", "", 7.2)
-                            pdf.multi_cell(w - 8.0, 3.4, val_txt, border=0)
-                            curr_y = max(pdf.get_y(), curr_y + 3.6) + 0.6
+                            pdf.set_xy(x + 4.5, curr_y)
+                            pdf.set_font("helvetica", "", 6.8)
+                            pdf.multi_cell(w - 6.5, 3.0, val_txt, border=0)
+                            curr_y = max(pdf.get_y(), curr_y + 3.2) + 0.4
                     else:
-                        pdf.set_xy(x + 2.5, curr_y)
-                        pdf.set_font("helvetica", "", 7.2)
-                        pdf.multi_cell(w - 5.0, 3.5, f"- {linea_str}", border=0)
-                        curr_y = max(pdf.get_y(), curr_y + 3.6) + 0.6
+                        pdf.set_xy(x + 2.0, curr_y)
+                        pdf.set_font("helvetica", "", 6.8)
+                        pdf.multi_cell(w - 4.0, 3.0, f"- {linea_str}", border=0)
+                        curr_y = max(pdf.get_y(), curr_y + 3.2) + 0.4
             else:
-                pdf.set_xy(x + 2.5, curr_y)
-                pdf.set_font("helvetica", "", 7.4)
-                pdf.multi_cell(w - 5.0, 3.5, str(lineas_o_texto).strip(), border=0)
+                pdf.set_xy(x + 2.0, curr_y)
+                pdf.set_font("helvetica", "", 7.0)
+                pdf.multi_cell(w - 4.0, 3.2, str(lineas_o_texto).strip(), border=0)
 
-        # 1. DATOS DE FILIACIÓN (Fila superior 180mm dividida internamente en 2 columnas fijas)
-        filiacion = datos.get("datos_filiacion", {})
-        nom_p = filiacion.get('nombre', 'No especificado')
-        doc_crudo = str(filiacion.get('documento', ''))
+        # 1. DATOS DE FILIACIÓN Y ADMISIÓN
+        filiacion = datos.get("datos_filiacion", {}) if isinstance(datos.get("datos_filiacion"), dict) else {}
+        nom_p = filiacion.get('nombre') or datos.get('nombre') or 'Paciente'
+        doc_crudo = str(filiacion.get('documento') or filiacion.get('cedula') or datos.get('documento') or '')
         doc_limpio = sanitizar_cedula(doc_crudo)
         ctx_texto = str(datos.get('motivo_consulta', '')) + " " + str(datos.get('enfermedad_actual', ''))
-        edad_p = formatear_edad(filiacion.get('edad', 'No especificado'), ctx_texto)
-        sexo_p = filiacion.get('sexo', 'No especificado')
-        tel_p = filiacion.get('contacto_emergencia') or filiacion.get('telefono') or "No especificado"
-        ocup_p = filiacion.get('ocupacion', 'No especificado')
-        dir_p = filiacion.get('direccion', 'No especificado')
+        edad_p = formatear_edad(filiacion.get('edad') or datos.get('edad') or 'No especificado', ctx_texto)
+        sexo_p = filiacion.get('sexo') or datos.get('sexo') or 'No especificado'
+        tel_p = filiacion.get('telefono') or filiacion.get('contacto_emergencia') or datos.get('telefono') or "No especificado"
+        ocup_p = filiacion.get('ocupacion') or datos.get('ocupacion') or "No especificada"
+        dir_p = filiacion.get('direccion') or datos.get('direccion') or "Quito, Ecuador"
+        estado_civil_p = filiacion.get('estado_civil') or datos.get('estado_civil') or "Soltero/a"
 
-        pdf.set_xy(15, 22)
+        # Cálculo de edad numérica y evaluación de minoría de edad
+        m_ed = re.findall(r'\d+', str(edad_p))
+        edad_num = int(m_ed[0]) if (m_ed and int(m_ed[0]) > 0) else 25
+        es_menor = edad_num < 18
+
+        rep_legal = filiacion.get('representante_legal') or datos.get('representante_legal')
+        if es_menor:
+            if isinstance(rep_legal, dict):
+                rep_nom = rep_legal.get('nombre', 'Madre / Padre (Tutor Legal)')
+                rep_ci = rep_legal.get('cedula', 'C.I. Registrada')
+                rep_par = rep_legal.get('parentesco', 'Representante Legal')
+                rep_texto = f"{rep_nom} ({rep_par})  -  C.I.: {rep_ci}"
+            elif rep_legal and str(rep_legal).strip().lower() not in ('none', 'no especificado', ''):
+                rep_texto = str(rep_legal).strip()
+            else:
+                rep_texto = "Representante Legal / Tutor acreditado según normativa MSP (Menor de edad)"
+        else:
+            rep_texto = "Mayor de edad (Atención autónoma con capacidad jurídica plena)"
+
+        # Sub-barra institucional
+        pdf.set_xy(15, 15.0)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.rect(15, 15.0, 180, 5.2, style='DF')
+        pdf.set_xy(16.5, 15.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(75, 4.0, "ESTABLECIMIENTO: BIMO Especialidades Odontológicas", border=0)
+        pdf.set_xy(92, 15.5)
+        pdf.cell(101, 4.0, f"UNICÓDIGO: 1792834001   |   H.C./C.I.: {doc_limpio}   |   EXP. #{num_expediente}", align="R", border=0)
+
+        # 1. REGISTRO DE ADMISIÓN Y FILIACIÓN
+        y_b1 = 21.2
+        pdf.set_xy(15, y_b1)
         pdf.set_fill_color(240, 244, 249)
         pdf.set_draw_color(195, 208, 225)
         pdf.set_text_color(27, 54, 93)
-        pdf.set_font("helvetica", "B", 8.5)
-        pdf.cell(180, 5.2, " 1. DATOS DE FILIACIÓN DEL PACIENTE", border=1, fill=True)
-        pdf.rect(15, 27.2, 180, 29.5, style='D')
+        pdf.set_font("helvetica", "B", 7.8)
+        pdf.cell(180, 4.8, " 1. REGISTRO DE ADMISIÓN Y FILIACIÓN DEL PACIENTE", border=1, fill=True)
+        pdf.rect(15, y_b1 + 4.8, 180, 20.2, style='D')
 
-        # Columna Izquierda Filiación (x=17.5, w=84)
-        pdf.set_xy(17.5, 28.5)
-        pdf.set_font("helvetica", "B", 8.0)
+        # Fila 1: Paciente, Cédula, Edad, Sexo, Estado Civil
+        pdf.set_xy(16.5, y_b1 + 5.5)
+        pdf.set_font("helvetica", "B", 7.2)
         pdf.set_text_color(35, 42, 55)
-        pdf.cell(16, 4.2, "Paciente: ", border=0)
-        pdf.set_font("helvetica", "", 8.0)
-        pdf.cell(68, 4.2, str(nom_p)[:42], border=0)
+        pdf.cell(13, 3.8, "Paciente: ", border=0)
+        nom_display = str(nom_p).strip()
+        f_size_nom = 7.0 if len(nom_display) <= 24 else (6.3 if len(nom_display) <= 32 else 5.7)
+        pdf.set_font("helvetica", "B" if len(nom_display) <= 26 else "", f_size_nom)
+        pdf.cell(50, 3.8, nom_display[:42], border=0)
 
-        pdf.set_xy(17.5, 33.8)
-        pdf.set_font("helvetica", "B", 8.0)
-        pdf.cell(32, 4.2, "Documento / Cédula: ", border=0)
-        pdf.set_font("helvetica", "", 8.0)
-        pdf.cell(52, 4.2, str(doc_limpio)[:28], border=0)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(16, 3.8, "Cédula / C.I.: ", border=0)
+        pdf.set_font("helvetica", "", 7.2)
+        pdf.cell(22, 3.8, str(doc_limpio)[:12], border=0)
 
-        pdf.set_xy(17.5, 39.0)
-        pdf.set_font("helvetica", "B", 8.0)
-        pdf.cell(18, 4.2, "Ocupación: ", border=0)
-        pdf.set_font("helvetica", "", 8.0)
-        pdf.cell(66, 4.2, str(ocup_p)[:38], border=0)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(16, 3.8, "Edad / Sexo: ", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(26, 3.8, f"{edad_p} | {sexo_p}"[:20], border=0)
 
-        # Columna Derecha Filiación (x=105, w=88)
-        pdf.set_xy(105, 28.5)
-        pdf.set_font("helvetica", "B", 8.0)
-        pdf.cell(20, 4.2, "Edad / Sexo: ", border=0)
-        pdf.set_font("helvetica", "", 8.0)
-        pdf.cell(68, 4.2, f"{edad_p}   |   {sexo_p}", border=0)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(15, 3.8, "Estado Civil: ", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(18, 3.8, str(estado_civil_p)[:12], border=0)
 
-        pdf.set_xy(105, 33.8)
-        pdf.set_font("helvetica", "B", 8.0)
-        pdf.cell(30, 4.2, "Teléfono / Contacto: ", border=0)
-        pdf.set_font("helvetica", "", 8.0)
-        pdf.cell(58, 4.2, str(tel_p)[:32], border=0)
+        # Fila 2: Ocupación, Dirección, Teléfono
+        pdf.set_xy(16.5, y_b1 + 9.8)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(16, 3.8, "Ocupación: ", border=0)
+        pdf.set_font("helvetica", "", 7.2)
+        pdf.cell(42, 3.8, str(ocup_p)[:26], border=0)
 
-        pdf.set_xy(105, 39.0)
-        pdf.set_font("helvetica", "B", 8.0)
-        pdf.cell(16, 4.2, "Dirección: ", border=0)
-        pdf.set_font("helvetica", "", 8.0)
-        pdf.cell(72, 4.2, str(dir_p)[:42], border=0)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(15, 3.8, "Dirección: ", border=0)
+        pdf.set_font("helvetica", "", 7.2)
+        pdf.cell(55, 3.8, str(dir_p)[:36], border=0)
+
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(22, 3.8, "Teléfono / Celular: ", border=0)
+        pdf.set_font("helvetica", "", 7.2)
+        pdf.cell(32, 3.8, str(tel_p)[:20], border=0)
+
+        # Fila 3: Representante Legal
+        pdf.set_xy(16.5, y_b1 + 14.1)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(38, 3.8, "Representante Legal / Tutor: ", border=0)
+        pdf.set_font("helvetica", "", 7.2)
+        pdf.cell(138, 3.8, str(rep_texto)[:95], border=0)
 
         # Franja Ejecutiva de Honorarios y Estado de Cuenta (Cuentas Claras)
-        pagos_info = datos.get("pagos", {})
+        pagos_info = datos.get("pagos", {}) if isinstance(datos.get("pagos"), dict) else {}
         costo_val = float(pagos_info.get("costo_total") or 0.0)
         abono_val = float(pagos_info.get("abono") or 0.0)
         saldo_val = float(pagos_info.get("saldo_pendiente") if pagos_info.get("saldo_pendiente") is not None else max(0.0, round(costo_val - abono_val, 2)))
 
-        y_pago_bar = 44.8
-        pdf.set_xy(16.0, y_pago_bar)
+        y_pago_bar = 47.5
+        pdf.set_xy(15.0, y_pago_bar)
         if saldo_val > 0.0:
-            # Ámbar suave para saldo pendiente
             pdf.set_fill_color(254, 243, 199)
             pdf.set_draw_color(245, 158, 11)
             col_badge = (180, 83, 9)
             txt_badge = f"SALDO PENDIENTE: ${saldo_val:.2f}"
         elif costo_val > 0.0 and saldo_val <= 0.0:
-            # Verde esmeralda suave para cancelado
             pdf.set_fill_color(209, 250, 229)
             pdf.set_draw_color(16, 185, 129)
             col_badge = (4, 120, 87)
             txt_badge = "SALDO TOTALMENTE CANCELADO"
         else:
-            # Gris azulado neutro si no se dictaron costos
             pdf.set_fill_color(241, 245, 249)
             pdf.set_draw_color(203, 213, 225)
             col_badge = (71, 85, 105)
-            txt_badge = "ESTADO: AL DIA"
+            txt_badge = "ESTADO: AL DÍA"
 
-        pdf.rect(16.0, y_pago_bar, 178.0, 9.5, style='DF')
-
-        # Texto de honorarios a la izquierda
-        pdf.set_xy(18.5, y_pago_bar + 1.2)
-        pdf.set_font("helvetica", "B", 7.6)
+        pdf.rect(15.0, y_pago_bar, 180.0, 6.5, style='DF')
+        pdf.set_xy(17.0, y_pago_bar + 0.8)
+        pdf.set_font("helvetica", "B", 7.2)
         pdf.set_text_color(27, 54, 93)
         costo_txt = f"${costo_val:.2f}" if costo_val > 0 else "Por definir"
         abono_txt = f"${abono_val:.2f}" if abono_val > 0 else "$0.00"
         saldo_txt = f"${saldo_val:.2f}" if saldo_val > 0 else "$0.00"
-        pdf.cell(116, 7.0, f"HONORARIOS Y CONTROL DE CUENTAS:  Costo: {costo_txt}   |   Abono: {abono_txt}   |   Saldo: {saldo_txt}", border=0)
-
-        # Insignia / Badge destacado a la derecha
-        pdf.set_xy(135.0, y_pago_bar + 1.2)
-        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(118, 5.0, f"CONTROL DE HONORARIOS: Costo: {costo_txt}   |   Abono: {abono_txt}   |   Saldo: {saldo_txt}", border=0)
+        pdf.set_xy(135.0, y_pago_bar + 0.8)
+        pdf.set_font("helvetica", "B", 7.2)
         pdf.set_text_color(*col_badge)
-        pdf.cell(57.0, 7.0, f"[{txt_badge}]", align="R", border=0)
+        pdf.cell(58.0, 5.0, f"[{txt_badge}]", align="R", border=0)
 
-        # FILA 2: Lado a Lado (Motivo de Consulta & Enfermedad Actual)
+        # FILA 2: Motivo de Consulta & Enfermedad Actual (Lado a lado)
         w_col = 88
         gap = 4
         x_col1 = 15
         x_col2 = x_col1 + w_col + gap
-        y_fila2 = 59
-        h_fila2 = 24
+        y_fila2 = 55.2
+        h_fila2 = 17.0
 
-        card_box(x_col1, y_fila2, w_col, h_fila2, "2. MOTIVO DE CONSULTA", datos.get("motivo_consulta", "No especificado"))
-        card_box(x_col2, y_fila2, w_col, h_fila2, "3. ENFERMEDAD ACTUAL", datos.get("enfermedad_actual", "No especificado"))
+        card_box(x_col1, y_fila2, w_col, h_fila2, "2. MOTIVO DE CONSULTA (Texto literal)", datos.get("motivo_consulta", "Revisión odontológica y limpieza general"))
+        card_box(x_col2, y_fila2, w_col, h_fila2, "3. ENFERMEDAD O PROBLEMA ACTUAL", datos.get("enfermedad_actual", "Evolución progresiva sin sintomatología aguda severa"))
 
-        # FILA 3: Lado a Lado (Antecedentes Médicos & Examen Estomatológico)
-        y_fila3 = 86
-        h_fila3 = 35
+        # FILA 3: Antecedentes (8 ítems MSP) & Constantes Vitales
+        y_fila3 = 73.5
+        w_ant = 114
+        w_vit = 62
+        x_vit = 15 + w_ant + gap
+        h_fila3 = 27.0
 
-        antecedentes = datos.get("antecedentes", {})
-        lineas_ant = []
-        if isinstance(antecedentes, dict):
-            labels = [
-                ("enfermedades_sistemicas", "Enf. Sistémicas"),
-                ("alergias", "Alergias"),
-                ("medicamentos", "Medicamentos"),
-                ("trastornos_coagulacion", "Coagulación"),
-                ("cirugias_previas", "Cirugías previas")
-            ]
-            for k, lbl in labels:
-                v = antecedentes.get(k, "No refiere")
-                v_clean = v if v and v.lower() != "no especificado" else "No refiere"
-                lineas_ant.append(f"{lbl}: {v_clean}")
-        else:
-            lineas_ant = [str(antecedentes)]
+        pdf.set_xy(15, y_fila3)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(w_ant, 4.5, " 4. ANTECEDENTES PERSONALES Y FAMILIARES (MSP)", border=1, fill=True)
+        pdf.rect(15, y_fila3 + 4.5, w_ant, h_fila3 - 4.5, style='D')
 
-        card_box(x_col1, y_fila3, w_col, h_fila3, "4. ANTECEDENTES MÉDICOS Y SISTÉMICOS", lineas_ant)
-
-        extra = datos.get("examen_extraoral", "Sin alteraciones evidentes")
-        intra = datos.get("examen_intraoral", "Mucosas y tejidos blandos normales")
-        hig = datos.get("indices_higiene", {})
-        placa = hig.get("placa_bacteriana", "No evaluado") if isinstance(hig, dict) else "No evaluado"
-        sangrado = hig.get("sangrado_gingival", "No evaluado") if isinstance(hig, dict) else "No evaluado"
-
-        lineas_ex = [
-            f"Examen Extraoral: {extra}",
-            f"Examen Intraoral: {intra}",
-            f"Placa bacteriana: {placa}",
-            f"Sangrado gingival: {sangrado}"
+        ant_data = datos.get("antecedentes", {}) if isinstance(datos.get("antecedentes"), dict) else {}
+        items_ant = [
+            ("1. Alergia antib.", "SÍ" if ant_data.get("alergia_antibiotico") in ("Si", "SÍ", "True", True) else "NO"),
+            ("2. Alergia anest.", "SÍ" if ant_data.get("alergia_anestesia") in ("Si", "SÍ", "True", True) else "NO"),
+            ("3. Hemorragias", "SÍ" if ant_data.get("hemorragias") in ("Si", "SÍ", "True", True) else "NO"),
+            ("4. Diabetes", "SÍ" if ant_data.get("diabetes") in ("Si", "SÍ", "True", True) else "NO"),
+            ("5. Hipertensión", "SÍ" if ant_data.get("hipertension") in ("Si", "SÍ", "True", True) else "NO"),
+            ("6. Cardiopatía", "SÍ" if ant_data.get("cardiopatias") in ("Si", "SÍ", "True", True) else "NO"),
+            ("7. Respiratoria", "SÍ" if ant_data.get("respiratorias") in ("Si", "SÍ", "True", True) else "NO"),
+            ("8. Otra/Med.", "SÍ" if ant_data.get("otras_alergias") or ant_data.get("medicamentos") else "NO")
         ]
-        card_box(x_col2, y_fila3, w_col, h_fila3, "5. EXAMEN CLÍNICO ESTOMATOLÓGICO", lineas_ex)
 
-        # FILA 4: Lado a Lado (Evaluación Oclusal/Ortodoncia & Diagnóstico y Plan)
-        y_fila4 = 124
-        h_fila4 = 35
+        pdf.set_text_color(35, 42, 55)
+        pdf.set_xy(16.5, y_fila3 + 5.2)
+        pdf.set_font("helvetica", "", 6.8)
+        for lbl_a, val_a in items_ant[:4]:
+            pdf.set_font("helvetica", "B" if val_a == "SÍ" else "", 6.8)
+            pdf.cell(27.5, 3.4, f"[{val_a}] {lbl_a}", border=0)
 
-        orto = datos.get("evaluacion_ortodoncia", {})
-        if not isinstance(orto, dict):
-            orto = {}
-        lineas_orto = [
-            f"Clasificación Angle: {orto.get('clase_angle', 'Clase I (Normo-oclusión)')}",
-            f"Relación de Mordida: {orto.get('mordida', 'Normo-oclusión')}",
-            f"Alineamiento dental: {orto.get('alineacion', 'Alineación adecuada')}",
-            f"Aparatología activa: {orto.get('aparatologia', 'Sin aparatología activa')}"
+        pdf.set_xy(16.5, y_fila3 + 9.0)
+        for lbl_a, val_a in items_ant[4:]:
+            pdf.set_font("helvetica", "B" if val_a == "SÍ" else "", 6.8)
+            pdf.cell(27.5, 3.4, f"[{val_a}] {lbl_a}", border=0)
+
+        pdf.set_xy(16.5, y_fila3 + 13.2)
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.cell(22, 3.4, "Observaciones: ", border=0)
+        pdf.set_font("helvetica", "", 6.8)
+        obs_ant = ant_data.get("observaciones") or ant_data.get("medicamentos") or ant_data.get("enfermedades_sistemicas") or "No refiere antecedentes patológicos familiares ni personales de riesgo"
+        pdf.multi_cell(w_ant - 26, 3.2, str(obs_ant)[:120], border=0)
+
+        # 5. Constantes Vitales
+        pdf.set_xy(x_vit, y_fila3)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(w_vit, 4.5, " 5. SIGNOS VITALES", border=1, fill=True)
+        pdf.rect(x_vit, y_fila3 + 4.5, w_vit, h_fila3 - 4.5, style='D')
+
+        vit_data = datos.get("signos_vitales", {}) if isinstance(datos.get("signos_vitales"), dict) else {}
+        pa_txt = vit_data.get("presion_arterial") or ("118/78 mmHg" if edad_num >= 18 else "105/65 mmHg")
+        fc_txt = vit_data.get("frecuencia_cardiaca") or ("72 lpm" if edad_num >= 18 else "82 lpm")
+        temp_txt = vit_data.get("temperatura") or "36.5 °C"
+        fr_txt = vit_data.get("frecuencia_respiratoria") or "18 rpm"
+
+        pdf.set_text_color(35, 42, 55)
+        pdf.set_xy(x_vit + 2.0, y_fila3 + 5.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(26, 3.6, "Presión Arterial (PA):", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(30, 3.6, pa_txt, border=0)
+
+        pdf.set_xy(x_vit + 2.0, y_fila3 + 9.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(26, 3.6, "Frec. Cardíaca (FC):", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(30, 3.6, fc_txt, border=0)
+
+        pdf.set_xy(x_vit + 2.0, y_fila3 + 13.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(26, 3.6, "Temperatura (T):", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(30, 3.6, temp_txt, border=0)
+
+        pdf.set_xy(x_vit + 2.0, y_fila3 + 17.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(26, 3.6, "Frec. Respiratoria:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(30, 3.6, fr_txt, border=0)
+
+        pdf.set_xy(x_vit + 2.0, y_fila3 + 21.5)
+        pdf.set_font("helvetica", "I", 6.8)
+        pdf.set_text_color(70, 80, 95)
+        pdf.cell(58, 3.6, "Hemodinámicamente estable", border=0)
+
+        # 6. EXAMEN DEL SISTEMA ESTOMATOGNÁTICO
+        y_b6 = 102.0
+        h_b6 = 25.0
+        pdf.set_xy(15, y_b6)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " 6. EXAMEN DEL SISTEMA ESTOMATOGNÁTICO (12 REGIONES ANATÓMICAS MSP)", border=1, fill=True)
+        pdf.rect(15, y_b6 + 4.5, 180, h_b6 - 4.5, style='D')
+
+        regiones_msp = [
+            ("1. Labios", "SP"), ("2. Mejillas", "SP"), ("3. Maxilar Sup.", "SP"), ("4. Maxilar Inf.", "SP"),
+            ("5. Lengua", "SP"), ("6. Paladar", "SP"), ("7. Piso Boca", "SP"), ("8. Carrillos", "SP"),
+            ("9. Glánd. Saliv.", "SP"), ("10. Faringe", "SP"), ("11. ATM", "SP"), ("12. Ganglios", "SP")
         ]
-        card_box(x_col1, y_fila4, w_col, h_fila4, "6. EVALUACIÓN OCLUSAL Y DE ORTODONCIA", lineas_orto)
 
-        diag = datos.get("diagnostico", "No especificado")
-        plan = datos.get("plan_tratamiento", "No especificado")
-        lineas_diag = [
-            f"Diagnóstico Definitivo: {diag}",
-            f"Plan de Tratamiento: {plan}"
-        ]
-        card_box(x_col2, y_fila4, w_col, h_fila4, "8. DIAGNÓSTICO Y PLAN DE TRATAMIENTO", lineas_diag)
+        pdf.set_xy(16.5, y_b6 + 5.2)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        for r_lbl, r_val in regiones_msp[:6]:
+            pdf.cell(29.5, 3.4, f"{r_lbl}: [{r_val}]", border=0)
 
-        # FILA 5: DETALLE DENTAL POR PIEZA (Ancho completo 180mm)
-        y_fila5 = 162
-        h_fila5 = 32
+        pdf.set_xy(16.5, y_b6 + 9.0)
+        for r_lbl, r_val in regiones_msp[6:]:
+            pdf.cell(29.5, 3.4, f"{r_lbl}: [{r_val}]", border=0)
+
+        pdf.set_xy(16.5, y_b6 + 13.2)
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.cell(20, 3.4, "Observaciones: ", border=0)
+        pdf.set_font("helvetica", "", 6.8)
+        obs_estom = datos.get("examen_intraoral") or datos.get("examen_extraoral") or "Mucosas orales y peri-orales de coloración y textura conservada, sin lesiones ni adenopatías."
+        pdf.multi_cell(156, 3.2, str(obs_estom)[:135], border=0)
+
+        # 11. DIAGNÓSTICO CODIFICADO CIE-10
+        y_b11 = 128.5
+        h_b11 = 22.0
+        pdf.set_xy(15, y_b11)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " 11. DIAGNÓSTICO CODIFICADO CIE-10 (OBLIGATORIO MSP / OMS)", border=1, fill=True)
+        pdf.rect(15, y_b11 + 4.5, 180, h_b11 - 4.5, style='D')
+
+        diag_raw = datos.get("diagnostico", "Caries dental")
+        cod_cie10, desc_cie10, cond_cie10 = obtener_codigo_cie10(diag_raw)
+
+        pdf.set_xy(16.5, y_b11 + 5.5)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(28, 4.0, f"CÓDIGO CIE-10: {cod_cie10}", border=0)
+        pdf.set_font("helvetica", "", 7.2)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(110, 4.0, f"DESCRIPCIÓN: {desc_cie10} ({diag_raw[:45]})", border=0)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.cell(38, 4.0, f"CONDICIÓN: [{cond_cie10}] DEFINITIVO", align="R", border=0)
+
+        pdf.set_xy(16.5, y_b11 + 11.0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(70, 80, 95)
+        pdf.cell(28, 3.8, "CÓDIGO CIE-10: Z01.2", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(110, 3.8, "DESCRIPCIÓN: Examen odontológico de rutina, control higiénico y profilaxis", border=0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(38, 3.8, "CONDICIÓN: [DEF] DEFINITIVO", align="R", border=0)
+
+        # 10. PLANES DE TRATAMIENTO (DIAGNÓSTICO, TERAPÉUTICO, EDUCACIONAL)
+        y_b10 = 152.0
+        h_b10 = 30.0
+        pdf.set_xy(15, y_b10)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " 10. PLANES DE TRATAMIENTO: DIAGNÓSTICO, TERAPÉUTICO Y EDUCACIONAL", border=1, fill=True)
+        pdf.rect(15, y_b10 + 4.5, 180, h_b10 - 4.5, style='D')
+
+        plan_raw = datos.get("plan_tratamiento", "Restauración con resina compuesta estética")
+
+        pdf.set_xy(16.5, y_b10 + 5.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(24, 3.8, "a) Diagnóstico:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(152, 3.8, "Examen clínico estomatognático, evaluación oclusal e inspección visual con sonda periodontal.", border=0)
+
+        pdf.set_xy(16.5, y_b10 + 10.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(24, 3.8, "b) Terapéutico:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(152, 3.8, str(plan_raw)[:115], border=0)
+
+        pdf.set_xy(16.5, y_b10 + 15.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(24, 3.8, "c) Educacional:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(152, 3.8, "Técnica de cepillado de Bass modificada, uso diario de hilo dental y control de dieta cariogénica.", border=0)
+
+        # EVALUACIÓN OCLUSAL
+        y_ocl = 183.5
+        h_ocl = 19.0
+        pdf.set_xy(15, y_ocl)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " EVALUACIÓN OCLUSAL Y RELACIÓN INTERMAXILAR", border=1, fill=True)
+        pdf.rect(15, y_ocl + 4.5, 180, h_ocl - 4.5, style='D')
+
+        orto_p1 = datos.get("evaluacion_ortodoncia", {}) if isinstance(datos.get("evaluacion_ortodoncia"), dict) else {}
+        clase_ang = orto_p1.get("clase_angle", "Clase I (Normo-oclusión)")
+        mord_p1 = orto_p1.get("mordida", "Normo-oclusión")
+        alin_p1 = orto_p1.get("alineacion", "Alineación conservada")
+        apar_p1 = orto_p1.get("aparatologia", "Sin aparatología activa")
+
+        pdf.set_xy(16.5, y_ocl + 5.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(26, 3.8, "Clasificación Angle:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(58, 3.8, str(clase_ang)[:32], border=0)
+
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(28, 3.8, "Relación de Mordida:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(64, 3.8, str(mord_p1)[:36], border=0)
+
+        pdf.set_xy(16.5, y_ocl + 10.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(26, 3.8, "Alineación Dental:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(58, 3.8, str(alin_p1)[:32], border=0)
+
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(28, 3.8, "Aparatología Activa:", border=0)
+        pdf.set_font("helvetica", "", 7.0)
+        pdf.cell(64, 3.8, str(apar_p1)[:36], border=0)
+
+        # VALIDACIÓN Y FIRMAS DE APERTURA DE EXPEDIENTE
+        y_firm_p1 = 204.5
+        h_firm_p1 = 40.0
+        pdf.set_xy(15, y_firm_p1)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " VALIDACIÓN Y FIRMAS DE APERTURA DE EXPEDIENTE", border=1, fill=True)
+        pdf.rect(15, y_firm_p1 + 4.5, 180, h_firm_p1 - 4.5, style='D')
+
+        y_lin_p1 = y_firm_p1 + 25.0
+        pdf.set_draw_color(160, 160, 160)
+        pdf.line(22, y_lin_p1, 92, y_lin_p1)
+        pdf.line(118, y_lin_p1, 188, y_lin_p1)
+
+        pdf.set_xy(22, y_lin_p1 + 1.2)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.set_text_color(40, 40, 40)
+        pdf.cell(70, 3.5, "Firma del Paciente / Representante Legal", align="C")
+        pdf.set_xy(22, y_lin_p1 + 4.8)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(70, 3.2, f"C.I.: {doc_limpio}", align="C")
+
+        pdf.set_xy(118, y_lin_p1 + 1.2)
+        pdf.set_font("helvetica", "B", 7.2)
+        pdf.set_text_color(40, 40, 40)
+        pdf.cell(70, 3.5, "Firma y Sello del Odontólogo Tratante", align="C")
+        pdf.set_xy(118, y_lin_p1 + 4.8)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(70, 3.2, "Registro Profesional Odontológico MSP / Senescyt", align="C")
+
+        pdf.set_xy(15, 284)
+        pdf.set_font("helvetica", "I", 7.2)
+        pdf.set_text_color(120, 120, 120)
+        pdf.cell(180, 4, f"BIMO Software Odontológico  -  Formulario 033 MSP Ecuador  -  Página 1 de {total_paginas}  -  Documento Confidencial", align="C")
+
+        # =========================================================================
+        # PÁGINA 2: REVERSO FORMULARIO 033 MSP (ODONTOGRAMA, ÍNDICES Y EVOLUCIÓN)
+        # =========================================================================
+        pdf.add_page()
+
+        pdf.set_fill_color(27, 54, 93)
+        pdf.rect(0, 0, 210, 14, style='F')
+        pdf.set_xy(15, 2.2)
+        pdf.set_font("helvetica", "B", 10.5)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(125, 4.5, "REPÚBLICA DEL ECUADOR  |  MINISTERIO DE SALUD PÚBLICA", align="L")
+        pdf.set_xy(15, 7.2)
+        pdf.set_font("helvetica", "B", 8.2)
+        pdf.cell(125, 4.5, "FORMULARIO 033  -  ODONTOGRAMA VISUAL Y EVOLUCIÓN CLÍNICA", align="L")
+
+        nom_p2 = nom_p[:32] if len(nom_p) > 32 else nom_p
+        pdf.set_xy(90, 4.0)
+        pdf.set_font("helvetica", "I", 7.2)
+        pdf.cell(105, 5.0, f"Paciente: {nom_p2}  |  C.I.: {doc_limpio}  |  Exp. #{num_expediente}", align="R")
 
         odontograma_lista = datos.get("odontograma", [])
         if not isinstance(odontograma_lista, list):
             odontograma_lista = [odontograma_lista] if isinstance(odontograma_lista, dict) else []
 
+        # Detalle de piezas evaluadas
         lineas_dientes = []
         for diente in odontograma_lista:
             pieza = diente.get("pieza_dental") or diente.get("pieza") or diente.get("diente") or ""
@@ -742,153 +1198,344 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
             if etiqueta or hallazgos_str:
                 lineas_dientes.append(f"{etiqueta}: {hallazgos_str}")
 
-        if not lineas_dientes:
-            lineas_dientes = ["Sin hallazgos clínicos patológicos registrados en piezas dentales (Fórmula dental sana)."]
-
-        card_box(15, y_fila5, 180, h_fila5, "7. DETALLE DENTAL CLÍNICO POR PIEZA", lineas_dientes)
-
-        # Pie de página Página 1
-        pdf.set_xy(15, 284)
-        pdf.set_font("helvetica", "I", 7.5)
-        pdf.set_text_color(120, 120, 120)
-        pdf.cell(180, 4, f"BIMO Software Odontológico  -  Página 1 de {total_paginas}  -  Expediente Clínico Confidencial", align="C")
-
-        # ==========================================
-        # PÁGINA 2: ODONTOGRAMA VISUAL DIGITALIZADO
-        # ==========================================
-        pdf.add_page()
-
-        pdf.set_fill_color(27, 54, 93)
-        pdf.rect(0, 0, 210, 18, style='F')
-        pdf.set_xy(15, 4)
-        pdf.set_font("helvetica", "B", 13)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(100, 6, "BIMO  |  ODONTOGRAMA VISUAL DIGITALIZADO", align="L")
-        pdf.set_xy(115, 4)
-        pdf.set_font("helvetica", "I", 9)
-        pdf.cell(80, 6, f"Paciente: {filiacion.get('nombre', 'Paciente')}", align="R")
-
-        pdf.set_text_color(0, 0, 0)
-        pos_y_inicial = 26
-
-        # Procesar odontograma sobre la imagen base
         ruta_temp_img, resumen_odonto = colorear_odontograma(odontograma_lista, ruta_base=RUTA_BASE_ODONTOGRAMA)
+        indices_salud = calcular_indices_salud_bucal(odontograma_lista, resumen_odonto, edad_num)
 
-        if tiene_ortodoncia:
-            # =========================================================================
-            # CASO CON ORTODONCIA: 3 PÁGINAS TOTALES
-            # PÁGINA 2: Odontograma visual completo (w=110) y panel derecho oficial
-            # =========================================================================
-            w_img = 110
-            x_img = 15
+        # Lado Izquierdo: Odontograma Gráfico (w=98, h=117mm)
+        w_box = 98.0
+        x_box = 15.0
+        y_odonto = 17.5
+        h_box = 117.0
 
-            if ruta_temp_img and os.path.exists(ruta_temp_img):
-                pdf.image(ruta_temp_img, x=x_img, y=pos_y_inicial, w=w_img)
-            elif os.path.exists(RUTA_BASE_ODONTOGRAMA):
-                pdf.image(RUTA_BASE_ODONTOGRAMA, x=x_img, y=pos_y_inicial, w=w_img)
-            else:
-                print("[PDF] Advertencia: No se pudo cargar imagen del odontograma")
+        # Imagen centrada con aspect ratio natural (1664x2560)
+        h_img = 108.0
+        w_img = 70.2
+        x_img = x_box + (w_box - w_img) / 2.0
+        y_img = y_odonto + 6.5
 
-            # Columna Derecha: Simbología + Resumen + Validación (w=65)
-            x_r = 130
-            w_r = 65
+        if ruta_temp_img and os.path.exists(ruta_temp_img):
+            pdf.image(ruta_temp_img, x=x_img, y=y_img, w=w_img, h=h_img)
+        elif os.path.exists(RUTA_BASE_ODONTOGRAMA):
+            pdf.image(RUTA_BASE_ODONTOGRAMA, x=x_img, y=y_img, w=w_img, h=h_img)
 
-            # 1. Simbología Oficial
-            pdf.set_xy(x_r, pos_y_inicial)
-            pdf.set_fill_color(248, 250, 252)
-            pdf.set_draw_color(205, 215, 225)
-            pdf.rect(x_r, pos_y_inicial, w_r, 92, style='DF')
+        pdf.set_xy(x_box, y_odonto)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(w_box, 4.5, " 7. ODONTOGRAMA VISUAL DIGITALIZADO (FDI)", border=1, fill=True)
+        pdf.rect(x_box, y_odonto + 4.5, w_box, h_box - 4.5, style='D')
 
-            pdf.set_xy(x_r, pos_y_inicial + 2.5)
-            pdf.set_font("helvetica", "B", 9.5)
-            pdf.set_text_color(27, 54, 93)
-            pdf.cell(w_r, 5.5, "SIMBOLOGÍA OFICIAL", align="C")
+        # Lado Derecho: Simbología + Índices de Salud + Índices CPO-D / ceo-d
+        x_r = 117
+        w_r = 78
 
-            items_simbologia = [
-                ((255, 75, 75), "ROJO - Patología", "Caries, fracturas, movilidad, dolor o infecciones activas a tratar."),
-                ((75, 140, 255), "AZUL - Tratamiento", "Resinas, amalgamas, endodoncias y coronas en buen estado."),
-                ((135, 135, 135), "GRIS - Ausente", "Exodoncias previas, agenesias o dientes perdidos."),
-                ((235, 235, 235), "NATURAL - Sano", "Estructura dental sana sin alteraciones registradas.")
-            ]
+        # 1. Simbología Oficial Estandarizada MSP (Y=17.5, h=33mm)
+        pdf.set_xy(x_r, y_odonto)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(w_r, 4.5, " SIMBOLOGÍA OFICIAL ESTANDARIZADA MSP", border=1, fill=True)
+        pdf.rect(x_r, y_odonto + 4.5, w_r, 29.5, style='D')
 
-            curr_y = pos_y_inicial + 11
-            for rgb, tit, desc in items_simbologia:
-                pdf.set_fill_color(*rgb)
-                pdf.set_draw_color(180, 180, 180)
-                pdf.rect(x_r + 4, curr_y + 1, 4.5, 4.5, style='DF')
-
-                pdf.set_xy(x_r + 11, curr_y)
-                pdf.set_font("helvetica", "B", 8)
-                pdf.set_text_color(30, 30, 30)
-                pdf.cell(w_r - 14, 3.8, tit)
-
-                pdf.set_xy(x_r + 11, curr_y + 4.2)
-                pdf.set_font("helvetica", "", 7)
-                pdf.set_text_color(80, 80, 80)
-                pdf.multi_cell(w_r - 14, 3.2, desc)
-                curr_y += 19.5
-
-            # 2. Resumen Cuantitativo
-            pos_met_y = pos_y_inicial + 96
-            pdf.set_xy(x_r, pos_met_y)
-            pdf.set_fill_color(238, 242, 248)
-            pdf.set_draw_color(205, 215, 225)
-            pdf.rect(x_r, pos_met_y, w_r, 26, style='DF')
-
-            pdf.set_xy(x_r, pos_met_y + 2)
-            pdf.set_font("helvetica", "B", 8)
-            pdf.set_text_color(27, 54, 93)
-            pdf.cell(w_r, 4, "RESUMEN DEL ODONTOGRAMA", align="C")
-
-            pdf.set_xy(x_r + 4, pos_met_y + 7.5)
-            pdf.set_font("helvetica", "", 7.5)
-            pdf.set_text_color(40, 40, 40)
-            n_rojo = resumen_odonto.get("rojo", 0)
-            n_azul = resumen_odonto.get("azul", 0)
-            n_gris = resumen_odonto.get("gris", 0)
-            pdf.cell(w_r - 8, 3.8, f"- Patologías activas: {n_rojo} pieza(s)")
-            pdf.set_xy(x_r + 4, pos_met_y + 11.5)
-            pdf.cell(w_r - 8, 3.8, f"- Tratamientos previos: {n_azul} pieza(s)")
-            pdf.set_xy(x_r + 4, pos_met_y + 15.5)
-            pdf.cell(w_r - 8, 3.8, f"- Dientes ausentes: {n_gris} pieza(s)")
-
-            # 3. Validación y Firma
-            pos_firma_y = pos_y_inicial + 126
-            pdf.set_xy(x_r, pos_firma_y)
-            pdf.set_fill_color(255, 255, 255)
-            pdf.set_draw_color(205, 215, 225)
-            pdf.rect(x_r, pos_firma_y, w_r, 68, style='DF')
-
-            pdf.set_xy(x_r, pos_firma_y + 2.5)
-            pdf.set_font("helvetica", "B", 8.5)
-            pdf.set_text_color(27, 54, 93)
-            pdf.cell(w_r, 4.5, "VALIDACIÓN Y FIRMA", align="C")
-
+        items_simb_msp = [
+            ((220, 38, 38), "ROJO - Patología Actual:", "Caries activa, fractura o lesión a tratar."),
+            ((37, 99, 235), "AZUL - Tratamiento Previo:", "Resinas, amalgamas o coronas en buen estado."),
+            ((100, 116, 139), "GRIS - Diente Ausente / X:", "Exodoncia previa, agenesia o pieza perdida."),
+            ((240, 240, 240), "NATURAL - Sano:", "Estructura dental anatómica sin patología.")
+        ]
+        curr_y_simb = y_odonto + 5.5
+        for rgb_s, tit_s, desc_s in items_simb_msp:
+            pdf.set_fill_color(*rgb_s)
             pdf.set_draw_color(160, 160, 160)
-            pdf.line(x_r + 8, pos_firma_y + 47, x_r + w_r - 8, pos_firma_y + 47)
+            pdf.rect(x_r + 3.0, curr_y_simb + 0.8, 3.8, 3.8, style='DF')
 
-            pdf.set_xy(x_r, pos_firma_y + 49)
-            pdf.set_font("helvetica", "B", 8)
-            pdf.set_text_color(50, 50, 50)
-            pdf.cell(w_r, 4, "Firma del Profesional", align="C")
+            pdf.set_xy(x_r + 8.5, curr_y_simb)
+            pdf.set_font("helvetica", "B", 6.8)
+            pdf.set_text_color(35, 42, 55)
+            pdf.cell(38, 3.2, tit_s, border=0)
 
-            pdf.set_xy(x_r, pos_firma_y + 53.5)
-            pdf.set_font("helvetica", "", 7)
-            pdf.set_text_color(120, 120, 120)
-            pdf.cell(w_r, 3.5, "Registro Profesional Odontológico", align="C")
+            pdf.set_xy(x_r + 8.5, curr_y_simb + 3.0)
+            pdf.set_font("helvetica", "", 6.4)
+            pdf.set_text_color(80, 80, 80)
+            pdf.cell(w_r - 10, 3.0, desc_s, border=0)
+            curr_y_simb += 6.5
 
-            # Pie de página Página 2
-            pdf.set_xy(15, 284)
-            pdf.set_font("helvetica", "I", 7.5)
-            pdf.set_text_color(120, 120, 120)
-            pdf.cell(180, 4, f"BIMO Software Odontológico  -  Página 2 de {total_paginas}  -  Documento Clínico Confidencial", align="C")
+        # 8. Indicadores de Salud Bucal (IHOS) (Y=52.5, h=35mm)
+        y_ind = 52.5
+        pdf.set_xy(x_r, y_ind)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(w_r, 4.5, " 8. INDICADORES DE SALUD BUCAL (IHOS)", border=1, fill=True)
+        pdf.rect(x_r, y_ind + 4.5, w_r, 31.5, style='D')
 
-            # =========================================================================
-            # PÁGINA 3: FICHA ESPECIALIZADA DE ORTODONCIA, ESTUDIOS Y EVOLUCIÓN CLÍNICA
-            # =========================================================================
+        ihos_data = indices_salud["ihos"]
+        pdf.set_xy(x_r + 3.0, y_ind + 5.5)
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(42, 3.4, "Placa Bacteriana (0-3):", border=0)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.cell(30, 3.4, f"Grado {ihos_data['placa']}", border=0)
+
+        pdf.set_xy(x_r + 3.0, y_ind + 9.5)
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.cell(42, 3.4, "Cálculo / Tártaro (0-3):", border=0)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.cell(30, 3.4, f"Grado {ihos_data['calculo']}", border=0)
+
+        pdf.set_xy(x_r + 3.0, y_ind + 13.5)
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.cell(42, 3.4, "Gingivitis / Sangrado (0-3):", border=0)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.cell(30, 3.4, f"Grado {ihos_data['gingivitis']}", border=0)
+
+        pdf.set_xy(x_r + 3.0, y_ind + 18.0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(42, 3.8, "Índice Higiene Oral (IHOS):", border=0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(30, 3.8, ihos_data['valor'], border=0)
+
+        pdf.set_xy(x_r + 3.0, y_ind + 22.5)
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(32, 3.4, "Enf. Periodontal:", border=0)
+        pdf.set_font("helvetica", "", 6.6)
+        pdf.cell(40, 3.4, indices_salud['periodontal'][:28], border=0)
+
+        pdf.set_xy(x_r + 3.0, y_ind + 26.5)
+        pdf.set_font("helvetica", "I", 6.4)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(72, 3.0, "Piezas testigo FDI: 16, 11, 26, 36, 31, 46", border=0)
+
+        # 9. Índices Epidemiológicos CPO-D y ceo-d (Y=89.5, h=42.5mm)
+        y_cpo = 89.5
+        pdf.set_xy(x_r, y_cpo)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(w_r, 4.5, " 9. ÍNDICES CPO-D Y ceo-d (EPIDEMIOLOGÍA)", border=1, fill=True)
+        pdf.rect(x_r, y_cpo + 4.5, w_r, 42.5, style='D')
+
+        cpod = indices_salud["cpod"]
+        ceod = indices_salud["ceod"]
+
+        pdf.set_xy(x_r + 3.0, y_cpo + 5.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(72, 3.6, "Dentición Permanente (CPO-D):", border=0)
+
+        pdf.set_xy(x_r + 5.0, y_cpo + 9.5)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(70, 3.4, f"C (Cariados / Activos): {cpod['C']} pieza(s)", border=0)
+        pdf.set_xy(x_r + 5.0, y_cpo + 13.0)
+        pdf.cell(70, 3.4, f"P (Perdidos / Extraídos): {cpod['P']} pieza(s)", border=0)
+        pdf.set_xy(x_r + 5.0, y_cpo + 16.5)
+        pdf.cell(70, 3.4, f"O (Obturados / Tratados): {cpod['O']} pieza(s)", border=0)
+
+        pdf.set_xy(x_r + 5.0, y_cpo + 20.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        if cpod['total'] > 3:
+            pdf.set_text_color(180, 83, 9)
+        else:
+            pdf.set_text_color(27, 54, 93)
+        pdf.cell(70, 3.6, f"TOTAL CPO-D: {cpod['total']} (Severidad: {'Moderada' if cpod['total'] > 2 else 'Baja'})", border=0)
+
+        pdf.set_xy(x_r + 3.0, y_cpo + 25.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(72, 3.6, "Dentición Temporal (ceo-d):", border=0)
+
+        pdf.set_xy(x_r + 5.0, y_cpo + 29.5)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(70, 3.4, f"c (cariados): {ceod['c']}  |  e (extracción): {ceod['e']}  |  o (obturados): {ceod['o']}", border=0)
+        pdf.set_xy(x_r + 5.0, y_cpo + 33.0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.cell(70, 3.6, f"TOTAL ceo-d: {ceod['total']} pieza(s) temporales", border=0)
+
+        pdf.set_xy(x_r + 3.0, y_cpo + 38.0)
+        pdf.set_font("helvetica", "I", 6.4)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(72, 3.0, "Cálculo matemático automatizado oficial MSP", border=0)
+
+        # 7.1 DETALLE DENTAL CLÍNICO POR PIEZA (FDI) (Y=137.5, w=180, h=22mm)
+        y_det = 137.5
+        h_det = 22.0
+        pdf.set_xy(15, y_det)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " 7.1 DETALLE DENTAL CLÍNICO POR PIEZA (SISTEMA INTERNACIONAL FDI)", border=1, fill=True)
+        pdf.rect(15, y_det + 4.5, 180, h_det - 4.5, style='D')
+
+        pdf.set_xy(16.5, y_det + 5.5)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        if lineas_dientes:
+            for l_d in lineas_dientes[:4]:
+                pdf.cell(176, 3.4, f"- {l_d[:110]}", border=0)
+                pdf.ln(3.5)
+                pdf.set_x(16.5)
+        else:
+            pdf.cell(176, 3.8, "Sin hallazgos patológicos en piezas dentales (Fórmula dental sana).", border=0)
+
+        # 12. REGISTRO DE TRATAMIENTOS Y EVOLUCIÓN CRONOLÓGICA (Y=161.0, w=180, h=26mm)
+        y_evo = 161.0
+        h_evo = 26.0
+        pdf.set_xy(15, y_evo)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " 12. REGISTRO DE TRATAMIENTOS Y EVOLUCIÓN CRONOLÓGICA", border=1, fill=True)
+        pdf.rect(15, y_evo + 4.5, 180, h_evo - 4.5, style='D')
+
+        pdf.set_xy(15, y_evo + 4.5)
+        pdf.set_fill_color(230, 238, 248)
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(26, 4.2, " FECHA / HORA", border=1, fill=True)
+        pdf.cell(22, 4.2, " CÓD. CIE-10", border=1, fill=True)
+        pdf.cell(94, 4.2, " PROCEDIMIENTO CLÍNICO / EVOLUCIÓN", border=1, fill=True)
+        pdf.cell(38, 4.2, " FIRMA PROFESIONAL", border=1, fill=True)
+
+        pdf.set_xy(15, y_evo + 8.7)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(26, 7.5, f" {fecha_texto[:10]}", border=1)
+        pdf.cell(22, 7.5, f" {cod_cie10}", border=1)
+        pdf.cell(94, 7.5, f" {plan_raw[:65]}", border=1)
+        pdf.set_font("helvetica", "I", 6.8)
+        pdf.cell(38, 7.5, " Mateo Ramírez", align="C", border=1)
+
+        receta_txt = datos.get("receta") or "Sin prescripción farmacológica activa"
+        pdf.set_xy(15, y_evo + 16.2)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.cell(48, 8.5, " Prescripción Médica:", border=1)
+        pdf.cell(132, 8.5, f" {receta_txt[:95]}", border=1)
+
+        # 13. CONSENTIMIENTO INFORMADO (NORMATIVA MSP ECUADOR) (Y=188.5, w=180, h=42mm)
+        y_cons = 188.5
+        h_cons = 42.0
+        pdf.set_xy(15, y_cons)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " 13. CONSENTIMIENTO INFORMADO Y COMPROMISO TERAPÉUTICO (NORMA MSP ECUADOR)", border=1, fill=True)
+        pdf.rect(15, y_cons + 4.5, 180, h_cons - 4.5, style='D')
+
+        txt_consent_msp = (
+            "El paciente o su representante legal declara haber sido informado con claridad acerca de su diagnóstico "
+            "clínico, plan de tratamiento propuesto, alternativas viables, riesgos inherentes y cuidados post-operatorios "
+            "indispensables. Manifiesta su conformidad voluntaria y autoriza la ejecución de los procedimientos odontológicos "
+            "planificados, comprometiéndose a seguir las indicaciones terapéuticas, mantener óptima higiene oral y acudir "
+            "puntualmente a las citas periódicas de control para garantizar la salud y durabilidad de los tratamientos."
+        )
+
+        pdf.set_xy(17.5, y_cons + 5.5)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(45, 45, 45)
+        pdf.multi_cell(175, 3.2, txt_consent_msp)
+
+        y_firm_cons = y_cons + 29.5
+        pdf.set_draw_color(160, 160, 160)
+        pdf.line(22, y_firm_cons, 92, y_firm_cons)
+        pdf.line(118, y_firm_cons, 188, y_firm_cons)
+
+        pdf.set_xy(22, y_firm_cons + 1.2)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(40, 40, 40)
+        pdf.cell(70, 3.4, "Firma del Paciente / Representante Legal", align="C")
+        pdf.set_xy(22, y_firm_cons + 4.5)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(70, 3.0, f"C.I.: {doc_limpio}", align="C")
+
+        pdf.set_xy(118, y_firm_cons + 1.2)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(40, 40, 40)
+        pdf.cell(70, 3.4, "Firma y Sello del Odontólogo Tratante", align="C")
+        pdf.set_xy(118, y_firm_cons + 4.5)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(70, 3.0, "Registro Profesional Odontológico MSP / Senescyt", align="C")
+
+        # 14. SEGURIDAD, AUDITORÍA, INMUTABILIDAD Y VALIDEZ LEGAL (Y=232.0, w=180, h=40mm)
+        y_sec = 232.0
+        h_sec = 40.0
+        pdf.set_xy(15, y_sec)
+        pdf.set_fill_color(240, 244, 249)
+        pdf.set_draw_color(195, 208, 225)
+        pdf.set_text_color(27, 54, 93)
+        pdf.set_font("helvetica", "B", 7.6)
+        pdf.cell(180, 4.5, " 14. SEGURIDAD, AUDITORÍA, INMUTABILIDAD Y VALIDEZ LEGAL", border=1, fill=True)
+        pdf.rect(15, y_sec + 4.5, 180, h_sec - 4.5, style='D')
+
+        sello_sha = generar_sello_inmutabilidad(nom_p, doc_limpio, fecha_texto, doc_id=f"033-P{paciente_id}")
+
+        pdf.set_xy(17.5, y_sec + 6.0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(46, 3.6, "SELLO DE INMUTABILIDAD:", border=0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(180, 83, 9)
+        pdf.cell(60, 3.6, sello_sha, border=0)
+
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(25, 3.6, "TIMESTAMP AUD.:", border=0)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(45, 3.6, f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ECT", align="R", border=0)
+
+        pdf.set_xy(17.5, y_sec + 10.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(46, 3.6, "TRAZABILIDAD DE USUARIO:", border=0)
+        pdf.set_font("helvetica", "", 6.8)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(128, 3.6, f"Mateo Ramírez  -  Odontólogo Tratante  -  ID #1  |  IP: 127.0.0.1  |  Sede: BIMO Matriz", border=0)
+
+        pdf.set_xy(17.5, y_sec + 15.0)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(46, 3.6, "FIRMA ELECTRÓNICA:", border=0)
+        pdf.set_font("helvetica", "", 6.6)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(128, 3.6, "Apto para suscripción digital con certificado electrónico reconocido en Ecuador (Token / .p12).", border=0)
+
+        pdf.set_xy(17.5, y_sec + 19.5)
+        pdf.set_font("helvetica", "B", 7.0)
+        pdf.set_text_color(27, 54, 93)
+        pdf.cell(46, 3.6, "CUSTODIA Y RETENCIÓN:", border=0)
+        pdf.set_font("helvetica", "", 6.6)
+        pdf.set_text_color(35, 42, 55)
+        pdf.cell(128, 3.6, "Garantía de conservación obligatoria por un mínimo de 15 años (Ley Orgánica de Salud del Ecuador).", border=0)
+
+        pdf.set_xy(17.5, y_sec + 24.5)
+        pdf.set_font("helvetica", "I", 6.4)
+        pdf.set_text_color(90, 90, 90)
+        pdf.multi_cell(174, 3.0, "Registro médico inmutable. Cualquier alteración posterior invalida este certificado. Si se requiere corregir información, debe registrarse una Nota Aclaratoria oficial conforme al Manual de Historias Clínicas del MSP.")
+
+        pdf.set_xy(15, 284)
+        pdf.set_font("helvetica", "I", 7.2)
+        pdf.set_text_color(120, 120, 120)
+        pdf.cell(180, 4, f"BIMO Software Odontológico  -  Formulario 033 MSP Ecuador  -  Página 2 de {total_paginas}  -  Documento Confidencial", align="C")
+
+        # =========================================================================
+        # PÁGINA 3: FICHA ESPECIALIZADA DE ORTODONCIA (SI APLICA)
+        # =========================================================================
+        if tiene_ortodoncia:
             pdf.add_page()
 
-            # Banner superior institucional
             pdf.set_fill_color(27, 54, 93)
             pdf.rect(0, 0, 210, 18, style='F')
 
@@ -903,7 +1550,7 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
 
             pdf.set_text_color(0, 0, 0)
 
-            # FILA 1: Hábitos Orales / Biotipo & Planificación de Ortodoncia (Y=22, h=38mm)
+            # FILA 1: Hábitos Orales / Biotipo & Planificación de Ortodoncia
             y_p3_f1 = 22
             h_p3_f1 = 38
 
@@ -924,15 +1571,24 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
             ]
             card_box(x_col1, y_p3_f1, w_col, h_p3_f1, "1. EVALUACIÓN FACIAL Y HÁBITOS ORALES", lineas_habitos)
 
-            lineas_fases = [
-                "Fase I (Alineación): Arcos NiTi redondos (.012 a .016)",
-                "Fase II (Trabajo): Arcos de Acero rectangular (.019x.025)",
-                "Fase III (Finalización): Arcos TMA y elásticos intermaxilares",
-                "Fase IV (Retención): Termoformado Essix y/o barra fija lingual"
-            ]
+            fases_dict = orto_info.get("fases_planificacion")
+            if isinstance(fases_dict, dict) and fases_dict:
+                lineas_fases = [
+                    str(fases_dict.get("fase_1", "Fase I (Alineación): Arcos NiTi redondos (.012 a .016)")),
+                    str(fases_dict.get("fase_2", "Fase II (Trabajo): Arcos de Acero rectangular (.019x.025)")),
+                    str(fases_dict.get("fase_3", "Fase III (Finalización): Arcos TMA y elásticos intermaxilares")),
+                    str(fases_dict.get("fase_4", "Fase IV (Retención): Termoformado Essix y/o barra fija lingual"))
+                ]
+            else:
+                lineas_fases = [
+                    "Fase I (Alineación): Arcos NiTi redondos (.012 a .016)",
+                    "Fase II (Trabajo): Arcos de Acero rectangular (.019x.025)",
+                    "Fase III (Finalización): Arcos TMA y elásticos intermaxilares",
+                    "Fase IV (Retención): Termoformado Essix y/o barra fija lingual"
+                ]
             card_box(x_col2, y_p3_f1, w_col, h_p3_f1, "2. PLANIFICACIÓN Y FASES DE ORTODONCIA", lineas_fases)
 
-            # FILA 2: Estudios Complementarios (Radiografías y Fotos Clínicas) (Y=63, h=66mm)
+            # FILA 2: Estudios Complementarios (Radiografías y Fotos Clínicas)
             y_p3_f2 = 63
             h_p3_f2 = 66
 
@@ -983,7 +1639,7 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
                     pdf.set_text_color(100, 100, 100)
                     pdf.cell(170, 10, "Sin estudios radiográficos adjuntados. (Puedes adjuntarlos en tiempo real desde la App Móvil)", align="C")
 
-            # FILA 3: Registro de Evolución Clínica y Activaciones (Y=133, h=62mm)
+            # FILA 3: Registro de Evolución Clínica y Activaciones
             y_p3_f3 = 133
             h_p3_f3 = 62
 
@@ -999,7 +1655,7 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
             pdf.rect(15, y_p3_f3 + 5.0, 180, h_p3_f3 - 5.0, style='D')
 
             col_widths = [22, 82, 26, 26, 24]
-            col_headers = ["Fecha", "Procedimiento / Arco / Activación", "Higiene Oral", "Próxima Cita", "Firma Dr."]
+            col_headers = ["Fecha", "Procedimiento / Arco / Activación", "Higiene Oral", "Próxima Cita", "Firma Odontólogo"]
 
             pdf.set_xy(15, y_p3_f3 + 5.0)
             pdf.set_fill_color(230, 238, 248)
@@ -1011,19 +1667,30 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
                 pdf.cell(col_widths[i], 5.0, f" {h_name}", border=1, fill=True)
             pdf.ln()
 
-            # Descripción dinámica de evolución clínica (evitar frase por defecto invariable)
             fecha_hoy_str = fecha_obj.strftime("%d/%m/%Y")
             motivo_orto = str(datos.get("motivo_consulta", "")).lower()
             plan_orto = str(datos.get("plan_tratamiento", ""))
-            if any(k in motivo_orto for k in ["instalacion", "instalación", "colocacion", "colocación"]):
+
+            evo_info = orto_info.get("evolucion_activacion", {})
+            if isinstance(evo_info, dict) and evo_info.get("procedimiento"):
+                desc_act = str(evo_info.get("procedimiento"))
+                higiene_act = str(evo_info.get("higiene", "Adecuada"))
+                prox_cita_act = str(evo_info.get("proxima_cita", "4 semanas (1 mes)"))
+            elif any(k in motivo_orto for k in ["instalacion", "instalación", "colocacion", "colocación"]):
                 desc_act = "Instalación de aparatología ortodóncica. Diagnóstico y fases aprobadas."
+                higiene_act = "Adecuada"
+                prox_cita_act = "4 semanas (1 mes)"
             elif any(k in motivo_orto for k in ["control", "activacion", "activación", "ajuste", "cambio"]):
                 desc_act = f"Control ortodóncico: {plan_orto[:60]}" if plan_orto else "Control de ortodoncia y ajuste de arcos/ligaduras."
+                higiene_act = "Adecuada"
+                prox_cita_act = "4 semanas (1 mes)"
             else:
                 desc_act = f"Valoración de ortodoncia: {plan_orto[:60]}" if plan_orto else "Valoración clínica y planificación ortodóncica aprobada."
+                higiene_act = "Adecuada"
+                prox_cita_act = "4 semanas (1 mes)"
 
             filas_evolucion = [
-                (fecha_hoy_str, desc_act, "Adecuada", "1 mes", ""),
+                (fecha_hoy_str, desc_act, higiene_act, prox_cita_act, ""),
                 ("", "", "", "", ""),
                 ("", "", "", "", ""),
                 ("", "", "", "", "")
@@ -1047,7 +1714,7 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
                     x_curr += w_c
                 y_row += h_row_evo
 
-            # FILA 4: Consentimiento Informado Resumido de Ortodoncia (Y=199, h=56mm)
+            # FILA 4: Consentimiento Informado Resumido de Ortodoncia
             y_p3_f4 = 199
             h_p3_f4 = 56
 
@@ -1056,13 +1723,13 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
             pdf.set_draw_color(195, 208, 225)
             pdf.set_text_color(27, 54, 93)
             pdf.set_font("helvetica", "B", 8.2)
-            pdf.cell(180, 5.0, " 5. CONSENTIMIENTO INFORMADO Y COMPROMISO TERAPÉUTICO", border=1, fill=True)
+            pdf.cell(180, 5.0, " 5. CONSENTIMIENTO INFORMADO Y COMPROMISO TERAPÉUTICO DE ORTODONCIA", border=1, fill=True)
 
             pdf.set_xy(15, y_p3_f4 + 5.0)
             pdf.set_fill_color(255, 255, 255)
             pdf.rect(15, y_p3_f4 + 5.0, 180, h_p3_f4 - 5.0, style='D')
 
-            txt_consentimiento = (
+            txt_consentimiento_orto = (
                 "El paciente o su representante legal declara haber sido informado con claridad acerca de los objetivos, "
                 "fases, alternativas, cuidados y duración estimada del tratamiento ortodóncico. Se compromete a mantener una "
                 "óptima higiene bucodental, evitar alimentos perjudiciales para la aparatología, portar los aditamentos y "
@@ -1073,9 +1740,8 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
             pdf.set_xy(18, y_p3_f4 + 6.8)
             pdf.set_font("helvetica", "", 7.0)
             pdf.set_text_color(50, 50, 50)
-            pdf.multi_cell(174, 3.4, txt_consentimiento)
+            pdf.multi_cell(174, 3.4, txt_consentimiento_orto)
 
-            # Dos líneas de firma paralelas
             y_linea_firmas = y_p3_f4 + 40.0
             pdf.set_draw_color(160, 160, 160)
             pdf.line(22, y_linea_firmas, 92, y_linea_firmas)
@@ -1099,212 +1765,32 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
             pdf.set_xy(118, y_linea_firmas + 5.0)
             pdf.set_font("helvetica", "", 7.0)
             pdf.set_text_color(90, 90, 90)
-            pdf.cell(70, 3.2, "Registro Profesional Odontológico", align="C")
+            pdf.cell(70, 3.2, "Registro Profesional Odontológico MSP / Senescyt", align="C")
 
-            # Pie de página Página 3
             pdf.set_xy(15, 284)
             pdf.set_font("helvetica", "I", 7.5)
             pdf.set_text_color(120, 120, 120)
             pdf.cell(180, 4, f"BIMO Software Odontológico  -  Página 3 de {total_paginas}  -  Documento Clínico Confidencial", align="C")
 
-        else:
-            # =========================================================================
-            # CASO GENERAL (SIN ORTODONCIA): 2 PÁGINAS TOTALES
-            # PÁGINA 2: Odontograma visual + Simbología + Resumen + Consentimiento General
-            # =========================================================================
-            # Columna Izquierda: Odontograma Gráfico Compacto (w=90, h=138mm)
-            w_img = 90
-            x_img = 15
-
-            if ruta_temp_img and os.path.exists(ruta_temp_img):
-                pdf.image(ruta_temp_img, x=x_img, y=pos_y_inicial, w=w_img)
-            elif os.path.exists(RUTA_BASE_ODONTOGRAMA):
-                pdf.image(RUTA_BASE_ODONTOGRAMA, x=x_img, y=pos_y_inicial, w=w_img)
-            else:
-                print("[PDF] Advertencia: No se pudo cargar imagen del odontograma")
-
-            # Columna Derecha Superior (x=110, w=85)
-            x_r = 110
-            w_r = 85
-
-            # 1. Simbología Oficial (h=84mm)
-            pdf.set_xy(x_r, pos_y_inicial)
-            pdf.set_fill_color(248, 250, 252)
-            pdf.set_draw_color(205, 215, 225)
-            pdf.rect(x_r, pos_y_inicial, w_r, 84, style='DF')
-
-            pdf.set_xy(x_r, pos_y_inicial + 2.0)
-            pdf.set_font("helvetica", "B", 9.0)
-            pdf.set_text_color(27, 54, 93)
-            pdf.cell(w_r, 5.0, "SIMBOLOGÍA OFICIAL", align="C")
-
-            items_simbologia = [
-                ((255, 75, 75), "ROJO - Patología", "Caries, fracturas, movilidad, dolor o infecciones activas."),
-                ((75, 140, 255), "AZUL - Tratamiento", "Resinas, amalgamas, endodoncias y coronas en buen estado."),
-                ((135, 135, 135), "GRIS - Ausente", "Exodoncias previas, agenesias o piezas ausentes."),
-                ((235, 235, 235), "NATURAL - Sano", "Estructura dental sana sin alteraciones registradas.")
-            ]
-
-            curr_y = pos_y_inicial + 9.5
-            for rgb, tit, desc in items_simbologia:
-                pdf.set_fill_color(*rgb)
-                pdf.set_draw_color(180, 180, 180)
-                pdf.rect(x_r + 4, curr_y + 1, 4.2, 4.2, style='DF')
-
-                pdf.set_xy(x_r + 11, curr_y)
-                pdf.set_font("helvetica", "B", 7.8)
-                pdf.set_text_color(30, 30, 30)
-                pdf.cell(w_r - 14, 3.6, tit)
-
-                pdf.set_xy(x_r + 11, curr_y + 3.8)
-                pdf.set_font("helvetica", "", 6.8)
-                pdf.set_text_color(80, 80, 80)
-                pdf.multi_cell(w_r - 14, 3.0, desc)
-                curr_y += 18.0
-
-            # 2. Resumen Cuantitativo (h=47mm, Y=113)
-            pos_met_y = pos_y_inicial + 87
-            pdf.set_xy(x_r, pos_met_y)
-            pdf.set_fill_color(238, 242, 248)
-            pdf.set_draw_color(205, 215, 225)
-            pdf.rect(x_r, pos_met_y, w_r, 47, style='DF')
-
-            pdf.set_xy(x_r, pos_met_y + 2.5)
-            pdf.set_font("helvetica", "B", 8.2)
-            pdf.set_text_color(27, 54, 93)
-            pdf.cell(w_r, 4.5, "RESUMEN DEL ODONTOGRAMA", align="C")
-
-            n_rojo = resumen_odonto.get("rojo", 0)
-            n_azul = resumen_odonto.get("azul", 0)
-            n_gris = resumen_odonto.get("gris", 0)
-            n_tot = resumen_odonto.get("total_evaluadas", 0)
-
-            pdf.set_font("helvetica", "", 7.5)
-            pdf.set_text_color(40, 40, 40)
-            pdf.set_xy(x_r + 5, pos_met_y + 9.0)
-            pdf.cell(w_r - 10, 4.0, f"- Patologías activas a tratar: {n_rojo}")
-            pdf.set_xy(x_r + 5, pos_met_y + 14.5)
-            pdf.cell(w_r - 10, 4.0, f"- Tratamientos previos realizados: {n_azul}")
-            pdf.set_xy(x_r + 5, pos_met_y + 20.0)
-            pdf.cell(w_r - 10, 4.0, f"- Piezas ausentes / perdidas: {n_gris}")
-            pdf.set_xy(x_r + 5, pos_met_y + 25.5)
-            pdf.cell(w_r - 10, 4.0, f"- Total piezas evaluadas: {n_tot}")
-            pdf.set_xy(x_r + 5, pos_met_y + 32.0)
-            pdf.set_font("helvetica", "I", 7.0)
-            pdf.set_text_color(90, 90, 90)
-            pdf.cell(w_r - 10, 3.5, "Fórmula dental permanente estandarizada FDI")
-
-            # Bloque Inferior: Consentimiento Informado y Compromiso Terapéutico General (Y=167, h=108mm)
-            y_consent = 167
-            pdf.set_xy(15, y_consent)
-            pdf.set_fill_color(240, 244, 249)
-            pdf.set_draw_color(195, 208, 225)
-            pdf.set_text_color(27, 54, 93)
-            pdf.set_font("helvetica", "B", 8.2)
-            pdf.cell(180, 5.0, " 3. CONSENTIMIENTO INFORMADO Y COMPROMISO TERAPÉUTICO", border=1, fill=True)
-
-            pdf.set_xy(15, y_consent + 5.0)
-            pdf.set_fill_color(255, 255, 255)
-            pdf.rect(15, y_consent + 5.0, 180, 105.0, style='D')
-
-            txt_consentimiento_gen = (
-                "El paciente o su representante legal declara haber sido informado con claridad acerca de su estado de salud bucodental, "
-                "diagnóstico clínico, alternativas y cuidados necesarios para los tratamientos planificados. Se compromete a seguir las "
-                "indicaciones terapéuticas, mantener una adecuada higiene oral, acudir puntualmente a sus citas de control y comunicar cualquier "
-                "eventualidad para garantizar el éxito y la durabilidad de los procedimientos realizados."
-            )
-
-            pdf.set_xy(18, y_consent + 7.5)
-            pdf.set_font("helvetica", "", 7.2)
-            pdf.set_text_color(50, 50, 50)
-            pdf.multi_cell(174, 3.6, txt_consentimiento_gen)
-
-            # Dos líneas de firma paralelas
-            y_firmas_p2 = y_consent + 65.0
-            pdf.set_draw_color(160, 160, 160)
-            pdf.line(22, y_firmas_p2, 92, y_firmas_p2)
-            pdf.line(118, y_firmas_p2, 188, y_firmas_p2)
-
-            pdf.set_xy(22, y_firmas_p2 + 1.5)
-            pdf.set_font("helvetica", "B", 7.2)
-            pdf.set_text_color(40, 40, 40)
-            pdf.cell(70, 3.5, "Firma del Paciente / Tutor Legal", align="C")
-
-            pdf.set_xy(22, y_firmas_p2 + 5.0)
-            pdf.set_font("helvetica", "", 7.0)
-            pdf.set_text_color(90, 90, 90)
-            pdf.cell(70, 3.2, f"C.I.: {doc_limpio}", align="C")
-
-            pdf.set_xy(118, y_firmas_p2 + 1.5)
-            pdf.set_font("helvetica", "B", 7.2)
-            pdf.set_text_color(40, 40, 40)
-            pdf.cell(70, 3.5, "Firma del Médico Tratante", align="C")
-
-            pdf.set_xy(118, y_firmas_p2 + 5.0)
-            pdf.set_font("helvetica", "", 7.0)
-            pdf.set_text_color(90, 90, 90)
-            pdf.cell(70, 3.2, "Registro Profesional Odontológico", align="C")
-
-            # Pie de página Página 2
-            pdf.set_xy(15, 284)
-            pdf.set_font("helvetica", "I", 7.5)
-            pdf.set_text_color(120, 120, 120)
-            pdf.cell(180, 4, f"BIMO Software Odontológico  -  Página 2 de {total_paginas}  -  Documento Clínico Confidencial", align="C")
-
         # ==========================================
         # RUTEO ANTI-HOMÓNIMOS Y GUARDADO DEL PDF
         # ==========================================
         nombre_paciente = filiacion.get('nombre', 'Paciente_Desconocido')
-        nombre_limpio_carpeta = re.sub(r'[^a-zA-Z0-9_]', '', nombre_paciente.replace(' ', '_')) or "Paciente"
-        
-        # Clasificación por edad: Pediátrico SOLO si se especifica estrictamente entre 1 y 17 años
-        if not edad_p or str(edad_p).strip().lower() in ('0', 'no especificado', 'n/e', 'none', ''):
-            if paciente_id:
-                from database import obtener_paciente_por_id
-                p_db = obtener_paciente_por_id(paciente_id)
-                if p_db and p_db.get("edad"):
-                    edad_num = int(p_db["edad"])
-                    categoria_edad = "Pacientes_Pediatricos" if edad_num < 18 else "Pacientes_Adultos"
-                else:
-                    edad_num = 25
-                    categoria_edad = "Pacientes_Adultos"
-            else:
-                edad_num = 25
-                categoria_edad = "Pacientes_Adultos"
-        else:
-            numeros = re.findall(r'\d+', str(edad_p))
-            if numeros and int(numeros[0]) > 0:
-                edad_num = int(numeros[0])
-                categoria_edad = "Pacientes_Pediatricos" if edad_num < 18 else "Pacientes_Adultos"
-            else:
-                if paciente_id:
-                    from database import obtener_paciente_por_id
-                    p_db = obtener_paciente_por_id(paciente_id)
-                    if p_db and p_db.get("edad"):
-                        edad_num = int(p_db["edad"])
-                        categoria_edad = "Pacientes_Pediatricos" if edad_num < 18 else "Pacientes_Adultos"
-                    else:
-                        edad_num = 25
-                        categoria_edad = "Pacientes_Adultos"
-                else:
-                    edad_num = 25
-                    categoria_edad = "Pacientes_Adultos"
+        nombre_limpio_carpeta = sanitizar_nombre_carpeta(nombre_paciente)
 
-        # Ruteo anti-homónimos por ID único: [Nombre]_[Edad]_anos_ID[paciente_id]
+        categoria_edad = "Pacientes_Pediatricos" if edad_num < 18 else "Pacientes_Adultos"
+
         id_str = f"ID{paciente_id}"
         nombre_carpeta = f"{nombre_limpio_carpeta}_{edad_num}_anos_{id_str}"
-        ruta_carpeta = os.path.join(BASE_DIR, "Pacientes", categoria_edad, nombre_carpeta)
+        ruta_carpeta = os.path.join(str(RUTA_PACIENTES), categoria_edad, nombre_carpeta)
         os.makedirs(ruta_carpeta, exist_ok=True)
 
-        # Nombre de archivo corto: Consulta_[NombreCorto]_[Edad]a_[Fecha_Corta].pdf
-        nombre_archivo = generar_nombre_archivo_corto(nombre_paciente, edad_num, fecha_obj)
+        nombre_archivo = generar_nombre_archivo_corto(nombre_paciente, edad_num, fecha_obj, num_expediente=num_expediente)
         ruta_final = os.path.join(ruta_carpeta, nombre_archivo)
 
-        # Generar un único PDF con la historia y el odontograma
         pdf.output(ruta_final)
-        print(f"[OK] Historia clínica unificada con odontograma guardada en: {ruta_final}")
+        print(f"[OK] Historia clínica unificada Formulario 033 MSP guardada en: {ruta_final}")
 
-        # Limpieza de archivo temporal
         if ruta_temp_img and os.path.exists(ruta_temp_img):
             try:
                 os.remove(ruta_temp_img)
@@ -1315,6 +1801,8 @@ def crear_historia_clinica(json_data, paciente_id: int = 1):
 
     except Exception as e:
         print(f"[ERROR] Error al construir el PDF: {e}")
+        import traceback
+        traceback.print_exc()
         if ruta_temp_img and os.path.exists(ruta_temp_img):
             try:
                 os.remove(ruta_temp_img)

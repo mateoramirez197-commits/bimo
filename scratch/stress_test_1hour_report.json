@@ -1,0 +1,347 @@
+{
+  "inicio": "2026-09-17T15:47:22.441479",
+  "duracion_programada_segundos": 3600,
+  "iteraciones": [
+    {
+      "iteracion": 1,
+      "timestamp": "2026-09-17T15:47:22.445337",
+      "paciente": "Elena Patricia Quinatoa Sisa",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 11.85,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Adultos\\Elena_Patricia_Quinatoa_Sisa_34_anos_ID181\\Consulta_Exp1_ElenaS_34a_17-09-2026.pdf",
+          "tamano_kb": 2676.1
+        },
+        "preview": {
+          "duracion_seg": 0.24,
+          "paginas": 2
+        },
+        "cita": {
+          "duracion_seg": 0.05,
+          "id": 230
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593998123456&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 639.84,
+        "cpu_percent": 0.0,
+        "hilos_activos": 49,
+        "duracion_ciclo_seg": 17.47
+      }
+    },
+    {
+      "iteracion": 2,
+      "timestamp": "2026-09-17T15:55:09.952387",
+      "paciente": "Mateo Sebastián Tituaña Morales",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 6.58,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Pediatricos\\Mateo_Sebastian_Tituana_Morales_9_anos_ID182\\Consulta_Exp1_MateoM_9a_17-09-2026.pdf",
+          "tamano_kb": 2683.8
+        },
+        "preview": {
+          "duracion_seg": 0.26,
+          "paginas": 2
+        },
+        "cita": {
+          "duracion_seg": 0.04,
+          "id": 232
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593987654321&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 647.75,
+        "cpu_percent": 0.0,
+        "hilos_activos": 46,
+        "duracion_ciclo_seg": 9.52
+      }
+    },
+    {
+      "iteracion": 3,
+      "timestamp": "2026-09-17T16:02:49.502380",
+      "paciente": "Gladys Yolanda Guasgua Farinango",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 4.56,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Adultos\\Gladys_Yolanda_Guasgua_Farinango_58_anos_ID183\\Consulta_Exp1_GladysF_58a_17-09-2026.pdf",
+          "tamano_kb": 2688.4
+        },
+        "preview": {
+          "duracion_seg": 0.26,
+          "paginas": 2
+        },
+        "cita": {
+          "duracion_seg": 0.04,
+          "id": 234
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593991238901&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 651.55,
+        "cpu_percent": 0.0,
+        "hilos_activos": 45,
+        "duracion_ciclo_seg": 7.37
+      }
+    },
+    {
+      "iteracion": 4,
+      "timestamp": "2026-09-17T16:10:26.984809",
+      "paciente": "Javier Alejandro Chushig Lema",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 7.07,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Adultos\\Javier_Alejandro_Chushig_Lema_27_anos_ID184\\Consulta_Exp1_JavierL_27a_17-09-2026.pdf",
+          "tamano_kb": 2670.9
+        },
+        "preview": {
+          "duracion_seg": 0.25,
+          "paginas": 2
+        },
+        "cita": {
+          "duracion_seg": 0.04,
+          "id": 236
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593984567890&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 658.05,
+        "cpu_percent": 0.0,
+        "hilos_activos": 46,
+        "duracion_ciclo_seg": 9.85
+      }
+    },
+    {
+      "iteracion": 5,
+      "timestamp": "2026-09-17T16:18:06.874222",
+      "paciente": "Carmen Amparo Pillajo Yamberla",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 6.83,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Adultos\\Carmen_Amparo_Pillajo_Yamberla_42_anos_ID185\\Consulta_Exp1_CarmenY_42a_17-09-2026.pdf",
+          "tamano_kb": 2666.5
+        },
+        "preview": {
+          "duracion_seg": 0.25,
+          "paginas": 2
+        },
+        "cita": {
+          "duracion_seg": 0.05,
+          "id": 238
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593993456789&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 658.73,
+        "cpu_percent": 0.0,
+        "hilos_activos": 46,
+        "duracion_ciclo_seg": 9.62
+      }
+    },
+    {
+      "iteracion": 6,
+      "timestamp": "2026-09-17T16:25:46.520879",
+      "paciente": "Andrés Felipe Toapanta Imbaquingo",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 5.63,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Adultos\\Andres_Felipe_Toapanta_Imbaquingo_21_anos_ID186\\Consulta_Exp1_AndresI_21a_17-09-2026.pdf",
+          "tamano_kb": 2717.3
+        },
+        "preview": {
+          "duracion_seg": 0.31,
+          "paginas": 3
+        },
+        "cita": {
+          "duracion_seg": 0.05,
+          "id": 240
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593981122334&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 663.73,
+        "cpu_percent": 0.0,
+        "hilos_activos": 46,
+        "duracion_ciclo_seg": 8.48
+      }
+    },
+    {
+      "iteracion": 7,
+      "timestamp": "2026-09-17T16:33:25.033079",
+      "paciente": "Rosa Mercedes Cachimuel Simbaña",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 5.64,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Adultos\\Rosa_Mercedes_Cachimuel_Simbana_64_anos_ID187\\Consulta_Exp1_RosaS_64a_17-09-2026.pdf",
+          "tamano_kb": 2688.4
+        },
+        "preview": {
+          "duracion_seg": 0.24,
+          "paginas": 2
+        },
+        "cita": {
+          "duracion_seg": 0.05,
+          "id": 242
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593995544332&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 667.23,
+        "cpu_percent": 0.0,
+        "hilos_activos": 46,
+        "duracion_ciclo_seg": 8.43
+      }
+    },
+    {
+      "iteracion": 8,
+      "timestamp": "2026-09-17T16:41:03.493019",
+      "paciente": "Elena Patricia Quinatoa Sisa",
+      "pasos": {
+        "procesar_ia": {
+          "duracion_seg": 5.05,
+          "status": "ok"
+        },
+        "pdf": {
+          "ruta": "C:\\Users\\Mateo\\Desktop\\Bimo_Project\\Pacientes\\Pacientes_Adultos\\Elena_Patricia_Quinatoa_Sisa_34_anos_ID181\\Consulta_Exp1_ElenaS_34a_17-09-2026.pdf",
+          "tamano_kb": 2676.1
+        },
+        "preview": {
+          "duracion_seg": 0.25,
+          "paginas": 2
+        },
+        "cita": {
+          "duracion_seg": 0.04,
+          "id": 244
+        },
+        "whatsapp": {
+          "url": "https://api.whatsapp.com/send?phone=593998123456&text=%C2%A1"
+        },
+        "qr": {
+          "duracion_seg": 0.01,
+          "url": "https://192.168.18.11:8765/"
+        },
+        "audio_externo": {
+          "status": "ok"
+        },
+        "total_pdfs_visibles": 50,
+        "db_integrity": "ok"
+      },
+      "telemetria": {
+        "ram_rss_mb": 671.46,
+        "cpu_percent": 0.0,
+        "hilos_activos": 46,
+        "duracion_ciclo_seg": 7.84
+      }
+    }
+  ],
+  "resumen": {
+    "total_pacientes_procesados": 8,
+    "total_pdfs_generados": 8,
+    "total_citas_agendadas": 8,
+    "total_recordatorios_whatsapp": 8,
+    "pruebas_servidor_movil_exitosas": 0,
+    "pruebas_qr_exitosas": 8,
+    "errores_totales": 0,
+    "ram_maxima_mb": 671.46,
+    "estado_db_final": "ok",
+    "duracion_total_real_seg": 3603.9
+  },
+  "fin": "2026-09-17T16:47:26.373917"
+}

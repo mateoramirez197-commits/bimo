@@ -6,15 +6,75 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 from license_manager import obtener_hwid_equipo
 
-# Directorio raíz del proyecto
-BASE_DIR = Path(__file__).resolve().parent
+import sys
 
-# Archivos del sistema
-RUTA_BASE_ODONTOGRAMA = BASE_DIR / "base_odontograma.png"
-RUTA_DB = BASE_DIR / "bimo.db"
-RUTA_PACIENTES = BASE_DIR / "Pacientes"
-RUTA_VAULT = BASE_DIR / "bimo.vault"
-RUTA_CLINICA_CONF = BASE_DIR / "clinica.json"
+# Directorio raíz del proyecto y directorio de datos clínicos persistentes
+dev_project_dir = Path.home() / "Desktop" / "Bimo_Project"
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+    # Si se ejecuta dentro de dist/ o en la máquina de Mateo, sincronizar con la fuente de datos real
+    if (BASE_DIR.parent.parent / "bimo.db").exists() and (BASE_DIR.parent.parent / "Pacientes").exists():
+        DATA_DIR = BASE_DIR.parent.parent
+    elif dev_project_dir.exists() and (dev_project_dir / "bimo.db").exists():
+        DATA_DIR = dev_project_dir
+    else:
+        DATA_DIR = BASE_DIR
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    DATA_DIR = BASE_DIR
+
+# Cargar variables de entorno desde .env buscando en todas las ubicaciones posibles
+_candidatos_env = [
+    BASE_DIR / ".env",
+    BASE_DIR / "_internal" / ".env",
+    DATA_DIR / ".env",
+    Path(getattr(sys, '_MEIPASS', BASE_DIR)) / ".env",
+    dev_project_dir / ".env"
+]
+for _cand_env in _candidatos_env:
+    if _cand_env.exists():
+        try:
+            with open(_cand_env, "r", encoding="utf-8") as _ef:
+                for _line in _ef:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _v = _line.split("=", 1)
+                        _k = _k.strip()
+                        _v = _v.strip().strip('"').strip("'")
+                        if _k and _k not in os.environ:
+                            os.environ[_k] = _v
+        except Exception:
+            pass
+
+# Archivos del sistema y persistencia clínica
+def _resolver_archivo(nombre_archivo):
+    for d in [BASE_DIR, BASE_DIR / "_internal", DATA_DIR, dev_project_dir, Path(getattr(sys, '_MEIPASS', BASE_DIR))]:
+        p = d / nombre_archivo
+        if p.exists():
+            return p
+    return BASE_DIR / nombre_archivo
+
+RUTA_BASE_ODONTOGRAMA = _resolver_archivo("base_odontograma.png")
+RUTA_MASCARAS_ODONTOGRAMA = _resolver_archivo("mascaras_odontograma.npz")
+RUTA_DB = DATA_DIR / "bimo.db"
+RUTA_PACIENTES = DATA_DIR / "Pacientes"
+RUTA_VAULT = DATA_DIR / "bimo.vault"
+RUTA_CLINICA_CONF = _resolver_archivo("clinica.json")
+
+import re
+import unicodedata
+
+def sanitizar_nombre_carpeta(nombre: str) -> str:
+    """
+    Convierte nombres con tildes y eñes a ASCII limpio sin amputar caracteres:
+    Ej: 'Ángel Mateo Tituaña' -> 'Angel_Mateo_Tituana'
+    """
+    if not nombre or str(nombre).strip().lower() in ("none", "no especificado", ""):
+        return "Paciente"
+    nom_trans = str(nombre).strip().replace('ñ', 'n').replace('Ñ', 'N')
+    norm = unicodedata.normalize('NFKD', nom_trans).encode('ASCII', 'ignore').decode('ASCII')
+    limpio = re.sub(r'[^a-zA-Z0-9_]', '', norm.replace(' ', '_'))
+    return limpio or "Paciente"
 
 # ==========================================
 # PALETA Y MOTOR DE TEMAS BIMO (INSPIRADOS EN REFERENCIAS VISUALES)
@@ -80,6 +140,28 @@ TEMAS_BIMO = {
         "fucsia": "#FF006E",
         "logo_colors": ["#00F5D4", "#70D6FF", "#FF006E", "#FFBE0B"],
         "corner_radius": 16,
+        "corner_btn": 12,
+    },
+    "Obsidian Violet": {
+        # Tema Moderno BIMO Pro: Dark Glassmorphic Obsidian con acentos Indigo / Violeta Neon
+        "mode": "dark",
+        "bg_dark": "#070913",
+        "card_dark": "#0E1224",
+        "card_inner": "#0A0D1B",
+        "sidebar": "#090C1A",
+        "border": "#1E2545",
+        "text_primary": "#F8FAFC",
+        "text_muted": "#94A3B8",
+        "input_bg": "#121730",
+        "input_border": "#28315C",
+        "card_hover": "#161D3D",
+        "aqua": "#38BDF8",
+        "azul_acero": "#6366F1",
+        "azul_pastel": "#818CF8",
+        "amarillo": "#FBBF24",
+        "fucsia": "#EC4899",
+        "logo_colors": ["#6366F1", "#8B5CF6", "#38BDF8", "#10B981"],
+        "corner_radius": 18,
         "corner_btn": 12,
     },
     "Starloy Cyber Neon": {
@@ -266,18 +348,18 @@ def obtener_tema_guardado() -> str:
         if os.path.exists(RUTA_CLINICA_CONF):
             with open(RUTA_CLINICA_CONF, "r", encoding="utf-8") as f:
                 d = json.load(f)
-                return d.get("tema_visual", "Skeuomorphism Stereo (Dark)")
+                return d.get("tema_visual", "Obsidian Violet")
     except Exception:
         pass
-    return "Skeuomorphism Stereo (Dark)"
+    return "Obsidian Violet"
 
 def obtener_tema_activo_dict() -> dict:
     """Retorna siempre el diccionario completo y actualizado del tema activo."""
     nombre = obtener_tema_guardado()
-    return TEMAS_BIMO.get(nombre, TEMAS_BIMO["Skeuomorphism Stereo (Dark)"])
+    return TEMAS_BIMO.get(nombre, TEMAS_BIMO["Obsidian Violet"])
 
 _tema_inicial = obtener_tema_guardado()
-_t_init = TEMAS_BIMO.get(_tema_inicial, TEMAS_BIMO["Skeuomorphism Stereo (Dark)"])
+_t_init = TEMAS_BIMO.get(_tema_inicial, TEMAS_BIMO["Obsidian Violet"])
 
 COLOR_BG_DARK = _t_init["bg_dark"]
 COLOR_CARD_DARK = _t_init["card_dark"]
@@ -346,32 +428,70 @@ def _get_vault_fernet() -> Fernet:
     key = base64.urlsafe_b64encode(hashlib.pbkdf2_hmac("sha256", hwid.encode(), _VAULT_SALT, 30_000))
     return Fernet(key)
 
+_DEFAULT_FALLBACK_GROQ_KEY = os.getenv("GROQ_API_KEY", "").strip()
+
 def inicializar_boveda_si_no_existe():
-    if not os.path.exists(RUTA_VAULT):
+    fernet = _get_vault_fernet()
+    api_key = os.getenv("GROQ_API_KEY", "").strip() or _DEFAULT_FALLBACK_GROQ_KEY
+    params_default = {
+        "groq_api_key": api_key,
+        "groq_model": os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+        "whisper_model": os.getenv("WHISPER_MODEL", "small")
+    }
+    enc_data = fernet.encrypt(json.dumps(params_default).encode("utf-8"))
+    with open(RUTA_VAULT, "wb") as f:
+        f.write(enc_data)
+
+def guardar_parametro_boveda(clave: str, valor: str) -> bool:
+    try:
         fernet = _get_vault_fernet()
-        params_default = {
-            "groq_api_key": os.getenv("GROQ_API_KEY", ""),
-            "groq_model": "llama-3.3-70b-versatile",
-            "whisper_model": "small"
-        }
-        enc_data = fernet.encrypt(json.dumps(params_default).encode("utf-8"))
+        params = {}
+        if os.path.exists(RUTA_VAULT):
+            try:
+                with open(RUTA_VAULT, "rb") as f:
+                    params = json.loads(fernet.decrypt(f.read()).decode("utf-8"))
+            except Exception:
+                params = {}
+        params[clave] = valor
+        enc_data = fernet.encrypt(json.dumps(params).encode("utf-8"))
         with open(RUTA_VAULT, "wb") as f:
             f.write(enc_data)
+        return True
+    except Exception as e:
+        print(f"[VAULT SAVE WARN]: {e}")
+        return False
 
 def obtener_parametro_boveda(clave: str, default=""):
     try:
-        inicializar_boveda_si_no_existe()
+        if not os.path.exists(RUTA_VAULT):
+            inicializar_boveda_si_no_existe()
         fernet = _get_vault_fernet()
         with open(RUTA_VAULT, "rb") as f:
             data = fernet.decrypt(f.read())
         params = json.loads(data.decode("utf-8"))
-        return params.get(clave, default)
+        val = params.get(clave, default)
+        if not val and clave == "groq_api_key":
+            env_key = os.getenv("GROQ_API_KEY", "").strip() or _DEFAULT_FALLBACK_GROQ_KEY
+            guardar_parametro_boveda("groq_api_key", env_key)
+            return env_key
+        return val
     except Exception:
-        return default
+        # Si el HWID cambió (máquina distinta) o el archivo está corrupto,
+        # re-inicializar la bóveda para este hardware nuevo sin bloquear la ejecución.
+        try:
+            inicializar_boveda_si_no_existe()
+            fernet = _get_vault_fernet()
+            with open(RUTA_VAULT, "rb") as f:
+                data = fernet.decrypt(f.read())
+            params = json.loads(data.decode("utf-8"))
+            return params.get(clave, default)
+        except Exception:
+            return os.getenv(clave.upper(), default)
 
 # Variables de acceso transparente al motor IA (ocultas para el usuario)
 def get_groq_api_key() -> str:
-    return os.getenv("GROQ_API_KEY") or obtener_parametro_boveda("groq_api_key")
+    key = os.getenv("GROQ_API_KEY") or obtener_parametro_boveda("groq_api_key") or _DEFAULT_FALLBACK_GROQ_KEY
+    return key.strip()
 
 def get_groq_model() -> str:
     return os.getenv("GROQ_MODEL") or obtener_parametro_boveda("groq_model", "openai/gpt-oss-120b")
@@ -399,6 +519,7 @@ def cargar_datos_clinica() -> dict:
         "telefono_contacto": "+57 300 123 4567",
         "modo_bajo_rendimiento": False,
         "onboarding_completado": False,
+        "email_google": "",
         "pin_rapido": "1234"
     }
 
@@ -504,3 +625,25 @@ def formatear_fecha_corta_es(dt=None) -> str:
     dia_corto = DIAS_SEMANA_ES[dt.weekday()][:3]
     mes_corto = MESES_ES[dt.month - 1][:3]
     return f"{dia_corto} {dt.day:02d} {mes_corto}"
+
+# ==========================================
+# ACUERDOS Y COMPROMISOS CLÍNICOS (ARQUITECTURA Y RIESGOS)
+# ==========================================
+def obtener_estado_terminos() -> dict:
+    clinica = cargar_datos_clinica()
+    return {
+        "status": "ok",
+        "aceptados": bool(clinica.get("terminos_aceptados", False)),
+        "fecha": clinica.get("fecha_aceptacion_terminos", ""),
+        "version": clinica.get("version_terminos", "1.0")
+    }
+
+def guardar_aceptacion_terminos() -> dict:
+    from datetime import datetime
+    clinica = cargar_datos_clinica()
+    clinica["terminos_aceptados"] = True
+    clinica["fecha_aceptacion_terminos"] = datetime.now().isoformat()
+    clinica["version_terminos"] = "1.0"
+    guardar_datos_clinica(clinica)
+    return {"status": "ok", "aceptados": True, "fecha": clinica["fecha_aceptacion_terminos"]}
+

@@ -1,0 +1,240 @@
+{
+  "estado": "FINALIZADO_CON_ADVERTENCIAS",
+  "fecha_inicio": "2026-09-15T16:54:50.606478",
+  "total_ciclos_planificados": 36,
+  "intervalo_segundos": 600,
+  "modelo_ia": "openai/gpt-oss-120b",
+  "whisper_modelo": "small",
+  "memoria_inicial_rss_mb": 190.27,
+  "ciclos_completados": 0,
+  "tasa_exito_porcentaje": 0.0,
+  "db_integrity": "unknown",
+  "ciclos": [],
+  "errores": [
+    {
+      "ciclo": 1,
+      "paciente": "Sisa Llumiquinga Guamán",
+      "timestamp": "2026-09-15T16:55:30.756805",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 3 días a las 10:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0984556677'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 3 días a las 10:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 2,
+      "paciente": "Inti Toapanta Simbaña",
+      "timestamp": "2026-09-15T17:06:02.914880",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 4 días a las 11:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0984556677'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 4 días a las 11:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 3,
+      "paciente": "María Carmen Pilataxi Quinatoa",
+      "timestamp": "2026-09-15T17:16:35.673594",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 5 días a las 12:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0984556677'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 5 días a las 12:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 4,
+      "paciente": "José Antonio Chushig Tituaña",
+      "timestamp": "2026-09-15T17:27:28.068985",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 6 días a las 13:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0984556677'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 6 días a las 13:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 5,
+      "paciente": "Rosa Elena Yugsi Guaminga",
+      "timestamp": "2026-09-15T17:38:21.306291",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 7 días a las 14:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0995667788'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 7 días a las 14:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 6,
+      "paciente": "Carlos Alberto Quispe Yamberla",
+      "timestamp": "2026-09-15T17:48:53.196690",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 8 días a las 15:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0995667788'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 8 días a las 15:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 7,
+      "paciente": "Ana Lucía Cachimuel Farinango",
+      "timestamp": "2026-09-15T17:59:45.632867",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 9 días a las 16:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0989889900'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 9 días a las 16:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 8,
+      "paciente": "Manuel Mesías Lema Imbaquingo",
+      "timestamp": "2026-09-15T18:10:38.432471",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 10 días a las 09:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0997113355'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 10 días a las 09:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 9,
+      "paciente": "Diana Mercedes Pillajo Alomoto",
+      "timestamp": "2026-09-15T18:21:10.604742",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 11 días a las 10:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0997113355'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 11 días a las 10:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 10,
+      "paciente": "Luis Fernando Chuquimarca Tipán",
+      "timestamp": "2026-09-15T18:32:05.294808",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 12 días a las 11:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0983445566'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 12 días a las 11:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 11,
+      "paciente": "Carmen Yolanda Caiza Masabanda",
+      "timestamp": "2026-09-15T18:42:57.859632",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 13 días a las 12:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0996117788'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 13 días a las 12:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 12,
+      "paciente": "Edwin Patricio Tasinchana Andrango",
+      "timestamp": "2026-09-15T18:53:30.296831",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 14 días a las 13:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0996117788'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 14 días a las 13:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 13,
+      "paciente": "Martha Cecilia Colcha Morocho",
+      "timestamp": "2026-09-15T19:04:22.838917",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 15 días a las 14:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0993884411'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 15 días a las 14:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 14,
+      "paciente": "Darwin Xavier Pastuña Guanoluisa",
+      "timestamp": "2026-09-15T19:15:17.504275",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 2 días a las 15:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0982773322'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 2 días a las 15:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 15,
+      "paciente": "Blanca Narcisa Guasgua Curipoma",
+      "timestamp": "2026-09-15T19:25:48.511987",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 3 días a las 16:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0982773322'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 3 días a las 16:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 16,
+      "paciente": "Segundo Rafael Sampedro Sangoluisa",
+      "timestamp": "2026-09-15T19:36:41.747900",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 4 días a las 09:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0986332211'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 4 días a las 09:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 17,
+      "paciente": "Gladys Mariana Pupiales Fueres",
+      "timestamp": "2026-09-15T19:47:34.233761",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 5 días a las 10:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0992336655'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 5 días a las 10:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 18,
+      "paciente": "Milton Fabián Otavalo Cotacachi",
+      "timestamp": "2026-09-15T19:58:06.222293",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 6 días a las 11:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0992336655'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 6 días a las 11:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 19,
+      "paciente": "Verónica Patricia Cachiguango Cachimuel",
+      "timestamp": "2026-09-15T20:08:58.674545",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 7 días a las 12:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0991887744'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 7 días a las 12:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 20,
+      "paciente": "Jorge Washington Cabascango Guamán",
+      "timestamp": "2026-09-15T20:19:51.124678",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 8 días a las 13:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0983119988'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 8 días a las 13:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 21,
+      "paciente": "Teresa Elizabeth Cajas Criollo",
+      "timestamp": "2026-09-15T20:30:25.300748",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 9 días a las 14:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0983119988'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 9 días a las 14:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 22,
+      "paciente": "Christian Marcelo Alulema Muenala",
+      "timestamp": "2026-09-15T20:41:17.793510",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 10 días a las 15:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0985663322'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 10 días a las 15:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 23,
+      "paciente": "Silvia Paulina Cachipuendo Llumiquinga",
+      "timestamp": "2026-09-15T20:52:10.464364",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 11 días a las 16:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0997441100'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 11 días a las 16:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 24,
+      "paciente": "Edison Roberto Chiluisa Toapanta",
+      "timestamp": "2026-09-15T21:03:07.488020",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 12 días a las 09:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0997441100'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 12 días a las 09:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 25,
+      "paciente": "Andrea Estefanía Simbaña Quishpe",
+      "timestamp": "2026-09-15T21:14:00.040187",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 13 días a las 10:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0993112288'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 13 días a las 10:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 26,
+      "paciente": "Wilson Hernán Tituaña Pilataxi",
+      "timestamp": "2026-09-15T21:24:52.535180",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 14 días a las 11:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0986774433'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 14 días a las 11:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 27,
+      "paciente": "Erika Maribel Quinatoa Chushig",
+      "timestamp": "2026-09-15T21:35:25.612247",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 15 días a las 12:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0986774433'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 15 días a las 12:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 28,
+      "paciente": "Alex Gonzalo Yugsi Alomoto",
+      "timestamp": "2026-09-15T21:46:18.279607",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 2 días a las 13:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0984113355'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 2 días a las 13:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 29,
+      "paciente": "Paola Viviana Farinango Tipán",
+      "timestamp": "2026-09-15T21:57:12.259368",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 3 días a las 14:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0992445599'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 3 días a las 14:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 30,
+      "paciente": "Ramiro Javier Imbaquingo Caiza",
+      "timestamp": "2026-09-15T22:07:43.279150",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 4 días a las 15:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0992445599'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 4 días a las 15:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 31,
+      "paciente": "Jessica Pamela Masabanda Colcha",
+      "timestamp": "2026-09-15T22:18:35.839969",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 5 días a las 16:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0995116633'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 5 días a las 16:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 32,
+      "paciente": "David Ernesto Morocho Pastuña",
+      "timestamp": "2026-09-15T22:29:28.186442",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 6 días a las 09:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0981448822'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 6 días a las 09:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 33,
+      "paciente": "Nancy Beatriz Guanoluisa Guasgua",
+      "timestamp": "2026-09-15T22:40:00.225927",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 7 días a las 10:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0981448822'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 7 días a las 10:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 34,
+      "paciente": "Víctor Hugo Curipoma Sampedro",
+      "timestamp": "2026-09-15T22:50:52.968092",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 8 días a las 11:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0983226611'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 8 días a las 11:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 35,
+      "paciente": "Mónica Alexandra Sangoluisa Pupiales",
+      "timestamp": "2026-09-15T23:01:45.751875",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 9 días a las 12:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0994993355'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 9 días a las 12:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    },
+    {
+      "ciclo": 36,
+      "paciente": "Héctor Daniel Fueres Otavalo",
+      "timestamp": "2026-09-15T23:12:21.935573",
+      "error": "Fallo en agendar cita por voz: {'status': 'ok', 'tipo': 'HISTORIA_CLINICA', 'texto': 'Bimo genera una cita para el último paciente en 10 días a las 13:00', 'resultado': {'tipo': 'HISTORIA_CLINICA', 'datos_filiacion': {'nombre': 'Paciente_Consulta', 'documento': 'No especificado', 'sexo': 'No especificado', 'contacto_emergencia': 'No especificado', 'telefono': '0994993355'}, 'motivo_consulta': 'Bimo genera una cita para el último paciente en 10 días a las 13:00', 'diagnostico': 'Pendiente de estructuración', 'plan_tratamiento': 'Evaluación clínica general', 'odontograma': [], 'pagos': {'costo_total': 0.0, 'abono': 0.0, 'saldo_pendiente': 0.0, 'estado': 'Cancelado', 'metodo_pago': 'Efectivo', 'notas': ''}, 'num_expediente': 1}, 'ruta_pdf': 'C:\\\\Users\\\\Mateo\\\\Desktop\\\\Bimo_Project\\\\Pacientes\\\\Pacientes_Adultos\\\\Paciente_Consulta_25_anos_ID169\\\\Consulta_Exp1_Pacienteconsulta_25a_15-09-2026.pdf', 'paciente': 'Paciente_Consulta', 'paciente_id': 169, 'consulta_id': 126, 'alerta_cedula_requerida': True, 'cita_programada': None, 'url_gcal': ''}"
+    }
+  ],
+  "ultima_actualizacion": "2026-09-15T23:12:21.936091",
+  "total_errores": 36,
+  "tiempo_transcurrido_segundos": 22651.3,
+  "tiempo_transcurrido_horas": 6.29,
+  "memoria_actual_rss_mb": 362.95,
+  "delta_memoria_mb": 172.68,
+  "fecha_fin": "2026-09-15T23:12:21.937730",
+  "duracion_total_horas": 6.29,
+  "memoria_final_rss_mb": 362.95
+}

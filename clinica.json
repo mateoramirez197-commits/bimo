@@ -1,7 +1,12 @@
 {
-  "nombre_doctor": "Dr. Mateo Ramírez",
-  "nombre_clinica": "BIMO Dental Clinic",
-  "registro_profesional": "RP-ODONT-2026",
-  "telefono_contacto": "+57 300 123 4567",
-  "pin_rapido": "1234"
+  "tema_activo": "cyan",
+  "whatsapp": {
+    "mensaje_plantilla": "Hola {paciente}, le recordamos su cita dental el {fecha} a las {hora}.",
+    "dias_adelanto": 1,
+    "webhook_url": ""
+  },
+  "opacidad_widget": 0.75,
+  "terminos_aceptados": false,
+  "fecha_aceptacion_terminos": "",
+  "version_terminos": "1.0"
 }

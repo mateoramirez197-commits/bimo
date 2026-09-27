@@ -1,0 +1,60 @@
+{
+  "fecha_ejecucion": "2026-09-15T23:28:22.131205",
+  "total_ciclos_planificados": 3,
+  "total_ciclos_exitosos": 3,
+  "total_errores": 0,
+  "tasa_exito_porcentaje": 100.0,
+  "tiempo_total_segundos": 110.35,
+  "tiempo_promedio_por_paciente_segundos": 36.78,
+  "memoria_inicial_mb": 189.86,
+  "memoria_final_mb": 343.31,
+  "delta_memoria_mb": 153.45,
+  "memoria_maxima_mb": 343.04,
+  "hilos_finales": 38,
+  "db_integrity": "ok",
+  "registros_totales_db": {
+    "pacientes_db": 87,
+    "consultas_db": 82,
+    "citas_db": 135,
+    "pdfs_generados_sesion": 3
+  },
+  "ciclos": [
+    {
+      "ciclo": 1,
+      "paciente": "Sisa Llumiquinga Guamán",
+      "paciente_id": 163,
+      "consulta_id": 119,
+      "duracion_segundos": 17.92,
+      "memoria_rss_mb": 332.27,
+      "hilos_activos": 38,
+      "pdf_kb": 2678.0,
+      "diagnostico": "Caries de la dentina K02.1",
+      "estado": "EXITOSO"
+    },
+    {
+      "ciclo": 2,
+      "paciente": "Inti Toapanta Simbaña",
+      "paciente_id": 164,
+      "consulta_id": 120,
+      "duracion_segundos": 17.81,
+      "memoria_rss_mb": 342.19,
+      "hilos_activos": 38,
+      "pdf_kb": 2683.7,
+      "diagnostico": "Fractura de diente en esmalte y dentina S02.5",
+      "estado": "EXITOSO"
+    },
+    {
+      "ciclo": 3,
+      "paciente": "Paciente_Consulta",
+      "paciente_id": 169,
+      "consulta_id": 126,
+      "duracion_segundos": 68.6,
+      "memoria_rss_mb": 343.04,
+      "hilos_activos": 38,
+      "pdf_kb": 2688.7,
+      "diagnostico": "Pendiente de estructuración",
+      "estado": "EXITOSO"
+    }
+  ],
+  "errores": []
+}

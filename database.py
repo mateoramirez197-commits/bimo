@@ -3,9 +3,10 @@ import shutil
 import re
 import sqlite3
 import json
+import datetime
 import unicodedata
-import difflib
-from config import RUTA_DB, RUTA_PACIENTES
+from contextlib import contextmanager
+from config import RUTA_DB, RUTA_PACIENTES, sanitizar_nombre_carpeta
 
 def coinciden_nombres_subtokens(nombre1: str, nombre2: str) -> bool:
     """
@@ -36,42 +37,33 @@ def coinciden_nombres_subtokens(nombre1: str, nombre2: str) -> bool:
 
     s1 = set(w1)
     s2 = set(w2)
+
+    # Si un conjunto de palabras es subconjunto estricto del otro
+    # (ej: 'Estefanía Sandoval' es subconjunto de 'Estefanía Sandoval Ruiz')
+    # Exigiendo al menos 2 palabras coincidentes si ambos tienen 2 o más palabras
     if s1.issubset(s2) or s2.issubset(s1):
-        return True
-
-    # Comparación difusa palabra por palabra (para variaciones de transcripción como s/z, b/v, etc.)
-    cortos, largos = (w1, w2) if len(w1) <= len(w2) else (w2, w1)
-    palabras_emparejadas = 0
-    for p_c in cortos:
-        if len(p_c) < 3:
-            continue
-        coincide = False
-        for p_l in largos:
-            if p_c == p_l:
-                coincide = True
-                break
-            if difflib.SequenceMatcher(None, p_c, p_l).ratio() >= 0.80:
-                coincide = True
-                break
-        if coincide:
-            palabras_emparejadas += 1
-
-    min_sig = sum(1 for p in cortos if len(p) >= 3)
-    if min_sig > 0 and palabras_emparejadas >= min_sig:
-        return True
-
-    if len(s1.intersection(s2)) >= 2:
-        return True
+        if min(len(s1), len(s2)) >= 2:
+            return True
+        elif len(s1) == 1 and len(s2) == 1:
+            return s1 == s2
 
     return False
 
+@contextmanager
 def get_connection():
-    conn = sqlite3.connect(RUTA_DB, timeout=15)
+    conn = sqlite3.connect(RUTA_DB, timeout=20)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL;")
     conn.execute("PRAGMA synchronous = NORMAL;")
     conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    conn.execute("PRAGMA busy_timeout = 5000;")
+    try:
+        yield conn
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def init_db():
     with get_connection() as conn:
@@ -170,11 +162,150 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_doc ON pacientes(documento);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_nom ON pacientes(nombre);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_consultas_paciente ON consultas(paciente_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_consultas_pac_fecha ON consultas(paciente_id, fecha_hora);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas_agenda(fecha_hora_inicio);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas_agenda(estado);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pagos_paciente ON pagos(paciente_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pagos_consulta ON pagos(consulta_id);")
 
+        # Migración segura: Añadir columnas de WhatsApp si no existen
+        try:
+            cursor.execute("ALTER TABLE citas_agenda ADD COLUMN recordatorio_enviado INTEGER DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE citas_agenda ADD COLUMN recordatorio_enviado_at TIMESTAMP;")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE citas_agenda ADD COLUMN recordatorio_metodo TEXT DEFAULT 'wa_me';")
+        except Exception:
+            pass
+
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_citas_rec_enviado ON citas_agenda(recordatorio_enviado);")
+
+        # Tabla de aprendizaje continuo de nombres, apellidos y vocabulario clínico
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS vocabulario_personalizado (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            termino TEXT UNIQUE NOT NULL,
+            tipo TEXT DEFAULT 'apellido',
+            frecuencia INTEGER DEFAULT 1,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_vocab_termino ON vocabulario_personalizado(termino);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_vocab_frecuencia ON vocabulario_personalizado(frecuencia DESC);")
+
+        # Sembrado inicial de apellidos andinos/ecuatorianos si está vacía
+        cursor.execute("SELECT COUNT(*) as count FROM vocabulario_personalizado")
+        if cursor.fetchone()["count"] == 0:
+            semillas = [
+                "Llumiquinga", "Guaminga", "Toapanta", "Quispe", "Quishpe", "Simbaña", "Tituaña",
+                "Chiluisa", "Chushig", "Pilataxi", "Chuquimarca", "Yugsi", "Quinatoa", "Alomoto",
+                "Tipán", "Caiza", "Tasinchana", "Masabanda", "Andrango", "Imbaquingo", "Farinango",
+                "Colcha", "Morocho", "Pastuña", "Guanoluisa", "Guasgua", "Curipoma", "Sampedro",
+                "Sangoluisa", "Pupiales", "Fueres", "Otavalo", "Cotacachi", "Cachiguango", "Cachimuel",
+                "Cabascango", "Guamán", "Cajas", "Criollo", "Alulema", "Muenala", "Pillajo"
+            ]
+            for s in semillas:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO vocabulario_personalizado (termino, tipo, frecuencia)
+                    VALUES (?, 'apellido', 5)
+                """, (s,))
+
         conn.commit()
+
+VOCABULARIO_JSON_PATH = os.path.join(os.path.dirname(__file__), "vocabulario_aprendido.json")
+
+def aprender_termino(termino: str, tipo: str = "apellido"):
+    """Registra o incrementa la frecuencia de un término aprendido en la base de datos."""
+    if not termino or len(termino.strip()) < 3:
+        return
+    term = termino.strip().title()
+    if term.lower() in ("del", "las", "los", "san", "santa", "para", "cita", "paciente", "doctor", "mateo", "consulta"):
+        return
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO vocabulario_personalizado (termino, tipo, frecuencia, actualizado_en)
+                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(termino) DO UPDATE SET 
+                    frecuencia = frecuencia + 1,
+                    actualizado_en = CURRENT_TIMESTAMP
+            """, (term, tipo))
+            conn.commit()
+    except Exception as e:
+        print(f"[VOCAB WARN] Error al aprender término '{term}': {e}")
+
+def aprender_nombres_paciente(nombre_completo: str):
+    """Extrae y aprende permanentemente cada nombre y apellido de un paciente."""
+    if not nombre_completo or nombre_completo.strip().lower() in ("no especificado", "paciente", "paciente_desconocido"):
+        return
+    partes = nombre_completo.strip().split()
+    for i, p in enumerate(partes):
+        tipo = "nombre" if i == 0 else "apellido"
+        aprender_termino(p, tipo=tipo)
+    try:
+        sincronizar_vocabulario_json()
+    except Exception:
+        pass
+
+def sincronizar_vocabulario_json():
+    """Exporta el vocabulario aprendido a un archivo JSON para persistencia rápida y portabilidad entre versiones."""
+    try:
+        terminos = obtener_vocabulario_aprendido(limite=250)
+        with open(VOCABULARIO_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(terminos, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def obtener_vocabulario_aprendido(limite: int = 150) -> list[str]:
+    """Retorna lista de nombres y apellidos aprendidos ordenados por frecuencia y recencia."""
+    lista = []
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT termino FROM vocabulario_personalizado ORDER BY frecuencia DESC, actualizado_en DESC LIMIT ?", (limite,))
+            rows = cursor.fetchall()
+            for r in rows:
+                lista.append(r["termino"])
+    except Exception:
+        if os.path.exists(VOCABULARIO_JSON_PATH):
+            try:
+                with open(VOCABULARIO_JSON_PATH, "r", encoding="utf-8") as f:
+                    lista = json.load(f)
+            except Exception:
+                pass
+    return lista
+
+def obtener_ultimo_paciente_atendido() -> dict | None:
+    """
+    Retorna el último paciente atendido o registrado en la clínica.
+    1. Busca el paciente de la consulta médica más reciente.
+    2. Fallback al último paciente registrado en la tabla pacientes.
+    """
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.* FROM consultas c
+                JOIN pacientes p ON c.paciente_id = p.id
+                ORDER BY c.fecha_hora DESC, c.id DESC LIMIT 1
+            """)
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+
+            cursor.execute("SELECT * FROM pacientes ORDER BY id DESC LIMIT 1")
+            row_p = cursor.fetchone()
+            if row_p:
+                return dict(row_p)
+    except Exception as e:
+        print(f"[DB ERROR] obtener_ultimo_paciente_atendido: {e}")
+    return None
 
 def purgar_datos_prueba():
     with get_connection() as conn:
@@ -186,8 +317,17 @@ def purgar_datos_prueba():
 
 # --- OPERACIONES DE PACIENTES ---
 
-def registrar_o_actualizar_paciente(datos_filiacion) -> int:
+def registrar_o_actualizar_paciente(datos_filiacion=None, **kwargs) -> int:
+    if datos_filiacion is None and kwargs:
+        datos_filiacion = kwargs
+    elif isinstance(datos_filiacion, dict) and kwargs:
+        datos_filiacion = {**datos_filiacion, **kwargs}
+    elif not isinstance(datos_filiacion, dict):
+        datos_filiacion = {}
+
     nombre = datos_filiacion.get("nombre", "").strip() or "Paciente_Desconocido"
+    if nombre and nombre != "Paciente_Desconocido":
+        aprender_nombres_paciente(nombre)
     doc_crudo = str(datos_filiacion.get("documento", "")).strip()
     doc_limpio = doc_crudo.replace(" ", "") if doc_crudo.lower() not in ("no especificado", "none", "") else None
     
@@ -223,17 +363,21 @@ def registrar_o_actualizar_paciente(datos_filiacion) -> int:
         # 1. SI SE PROPORCIONA CÉDULA VÁLIDA (PRIORIDAD MÁXIMA)
         if doc_limpio:
             # A) Buscar por cédula exacta
-            cursor.execute("SELECT id FROM pacientes WHERE documento = ?", (doc_limpio,))
+            cursor.execute("SELECT id, telefono FROM pacientes WHERE documento = ?", (doc_limpio,))
             row = cursor.fetchone()
             if row:
                 paciente_id = row["id"]
                 cursor.execute("""
                     UPDATE pacientes SET
-                        nombre = ?, edad = COALESCE(?, edad), sexo = ?, telefono = ?,
+                        nombre = ?, edad = COALESCE(?, edad), sexo = ?,
+                        telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
                         direccion = ?, ocupacion = ?, medico_cabecera = ?
                     WHERE id = ?
                 """, (nombre, edad_val, sexo, telefono, direccion, ocupacion, medico, paciente_id))
                 conn.commit()
+                if telefono and telefono.lower() not in ("no especificado", "none", ""):
+                    cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE paciente_id = ? AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, paciente_id))
+                    conn.commit()
                 return paciente_id
             
             # B) Si no existe con esa cédula, buscar si existe un paciente previo por nombre o subtokens sin cédula
@@ -254,13 +398,16 @@ def registrar_o_actualizar_paciente(datos_filiacion) -> int:
                             documento = ?,
                             edad = COALESCE(?, edad),
                             sexo = COALESCE(NULLIF(?, 'No especificado'), sexo),
-                            telefono = COALESCE(NULLIF(?, 'No especificado'), telefono),
+                            telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
                             direccion = COALESCE(NULLIF(?, 'No especificado'), direccion),
                             ocupacion = COALESCE(NULLIF(?, 'No especificado'), ocupacion),
                             medico_cabecera = COALESCE(NULLIF(?, 'No especificado'), medico_cabecera)
                         WHERE id = ?
                     """, (nom_mas_completo, doc_limpio, edad_final, sexo, telefono, direccion, ocupacion, medico, paciente_id))
                     conn.commit()
+                    if telefono and telefono.lower() not in ("no especificado", "none", ""):
+                        cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE paciente_id = ? AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, paciente_id))
+                        conn.commit()
                     print(f"[UNIFICACIÓN CÉDULA] Cédula {doc_limpio} asignada a '{nom_c}' -> ID: {paciente_id}")
                     return paciente_id
 
@@ -272,41 +419,60 @@ def registrar_o_actualizar_paciente(datos_filiacion) -> int:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (nombre, doc_limpio, edad_val, sexo, telefono, direccion, ocupacion, medico, creado_local))
             conn.commit()
-            return cursor.lastrowid
+            new_id = cursor.lastrowid
+            if telefono and telefono.lower() not in ("no especificado", "none", ""):
+                cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE LOWER(nombre_paciente) = LOWER(?) AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, nombre))
+                conn.commit()
+            return new_id
 
         # 2. SI NO SE PROPORCIONA CÉDULA: ENCAPSULACIÓN INTELIGENTE (NO CREAR DUPLICADOS)
-        # A) Buscar por nombre y edad coincidentes
+        # A) Buscar por nombre y edad coincidentes (tolerancia estricta +-3 años)
         if edad_val:
             cursor.execute("""
-                SELECT id FROM pacientes 
-                WHERE LOWER(nombre) = LOWER(?) AND edad = ?
+                SELECT id, edad, telefono FROM pacientes 
+                WHERE LOWER(nombre) = LOWER(?)
                 ORDER BY id ASC
-            """, (nombre, edad_val))
-            coincidencias = cursor.fetchall()
-            if coincidencias:
-                # Encapsular en el paciente existente canónico
-                paciente_id = coincidencias[0]["id"]
+            """, (nombre,))
+            cands_nombre = cursor.fetchall()
+            for cand in cands_nombre:
+                edad_existente = cand["edad"]
+                if edad_existente is not None and abs(edad_val - int(edad_existente)) <= 3:
+                    paciente_id = cand["id"]
+                    cursor.execute("""
+                        UPDATE pacientes SET
+                            sexo = COALESCE(NULLIF(?, 'No especificado'), sexo),
+                            telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
+                            direccion = COALESCE(NULLIF(?, 'No especificado'), direccion),
+                            ocupacion = COALESCE(NULLIF(?, 'No especificado'), ocupacion),
+                            medico_cabecera = COALESCE(NULLIF(?, 'No especificado'), medico_cabecera)
+                        WHERE id = ?
+                    """, (sexo, telefono, direccion, ocupacion, medico, paciente_id))
+                    conn.commit()
+                    if telefono and telefono.lower() not in ("no especificado", "none", ""):
+                        cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE paciente_id = ? AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, paciente_id))
+                        conn.commit()
+                    return paciente_id
+
+        # B) Si NO se especificó edad en el dictado, pero coincide exactamente en nombre y solo hay uno registrado
+        elif not edad_val:
+            cursor.execute("SELECT id, telefono FROM pacientes WHERE LOWER(nombre) = LOWER(?) ORDER BY id ASC", (nombre,))
+            filas_nombre = cursor.fetchall()
+            if len(filas_nombre) == 1:
+                paciente_id = filas_nombre[0]["id"]
                 cursor.execute("""
                     UPDATE pacientes SET
-                        sexo = COALESCE(NULLIF(?, 'No especificado'), sexo),
-                        telefono = COALESCE(NULLIF(?, 'No especificado'), telefono),
-                        direccion = COALESCE(NULLIF(?, 'No especificado'), direccion),
-                        ocupacion = COALESCE(NULLIF(?, 'No especificado'), ocupacion),
-                        medico_cabecera = COALESCE(NULLIF(?, 'No especificado'), medico_cabecera)
+                        sexo = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), sexo),
+                        telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
+                        direccion = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), direccion),
+                        ocupacion = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), ocupacion),
+                        medico_cabecera = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), medico_cabecera)
                     WHERE id = ?
                 """, (sexo, telefono, direccion, ocupacion, medico, paciente_id))
                 conn.commit()
+                if telefono and telefono.lower() not in ("no especificado", "none", ""):
+                    cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE paciente_id = ? AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, paciente_id))
+                    conn.commit()
                 return paciente_id
-
-        # B) Si no tiene edad pero coincide exactamente en nombre y solo hay uno registrado
-        cursor.execute("SELECT id FROM pacientes WHERE LOWER(nombre) = LOWER(?) ORDER BY id ASC", (nombre,))
-        filas_nombre = cursor.fetchall()
-        if len(filas_nombre) == 1:
-            paciente_id = filas_nombre[0]["id"]
-            if edad_val:
-                cursor.execute("UPDATE pacientes SET edad = ? WHERE id = ?", (edad_val, paciente_id))
-                conn.commit()
-            return paciente_id
 
         # C) Búsqueda inteligente por subtokens (ej: 'Juan Valdés' vs 'Juan Valdés Salazar')
         cursor.execute("SELECT * FROM pacientes WHERE nombre != 'No especificado' ORDER BY id ASC")
@@ -333,17 +499,39 @@ def registrar_o_actualizar_paciente(datos_filiacion) -> int:
                         edad = COALESCE(?, edad),
                         documento = COALESCE(?, documento),
                         sexo = COALESCE(NULLIF(?, 'No especificado'), sexo),
-                        telefono = COALESCE(NULLIF(?, 'No especificado'), telefono),
+                        telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
                         direccion = COALESCE(NULLIF(?, 'No especificado'), direccion),
                         ocupacion = COALESCE(NULLIF(?, 'No especificado'), ocupacion),
                         medico_cabecera = COALESCE(NULLIF(?, 'No especificado'), medico_cabecera)
                     WHERE id = ?
                 """, (nom_mas_completo, edad_final, doc_final, sexo, telefono, direccion, ocupacion, medico, paciente_id))
                 conn.commit()
+                if telefono and telefono.lower() not in ("no especificado", "none", ""):
+                    cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE paciente_id = ? AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, paciente_id))
+                    conn.commit()
                 print(f"[UNIFICACIÓN] Paciente '{nombre}' consolidado con '{nom_c}' -> ID: {paciente_id}")
                 return paciente_id
 
         # D) Solo crear nuevo paciente si no hay absolutamente ninguna coincidencia
+        if not telefono or str(telefono).strip().lower() in ("no especificado", "none", ""):
+            cursor.execute("""
+                SELECT telefono FROM citas_agenda 
+                WHERE LOWER(TRIM(nombre_paciente)) = LOWER(TRIM(?))
+                  AND telefono IS NOT NULL 
+                  AND telefono != '' 
+                  AND telefono != 'No especificado'
+                ORDER BY id DESC LIMIT 1
+            """, (nombre,))
+            r_prev_c = cursor.fetchone()
+            if not r_prev_c:
+                cursor.execute("SELECT nombre_paciente, telefono FROM citas_agenda WHERE telefono IS NOT NULL AND telefono != '' AND telefono != 'No especificado' ORDER BY id DESC")
+                for c_cand in cursor.fetchall():
+                    if coinciden_nombres_subtokens(nombre, c_cand["nombre_paciente"]):
+                        r_prev_c = c_cand
+                        break
+            if r_prev_c and r_prev_c["telefono"]:
+                telefono = str(r_prev_c["telefono"]).strip()
+
         import datetime
         creado_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
@@ -351,7 +539,11 @@ def registrar_o_actualizar_paciente(datos_filiacion) -> int:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (nombre, None, edad_val, sexo, telefono, direccion, ocupacion, medico, creado_local))
         conn.commit()
-        return cursor.lastrowid
+        new_id = cursor.lastrowid
+        if telefono and telefono.lower() not in ("no especificado", "none", ""):
+            cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE LOWER(nombre_paciente) = LOWER(?) AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, nombre))
+            conn.commit()
+        return new_id
 
 def consolidar_pacientes_duplicados():
     """
@@ -497,7 +689,7 @@ def eliminar_paciente_db(paciente_id: int) -> bool:
         # 3. Borrar físicamente el directorio del paciente en disco
         if p_row:
             nom = p_row["nombre"]
-            nombre_limpio = re.sub(r'[^a-zA-Z0-9_]', '', nom.replace(' ', '_')) or "Paciente"
+            nombre_limpio = sanitizar_nombre_carpeta(nom)
             edad_num = p_row["edad"] or 18
             categoria_edad = "Pacientes_Pediatricos" if edad_num < 18 else "Pacientes_Adultos"
             nombre_carpeta = f"{nombre_limpio}_{edad_num}_anos_ID{paciente_id}"
@@ -557,6 +749,68 @@ def buscar_pacientes_por_nombre(nombre: str) -> list[dict]:
         return [p for p in todos if coinciden_nombres_subtokens(nombre, p["nombre"])]
 
 # --- OPERACIONES DE CONSULTAS ---
+
+def obtener_siguiente_num_expediente_paciente(paciente_id: int) -> int:
+    """Retorna el número correlativo del próximo expediente/consulta para un paciente (1, 2, 3...)."""
+    if not paciente_id:
+        return 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM consultas WHERE paciente_id = ?", (paciente_id,))
+        row = cursor.fetchone()
+        count = row[0] if row else 0
+        return count + 1
+
+def obtener_num_expediente_consulta(consulta_id: int) -> int:
+    """Retorna el número ordinal de la consulta dentro del historial de ese paciente (1, 2, 3...)."""
+    if not consulta_id:
+        return 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT paciente_id FROM consultas WHERE id = ?", (consulta_id,))
+        r = cursor.fetchone()
+        if not r:
+            return 1
+        pid = r["paciente_id"]
+        cursor.execute("SELECT id FROM consultas WHERE paciente_id = ? ORDER BY id ASC", (pid,))
+        all_ids = [row["id"] for row in cursor.fetchall()]
+        try:
+            return all_ids.index(consulta_id) + 1
+        except ValueError:
+            return 1
+
+def buscar_consulta_por_expediente_o_cedula(paciente_id_o_nombre=None, cedula=None, num_expediente=None) -> dict | None:
+    """Busca una consulta específica de un paciente por número de expediente (1, 2, 3...) y/o cédula."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        pid = None
+        if cedula:
+            doc_c = str(cedula).replace(" ", "").replace("-", "").strip()
+            cursor.execute("SELECT id FROM pacientes WHERE documento = ?", (doc_c,))
+            p = cursor.fetchone()
+            if p:
+                pid = p["id"]
+        if not pid and paciente_id_o_nombre:
+            if isinstance(paciente_id_o_nombre, int):
+                pid = paciente_id_o_nombre
+            else:
+                cursor.execute("SELECT id FROM pacientes WHERE LOWER(nombre) = LOWER(?) ORDER BY id DESC LIMIT 1", (str(paciente_id_o_nombre).strip(),))
+                p = cursor.fetchone()
+                if p:
+                    pid = p["id"]
+
+        if not pid:
+            return None
+
+        cursor.execute("SELECT * FROM consultas WHERE paciente_id = ? ORDER BY id ASC", (pid,))
+        consultas = [dict(row) for row in cursor.fetchall()]
+        if not consultas:
+            return None
+
+        if num_expediente and 1 <= int(num_expediente) <= len(consultas):
+            return consultas[int(num_expediente) - 1]
+        
+        return consultas[-1]
 
 def guardar_consulta_db(paciente_id, json_clinico=None, ruta_pdf=None, medico_id=None, **kwargs):
     # Si el invocador pasó (paciente_id, medico_id, json_clinico, ...) reordenar dinámicamente
@@ -667,6 +921,8 @@ def actualizar_consulta_existente(consulta_id: int, json_clinico, ruta_pdf=None)
     diagnostico = datos.get("diagnostico", "No especificado")
     plan = datos.get("plan_tratamiento", "No especificado")
 
+    fecha_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     with get_connection() as conn:
         cursor = conn.cursor()
         if ruta_pdf:
@@ -677,9 +933,10 @@ def actualizar_consulta_existente(consulta_id: int, json_clinico, ruta_pdf=None)
                     diagnostico = ?,
                     plan_tratamiento = ?,
                     json_clinico = ?,
-                    ruta_pdf = ?
+                    ruta_pdf = ?,
+                    fecha_hora = ?
                 WHERE id = ?
-            """, (motivo, enfermedad, diagnostico, plan, json_str, ruta_pdf, consulta_id))
+            """, (motivo, enfermedad, diagnostico, plan, json_str, ruta_pdf, fecha_local, consulta_id))
         else:
             cursor.execute("""
                 UPDATE consultas SET
@@ -687,9 +944,10 @@ def actualizar_consulta_existente(consulta_id: int, json_clinico, ruta_pdf=None)
                     enfermedad_actual = ?,
                     diagnostico = ?,
                     plan_tratamiento = ?,
-                    json_clinico = ?
+                    json_clinico = ?,
+                    fecha_hora = ?
                 WHERE id = ?
-            """, (motivo, enfermedad, diagnostico, plan, json_str, consulta_id))
+            """, (motivo, enfermedad, diagnostico, plan, json_str, fecha_local, consulta_id))
         conn.commit()
 
         # Sincronización automática de honorarios / pagos
@@ -819,21 +1077,74 @@ def crear_cita_db(paciente_id=None, nombre_paciente="", telefono="", fecha_hora_
         descripcion = kwargs["motivo"]
     if not nombre_paciente and "paciente" in kwargs:
         nombre_paciente = kwargs["paciente"]
+    if not telefono and "celular" in kwargs:
+        telefono = kwargs["celular"]
+    if not telefono and "tel" in kwargs:
+        telefono = kwargs["tel"]
 
     nombre_paciente = str(nombre_paciente or "").strip() or "Paciente"
     telefono = str(telefono or "").strip()
+    if telefono.lower() in ("no especificado", "none", "null"):
+        telefono = ""
+
     if not fecha_hora_inicio:
         fecha_hora_inicio = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d 10:00:00")
 
     with get_connection() as conn:
         cursor = conn.cursor()
+        
+        # 1. Si no hay paciente_id explícito, buscar en la tabla pacientes
         if not paciente_id and nombre_paciente and nombre_paciente.lower() not in ("paciente", "no especificado"):
-            cursor.execute("SELECT id, telefono FROM pacientes WHERE LOWER(nombre) = ? ORDER BY id DESC LIMIT 1", (nombre_paciente.lower(),))
+            cursor.execute("SELECT id, nombre, telefono FROM pacientes WHERE LOWER(nombre) = ? ORDER BY id DESC LIMIT 1", (nombre_paciente.lower(),))
             row_p = cursor.fetchone()
+            
+            if not row_p:
+                cursor.execute("SELECT id, nombre, telefono FROM pacientes WHERE nombre != 'No especificado' ORDER BY id DESC")
+                for c_p in cursor.fetchall():
+                    if coinciden_nombres_subtokens(nombre_paciente, c_p["nombre"]):
+                        row_p = c_p
+                        break
+
             if row_p:
                 paciente_id = row_p["id"]
-                if not telefono and row_p["telefono"] and row_p["telefono"] != "No especificado":
-                    telefono = row_p["telefono"]
+                tel_pac = str(row_p["telefono"] or "").strip()
+                if not telefono and tel_pac and tel_pac.lower() not in ("no especificado", "none", ""):
+                    telefono = tel_pac
+                elif telefono and (not tel_pac or tel_pac.lower() in ("no especificado", "none", "")):
+                    cursor.execute("UPDATE pacientes SET telefono = ? WHERE id = ?", (telefono, paciente_id))
+                    conn.commit()
+
+        # 2. Si todavía no hay teléfono, buscar en citas previas del mismo paciente con coincidencia exacta o subtokens
+        if not telefono and nombre_paciente and nombre_paciente.lower() not in ("paciente", "no especificado"):
+            cursor.execute("""
+                SELECT nombre_paciente, telefono FROM citas_agenda 
+                WHERE LOWER(TRIM(nombre_paciente)) = LOWER(TRIM(?))
+                  AND telefono IS NOT NULL 
+                  AND telefono != '' 
+                  AND telefono != 'No especificado'
+                ORDER BY id DESC LIMIT 1
+            """, (nombre_paciente,))
+            row_prev_c = cursor.fetchone()
+            if not row_prev_c:
+                cursor.execute("""
+                    SELECT nombre_paciente, telefono FROM citas_agenda
+                    WHERE telefono IS NOT NULL AND telefono != '' AND telefono != 'No especificado'
+                    ORDER BY id DESC
+                """)
+                for c_cand in cursor.fetchall():
+                    if coinciden_nombres_subtokens(nombre_paciente, c_cand["nombre_paciente"]):
+                        row_prev_c = c_cand
+                        break
+            if row_prev_c and row_prev_c["telefono"]:
+                telefono = str(row_prev_c["telefono"]).strip()
+
+        # 3. Si se tiene paciente_id y teléfono, asegurar sincronización si el paciente no lo tenía
+        if paciente_id and telefono:
+            cursor.execute("SELECT telefono FROM pacientes WHERE id = ?", (paciente_id,))
+            rp = cursor.fetchone()
+            if rp and (not rp["telefono"] or str(rp["telefono"]).strip().lower() in ("no especificado", "none", "")):
+                cursor.execute("UPDATE pacientes SET telefono = ? WHERE id = ?", (telefono, paciente_id))
+                conn.commit()
 
         creado_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
@@ -845,13 +1156,21 @@ def crear_cita_db(paciente_id=None, nombre_paciente="", telefono="", fecha_hora_
         conn.commit()
         return cursor.lastrowid
 
-def listar_citas_db(limite=50):
+def listar_citas_db(limite=100):
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT * FROM citas_agenda 
             WHERE estado != 'cancelada'
-            ORDER BY fecha_hora_inicio ASC 
+            ORDER BY 
+                CASE 
+                    WHEN fecha_hora_inicio >= datetime('now', 'localtime', '-2 hours') THEN 0 
+                    ELSE 1 
+                END ASC,
+                CASE 
+                    WHEN fecha_hora_inicio >= datetime('now', 'localtime', '-2 hours') THEN fecha_hora_inicio 
+                END ASC,
+                fecha_hora_inicio DESC
             LIMIT ?
         """, (limite,))
         return [dict(row) for row in cursor.fetchall()]
@@ -986,3 +1305,256 @@ def listar_fotos_paciente(paciente_id: int) -> list:
             ORDER BY id DESC
         """, (paciente_id,))
         return [dict(r) for r in cursor.fetchall()]
+
+def marcar_recordatorio_enviado_cita(cita_id: int, metodo: str = "wa_me") -> bool:
+    """Actualiza el estado de la cita indicando que el recordatorio fue despachado."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE citas_agenda
+            SET recordatorio_enviado = 1,
+                recordatorio_enviado_at = datetime('now', 'localtime'),
+                recordatorio_metodo = ?
+            WHERE id = ?
+        """, (metodo, cita_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def listar_citas_pendientes_recordatorio(dias_adelanto: int = 1) -> list:
+    """Retorna citas de una fecha relativa (ej. mañana) que aún no han sido notificadas."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT c.*, p.telefono as tel_paciente, p.nombre as nom_pac_db
+            FROM citas_agenda c
+            LEFT JOIN pacientes p ON c.paciente_id = p.id
+            WHERE date(c.fecha_hora_inicio) = date('now', 'localtime', '+' || ? || ' day')
+              AND c.estado != 'cancelada'
+            ORDER BY c.fecha_hora_inicio ASC
+        """, (dias_adelanto,))
+        return [dict(r) for r in cursor.fetchall()]
+
+def actualizar_datos_paciente_y_expediente(
+    paciente_id_o_nombre,
+    nuevo_nombre: str = None,
+    nueva_cedula: str = None,
+    nuevo_telefono: str = None,
+    regenerar_pdf: bool = True,
+    documento: str = None
+) -> dict:
+    """
+    Actualiza simultáneamente o individualmente el nombre, cédula y/o teléfono de un paciente
+    en las tablas `pacientes` y `citas_agenda`, sincroniza el json_clinico de su última consulta
+    y regenera su PDF de historia clínica oficial con los datos actualizados sin crear
+    consultas ni pacientes duplicados.
+    Si se detectan homónimos, retorna las opciones con su número de cédula para desambiguación.
+    """
+    import re, json, os
+    from ai_engine import extraer_telefono_dictado, sanitizar_cedula, _normalizar_nombres_espanol
+
+    # 1. Normalización previa de parámetros recibidos
+    nombre_limpio = None
+    if nuevo_nombre and str(nuevo_nombre).strip() and str(nuevo_nombre).lower() not in ("no especificado", "none"):
+        nombre_limpio = _normalizar_nombres_espanol(str(nuevo_nombre).strip().title())
+
+    cedula_limpia = None
+    if nueva_cedula and str(nueva_cedula).strip() and str(nueva_cedula).lower() not in ("no especificado", "none"):
+        ced_cand = sanitizar_cedula(str(nueva_cedula))
+        if ced_cand and ced_cand.lower() != "no especificado":
+            cedula_limpia = ced_cand
+
+    tel_limpio = None
+    if nuevo_telefono and str(nuevo_telefono).strip() and str(nuevo_telefono).lower() not in ("no especificado", "none"):
+        t_cand = extraer_telefono_dictado(str(nuevo_telefono))
+        if not t_cand:
+            digits = re.sub(r'\D', '', str(nuevo_telefono))
+            if len(digits) == 9 and digits.startswith('9'):
+                digits = '0' + digits
+            if len(digits) in (7, 8, 9, 10, 11, 12):
+                t_cand = digits
+        if t_cand:
+            tel_limpio = t_cand
+
+    if not nombre_limpio and not cedula_limpia and not tel_limpio:
+        return {"status": "error", "message": "No se especificó ningún dato a actualizar (nombre, cédula o teléfono)."}
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        paciente = None
+        pid = None
+
+        # 2. Búsqueda por ID directo
+        if isinstance(paciente_id_o_nombre, int) or (isinstance(paciente_id_o_nombre, str) and str(paciente_id_o_nombre).isdigit()):
+            cursor.execute("SELECT * FROM pacientes WHERE id = ?", (int(paciente_id_o_nombre),))
+            paciente = cursor.fetchone()
+            if paciente:
+                pid = paciente["id"]
+
+        # 3. Búsqueda por documento si fue proporcionado para desambiguar
+        if not paciente and documento:
+            doc_busc = sanitizar_cedula(str(documento))
+            cursor.execute("SELECT * FROM pacientes WHERE documento = ?", (doc_busc,))
+            paciente = cursor.fetchone()
+            if paciente:
+                pid = paciente["id"]
+
+        # 4. Búsqueda por nombre
+        if not paciente and isinstance(paciente_id_o_nombre, str) and paciente_id_o_nombre.strip():
+            nom_busqueda = paciente_id_o_nombre.strip()
+            cursor.execute("SELECT * FROM pacientes WHERE LOWER(nombre) = LOWER(?)", (nom_busqueda,))
+            exactos = cursor.fetchall()
+            if len(exactos) == 1:
+                paciente = exactos[0]
+                pid = paciente["id"]
+            elif len(exactos) > 1:
+                candidatos = [{"id": r["id"], "nombre": r["nombre"], "documento": r["documento"] or "Sin cédula"} for r in exactos]
+                return {
+                    "status": "ambiguous",
+                    "mensaje": f"Se encontraron {len(exactos)} pacientes con el nombre {nom_busqueda}. Por favor indique la cédula.",
+                    "candidatos": candidatos
+                }
+            else:
+                cursor.execute("SELECT * FROM pacientes ORDER BY id DESC")
+                todos = cursor.fetchall()
+                cands = [p for p in todos if coinciden_nombres_subtokens(nom_busqueda, p["nombre"])]
+                if len(cands) == 1:
+                    paciente = cands[0]
+                    pid = paciente["id"]
+                elif len(cands) > 1:
+                    candidatos = [{"id": r["id"], "nombre": r["nombre"], "documento": r["documento"] or "Sin cédula"} for r in cands]
+                    return {
+                        "status": "ambiguous",
+                        "mensaje": f"Se encontraron varios pacientes coincidentes con {nom_busqueda}. Por favor desambigüe por cédula.",
+                        "candidatos": candidatos
+                    }
+
+        if not paciente or not pid:
+            return {"status": "error", "message": f"No se encontró el paciente '{paciente_id_o_nombre}' en la base de datos."}
+
+        pac_nombre_prev = paciente["nombre"]
+        pac_doc_prev = paciente["documento"] or "No especificado"
+        pac_tel_prev = paciente["telefono"] or "No registrado"
+
+        pac_nombre_final = nombre_limpio if nombre_limpio else pac_nombre_prev
+        pac_doc_final = cedula_limpia if cedula_limpia else pac_doc_prev
+        pac_tel_final = tel_limpio if tel_limpio else pac_tel_prev
+
+        campos_actualizados = []
+        if nombre_limpio and nombre_limpio != pac_nombre_prev:
+            campos_actualizados.append("nombre")
+        if cedula_limpia and cedula_limpia != pac_doc_prev:
+            cursor.execute("SELECT id, nombre FROM pacientes WHERE documento = ? AND id != ?", (cedula_limpia, pid))
+            dup = cursor.fetchone()
+            if dup:
+                return {
+                    "status": "error",
+                    "message": f"La cédula {cedula_limpia} ya está registrada a nombre de '{dup['nombre']}' (ID {dup['id']})."
+                }
+            campos_actualizados.append("cédula")
+        if tel_limpio and tel_limpio != pac_tel_prev:
+            campos_actualizados.append("teléfono")
+
+        # 5. Actualizar tabla pacientes
+        cursor.execute("""
+            UPDATE pacientes 
+            SET nombre = ?, documento = ?, telefono = ? 
+            WHERE id = ?
+        """, (pac_nombre_final, pac_doc_final, pac_tel_final, pid))
+
+        # 6. Actualizar citas_agenda
+        cursor.execute("""
+            UPDATE citas_agenda 
+            SET nombre_paciente = ?, telefono = ? 
+            WHERE paciente_id = ? OR LOWER(nombre_paciente) = LOWER(?)
+        """, (pac_nombre_final, pac_tel_final, pid, pac_nombre_prev))
+        conn.commit()
+
+        # 7. Actualizar expediente clínico más reciente y regenerar PDF
+        nueva_ruta_pdf = None
+        cursor.execute("SELECT id, json_clinico, ruta_pdf FROM consultas WHERE paciente_id = ? ORDER BY id DESC LIMIT 1", (pid,))
+        cons_row = cursor.fetchone()
+        if cons_row:
+            cid = cons_row["id"]
+            ruta_antigua = cons_row["ruta_pdf"]
+            json_c = {}
+            if cons_row["json_clinico"]:
+                try:
+                    json_c = json.loads(cons_row["json_clinico"])
+                except Exception:
+                    pass
+            fil = json_c.setdefault("datos_filiacion", {})
+            fil["nombre"] = pac_nombre_final
+            fil["documento"] = pac_doc_final
+            fil["telefono"] = pac_tel_final
+
+            if regenerar_pdf:
+                from generador_pdf import crear_historia_clinica
+                nueva_ruta_pdf = crear_historia_clinica(json_c, paciente_id=pid)
+                cursor.execute("UPDATE consultas SET json_clinico = ?, ruta_pdf = ? WHERE id = ?",
+                               (json.dumps(json_c, ensure_ascii=False), nueva_ruta_pdf, cid))
+                conn.commit()
+                if ruta_antigua and nueva_ruta_pdf and ruta_antigua != nueva_ruta_pdf and os.path.exists(ruta_antigua):
+                    try:
+                        os.remove(ruta_antigua)
+                    except Exception:
+                        pass
+
+    partes_msg = []
+    if nombre_limpio:
+        partes_msg.append(f"Nombre: {pac_nombre_final}")
+    if cedula_limpia:
+        partes_msg.append(f"Cédula: {pac_doc_final}")
+    if tel_limpio:
+        partes_msg.append(f"Teléfono: {pac_tel_final}")
+
+    desc_cambios = ", ".join(partes_msg) if partes_msg else "Datos actualizados"
+
+    return {
+        "status": "ok",
+        "paciente_id": pid,
+        "nombre": pac_nombre_final,
+        "documento": pac_doc_final,
+        "telefono": pac_tel_final,
+        "campos_actualizados": campos_actualizados,
+        "ruta_pdf": nueva_ruta_pdf,
+        "mensaje": f"Datos de {pac_nombre_final} actualizados exitosamente ({desc_cambios}). Expediente PDF regenerado."
+    }
+
+def actualizar_telefono_paciente_y_expediente(paciente_id_o_nombre, nuevo_telefono: str, regenerar_pdf: bool = True, documento: str = None) -> dict:
+    """Mantiene compatibilidad hacia atrás delegando en actualizar_datos_paciente_y_expediente."""
+    return actualizar_datos_paciente_y_expediente(
+        paciente_id_o_nombre=paciente_id_o_nombre,
+        nuevo_telefono=nuevo_telefono,
+        regenerar_pdf=regenerar_pdf,
+        documento=documento
+    )
+
+def actualizar_contacto_cita_manana(nuevo_telefono: str) -> dict:
+    """Actualiza el teléfono de la próxima cita agendada para el día de mañana."""
+    import re
+    digits = re.sub(r'\D', '', str(nuevo_telefono or ""))
+    if len(digits) == 9 and digits.startswith('9'):
+        digits = '0' + digits
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, nombre_paciente, fecha_hora_inicio 
+            FROM citas_agenda 
+            WHERE date(fecha_hora_inicio) = date('now', 'localtime', '+1 day')
+              AND estado != 'cancelada'
+            ORDER BY fecha_hora_inicio ASC LIMIT 1
+        """)
+        r = cursor.fetchone()
+        if r:
+            cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE id = ?", (digits, r["id"]))
+            conn.commit()
+            return {
+                "status": "ok",
+                "cita_id": r["id"],
+                "nombre_paciente": r["nombre_paciente"],
+                "telefono": digits,
+                "mensaje": f"Teléfono {digits} asignado a la cita de mañana para {r['nombre_paciente']}."
+            }
+        return {"status": "error", "message": "No se encontraron citas activas para el día de mañana."}
+
+

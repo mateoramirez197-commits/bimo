@@ -6,7 +6,7 @@ from pathlib import Path
 import qrcode
 from PIL import Image
 import re
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 import uvicorn
 from cryptography import x509
@@ -14,7 +14,7 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from config import MOBILE_SERVER_PORT, BASE_DIR
+from config import MOBILE_SERVER_PORT, BASE_DIR, sanitizar_nombre_carpeta
 from database import buscar_pacientes, listar_consultas_paciente, obtener_consulta_por_id
 
 app = FastAPI(title="BIMO Mobile Bridge & Clinical Viewer")
@@ -578,12 +578,40 @@ HTML_MOVIL = """<!DOCTYPE html>
                     <div class="patient-card">
                         <div class="patient-name">${p.nombre}</div>
                         <div class="patient-meta">Cédula: ${p.documento || 'N/E'} | Edad: ${p.edad || 'N/E'} años</div>
-                        <button class="btn-view-history" onclick="toggleConsultas(${p.id})">📂 Ver Consultas (${p.total_consultas || 0})</button>
+                        <div class="patient-meta" style="color: #38bdf8; margin-top: 3px;">📞 Teléfono: ${p.telefono && p.telefono !== 'No especificado' ? p.telefono : 'Sin registrar'}</div>
+                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                            <button class="btn-view-history" style="flex: 1;" onclick="toggleConsultas(${p.id})">📂 Ver Consultas (${p.total_consultas || 0})</button>
+                            <button class="btn-view-history" style="flex: 1; background: #0f766e; border-color: #14b8a6;" onclick="modificarTelefonoMovil(${p.id}, '${p.telefono || ''}')">📞 Modificar Teléfono</button>
+                        </div>
                         <div id="consultas_${p.id}" class="consultations-list" style="display:none;"></div>
                     </div>
                 `).join('');
             } catch (err) {
                 container.innerHTML = '<div style="color:#ef4444;text-align:center;">Error al cargar directorio.</div>';
+            }
+        }
+
+        async function modificarTelefonoMovil(pacienteId, currentTel) {
+            const cleanTel = (!currentTel || currentTel === 'No especificado') ? '' : currentTel;
+            const nuevo = prompt('Ingrese el nuevo número de teléfono o celular para este paciente:', cleanTel || '09');
+            if (nuevo === null) return;
+            const telTrim = nuevo.trim();
+            if (!telTrim) return;
+            try {
+                const res = await fetch('/api/paciente/telefono', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paciente_id: pacienteId, telefono: telTrim })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    alert('✅ Teléfono actualizado correctamente');
+                    cargarPacientes(document.getElementById('inputSearch').value);
+                } else {
+                    alert('❌ ' + (data.message || data.error || 'Error al actualizar teléfono'));
+                }
+            } catch (err) {
+                alert('❌ Error de comunicación con el servidor');
             }
         }
 
@@ -674,6 +702,18 @@ async def upload_audio(file: UploadFile = File(...)):
 async def api_listar_pacientes(q: str = ""):
     return buscar_pacientes(q)
 
+@app.post("/api/paciente/telefono")
+async def api_actualizar_telefono_paciente(request: Request):
+    try:
+        from database import actualizar_telefono_paciente_y_expediente
+        datos = await request.json()
+        paciente_id = datos.get("paciente_id")
+        nuevo_telefono = datos.get("telefono", "")
+        res = actualizar_telefono_paciente_y_expediente(paciente_id, nuevo_telefono, regenerar_pdf=True)
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
 @app.get("/api/consultas/{paciente_id}")
 async def api_consultas_paciente(paciente_id: int):
     return listar_consultas_paciente(paciente_id)
@@ -703,19 +743,20 @@ async def upload_foto_clinica(
 ):
     try:
         from database import obtener_paciente_por_id, guardar_foto_paciente_db, obtener_consulta_del_dia, actualizar_consulta_existente
-        from generador_pdf import BASE_DIR, crear_historia_clinica
+        from config import RUTA_PACIENTES
+        from generador_pdf import crear_historia_clinica
         import json
 
         paciente = obtener_paciente_por_id(paciente_id)
         if not paciente:
             raise HTTPException(status_code=404, detail="Paciente no encontrado")
 
-        nom_limpio = re.sub(r'[^a-zA-Z0-9_]', '', paciente.get('nombre', '').replace(' ', '_')) or "Paciente"
+        nom_limpio = sanitizar_nombre_carpeta(paciente.get('nombre', ''))
         edad_num = int(paciente.get('edad') or 18)
         cat_edad = "Pacientes_Pediatricos" if edad_num < 18 else "Pacientes_Adultos"
         
         carpeta_paciente = os.path.join(
-            BASE_DIR, "Pacientes", cat_edad,
+            str(RUTA_PACIENTES), cat_edad,
             f"{nom_limpio}_{edad_num}_anos_ID{paciente_id}",
             "Fotos_Radiografias"
         )

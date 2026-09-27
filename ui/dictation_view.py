@@ -297,7 +297,7 @@ class DictationView(ctk.CTkFrame):
             sonar_fin_dictado()
             self.grabando = False
             self.btn_grabar.configure(text="⏳ Procesando...", fg_color="#475569", state="disabled")
-            self.badge_estado.configure(text="● Analizando Whisper...", text_color=t["amarillo"], fg_color=t["card_hover"])
+            self.badge_estado.configure(text="● Procesando...", text_color=t["amarillo"], fg_color=t["card_hover"])
 
     def _grabar_audio_loop(self):
         with sd.InputStream(samplerate=self.frecuencia, channels=1, dtype='int16', callback=self._audio_callback):
@@ -376,7 +376,7 @@ class DictationView(ctk.CTkFrame):
                 audio_np = np.array(self.datos_audio)
                 write(ruta_archivo, self.frecuencia, audio_np)
 
-            self._actualizar_status("Transcribiendo con Faster-Whisper...", t["amarillo"], t["card_hover"])
+            self._actualizar_status("El sistema está generando tu PDF...", t["amarillo"], t["card_hover"])
             texto_crudo = transcribir_audio(ruta_archivo)
 
             self.after(0, lambda: self.caja_salida.insert("end", f"📝 Transcripción de Audio:\n\"{texto_crudo}\"\n\n"))
@@ -426,13 +426,14 @@ class DictationView(ctk.CTkFrame):
             paciente_nom = resultado_ia.get("nombre_paciente", "").strip() or "No especificado"
             fecha_hora = resultado_ia.get("fecha_hora", "")
             motivo = resultado_ia.get("motivo", "Consulta reprogramada" if es_reprogramacion else "Consulta general")
+            tel_cita = str(resultado_ia.get("telefono") or "").strip()
 
             # 1. SI NO SE MENCIONÓ NOMBRE EN EL COMANDO:
             if not paciente_nom or paciente_nom.lower() in ["no especificado", "paciente", "alguien", "desconocido", "none"]:
                 if self.paciente_activo:
                     pac_id = self.paciente_activo["id"]
                     pac_nombre = self.paciente_activo["nombre"]
-                    self.after(0, lambda: self._completar_agendamiento(pac_id, pac_nombre, fecha_hora, motivo, es_reprogramacion=es_reprogramacion))
+                    self.after(0, lambda: self._completar_agendamiento(pac_id, pac_nombre, fecha_hora, motivo, es_reprogramacion=es_reprogramacion, telefono=tel_cita))
                     return
                 else:
                     # Si es reprogramación sin nombre, buscar la última cita registrada para actualizarla
@@ -441,7 +442,7 @@ class DictationView(ctk.CTkFrame):
                     if citas_ult and es_reprogramacion:
                         pac_nombre = citas_ult[0].get("nombre_paciente", "Paciente")
                         pac_id = citas_ult[0].get("paciente_id")
-                        self.after(0, lambda: self._completar_agendamiento(pac_id, pac_nombre, fecha_hora, motivo, es_reprogramacion=True))
+                        self.after(0, lambda: self._completar_agendamiento(pac_id, pac_nombre, fecha_hora, motivo, es_reprogramacion=True, telefono=tel_cita))
                         return
 
                     self._actualizar_status("⚠️ Indique el nombre del paciente", t["amarillo"], t["card_hover"])
@@ -454,7 +455,7 @@ class DictationView(ctk.CTkFrame):
                     return
 
             # 2. SI SÍ SE MENCIONÓ NOMBRE (Búsqueda inteligente automática):
-            self.after(0, lambda: self._resolver_paciente_cita(paciente_nom, fecha_hora, motivo, es_reprogramacion=es_reprogramacion))
+            self.after(0, lambda: self._resolver_paciente_cita(paciente_nom, fecha_hora, motivo, es_reprogramacion=es_reprogramacion, telefono=tel_cita))
             return
 
         # ----------------------------------------------------
@@ -1001,14 +1002,14 @@ class DictationView(ctk.CTkFrame):
         self.after(0, lambda: self._renderizar_tarjetas_clinicas(datos_actualizados, nueva_ruta, cedula_faltante=False, paciente_id=p_id))
         self._actualizar_status("● Expediente Actualizado", self.theme["aqua"], "#064e3b")
 
-    def _resolver_paciente_cita(self, nombre_dictado, fecha_hora, motivo, es_reprogramacion=False):
+    def _resolver_paciente_cita(self, nombre_dictado, fecha_hora, motivo, es_reprogramacion=False, telefono=""):
         # A) Si coincide con el paciente actualmente en consulta
         if self.paciente_activo and (
             nombre_dictado.lower() in self.paciente_activo["nombre"].lower() or 
             self.paciente_activo["nombre"].lower() in nombre_dictado.lower()
         ):
             pac = self.paciente_activo
-            self._completar_agendamiento(pac["id"], pac["nombre"], fecha_hora, motivo, es_reprogramacion=es_reprogramacion)
+            self._completar_agendamiento(pac["id"], pac["nombre"], fecha_hora, motivo, es_reprogramacion=es_reprogramacion, telefono=telefono)
             return
 
         # B) Búsqueda en base de datos
@@ -1017,18 +1018,18 @@ class DictationView(ctk.CTkFrame):
         # 1. Un solo paciente encontrado: Asignación inmediata (Sin pedir cédula)
         if len(coincidencias) == 1:
             pac = coincidencias[0]
-            self._completar_agendamiento(pac["id"], pac["nombre"], fecha_hora, motivo, es_reprogramacion=es_reprogramacion)
+            self._completar_agendamiento(pac["id"], pac["nombre"], fecha_hora, motivo, es_reprogramacion=es_reprogramacion, telefono=telefono)
 
         # 2. Dos o más homónimos: Preguntar con edad y cédula si no es reprogramación inmediata
         elif len(coincidencias) > 1 and not es_reprogramacion:
             preguntar_desambiguacion_homonimos_detallada(nombre_dictado, coincidencias)
-            self._mostrar_modal_homonimos(nombre_dictado, fecha_hora, motivo, coincidencias)
+            self._mostrar_modal_homonimos(nombre_dictado, fecha_hora, motivo, coincidencias, telefono=telefono)
 
         # 3. Paciente no registrado o reprogramación directa: Crear/reprogramar cita directa para ese nombre
         else:
-            self._completar_agendamiento(None, nombre_dictado, fecha_hora, motivo, es_reprogramacion=es_reprogramacion)
+            self._completar_agendamiento(None, nombre_dictado, fecha_hora, motivo, es_reprogramacion=es_reprogramacion, telefono=telefono)
 
-    def _mostrar_modal_homonimos(self, nombre_paciente, fecha_hora, motivo, coincidencias):
+    def _mostrar_modal_homonimos(self, nombre_paciente, fecha_hora, motivo, coincidencias, telefono=""):
         t = self.theme
         modal = ctk.CTkToplevel(self)
         modal.title("Desambiguación de Homónimos")
@@ -1051,18 +1052,18 @@ class DictationView(ctk.CTkFrame):
                 scroll, text=btn_text, font=("Segoe UI", 13, "bold"), height=38,
                 fg_color=t["azul_acero"], hover_color=t["azul_pastel"], text_color="#ffffff",
                 corner_radius=t["corner_btn"],
-                command=lambda pac=p: [modal.destroy(), self._completar_agendamiento(pac['id'], pac['nombre'], fecha_hora, motivo)]
+                command=lambda pac=p: [modal.destroy(), self._completar_agendamiento(pac['id'], pac['nombre'], fecha_hora, motivo, telefono=telefono)]
             )
             btn.pack(fill="x", padx=10, pady=4)
 
         btn_nuevo = ctk.CTkButton(
             modal, text="➕ Es un Paciente Nuevo Diferente", height=38, font=("Segoe UI", 13),
             fg_color="#334155", hover_color="#475569", corner_radius=t["corner_btn"],
-            command=lambda: [modal.destroy(), self._completar_agendamiento(None, nombre_paciente, fecha_hora, motivo)]
+            command=lambda: [modal.destroy(), self._completar_agendamiento(None, nombre_paciente, fecha_hora, motivo, telefono=telefono)]
         )
         btn_nuevo.pack(fill="x", padx=20, pady=(0, 20))
 
-    def _completar_agendamiento(self, paciente_id, nombre_paciente, fecha_hora, motivo, es_reprogramacion=False):
+    def _completar_agendamiento(self, paciente_id, nombre_paciente, fecha_hora, motivo, es_reprogramacion=False, telefono=""):
         import time
         from database import cancelar_o_eliminar_cita_db
         from voice_assistant import decir_confirmacion_cita, decir_reprogramacion_cita
@@ -1088,7 +1089,7 @@ class DictationView(ctk.CTkFrame):
                 return
             self._citas_recientes_anti_bucle[primer_nombre_paciente] = ahora
 
-        resultado_sync = agendar_cita(nombre_paciente, "", fecha_hora, descripcion=motivo, paciente_id=paciente_id, abrir_en_navegador=True)
+        resultado_sync = agendar_cita(nombre_paciente, telefono, fecha_hora, descripcion=motivo, paciente_id=paciente_id, abrir_en_navegador=True)
         url_gcal = resultado_sync.get("url_gcal", "")
 
         datos_clinica = cargar_datos_clinica()

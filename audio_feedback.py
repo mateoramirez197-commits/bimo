@@ -12,14 +12,14 @@ def _reproducir_wav(nombre_archivo):
     try:
         if sys.platform == "win32":
             import winsound
-            winsound.PlaySound(ruta, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            winsound.PlaySound(ruta, winsound.SND_FILENAME | winsound.SND_NODEFAULT | winsound.SND_ASYNC)
         else:
             import soundfile as sf
             import sounddevice as sd
             data, fs = sf.read(ruta, dtype='float32')
             sd.play(data, fs)
             sd.wait()
-    except Exception:
+    except Exception as e:
         pass
 
 def sonar_inicio_dictado():

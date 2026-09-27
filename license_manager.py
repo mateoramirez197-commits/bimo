@@ -8,7 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from cryptography.fernet import Fernet
 
-BASE_DIR = Path(__file__).resolve().parent
+import sys
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+
 RUTA_LICENCIA = BASE_DIR / "bimo.lic"
 
 _SECRET_SALT = b"BIMO_SAAS_CLINICAL_SECURE_SALT_2026_V1"
@@ -77,11 +83,17 @@ def activar_licencia_equipo(email_doctor: str) -> bool:
     return True
 
 def validar_licencia() -> tuple[bool, dict]:
+    hwid_actual = obtener_hwid_equipo()
     if not os.path.exists(RUTA_LICENCIA):
-        return False, {}
+        # Auto-activación inicial por hardware en la primera ejecución
+        try:
+            print(f"[LICENCIA] Primera ejecución detectada. Vinculando licencia permanente a este equipo ({hwid_actual[:8]})...")
+            activar_licencia_equipo("mateoramirez@bimo.local")
+        except Exception as e_init:
+            print(f"[LICENCIA WARN] Auto-activación falló: {e_init}")
+            return False, {"motivo": "LICENCIA_INEXISTENTE", "hwid": hwid_actual}
 
     try:
-        hwid_actual = obtener_hwid_equipo()
         fernet_key = _generar_fernet_key(hwid_actual)
         fernet = Fernet(fernet_key)
 
@@ -92,19 +104,19 @@ def validar_licencia() -> tuple[bool, dict]:
         payload = json.loads(datos_json.decode("utf-8"))
 
         if payload.get("hwid") != hwid_actual:
-            print("[SEGURIDAD] ALERTA: HWID no coincide. Ejecución no autorizada.")
-            return False, {}
+            print(f"[SEGURIDAD] ALERTA CRÍTICA: Intento de ejecución no autorizada. El hardware ({hwid_actual[:8]}) no coincide con la licencia.")
+            return False, {"motivo": "HWID_NO_COINCIDE", "hwid": hwid_actual, "email": payload.get("email")}
 
         email = payload.get("email", "")
         firma_esperada = hashlib.sha256(f"{email}::{hwid_actual}::{_SECRET_SALT.decode()}".encode()).hexdigest()
         if payload.get("signature") != firma_esperada:
-            print("[SEGURIDAD] ALERTA: Firma de licencia manipulada.")
-            return False, {}
+            print("[SEGURIDAD] ALERTA CRÍTICA: Firma criptográfica alterada o inválida.")
+            return False, {"motivo": "FIRMA_INVALIDA", "hwid": hwid_actual}
 
         return True, payload
     except Exception as e:
-        print(f"[SEGURIDAD] Error de validación de licencia: {e}")
-        return False, {}
+        print(f"[SEGURIDAD] Acceso denegado: Fallo de descifrado de licencia por hardware incompatible ({e}).")
+        return False, {"motivo": "ERROR_DESCIFRADO", "hwid": hwid_actual}
 
 def resetear_licencia():
     """

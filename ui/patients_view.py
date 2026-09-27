@@ -7,7 +7,7 @@ from config import (
     COLOR_BG_DARK, COLOR_CARD_DARK, COLOR_AZUL_ACERO, COLOR_AZUL_PASTEL,
     COLOR_AQUA, COLOR_BORDER, COLOR_TEXT_PRIMARY, COLOR_TEXT_MUTED,
     CORNER_RADIUS_CARD, CORNER_RADIUS_BTN, RUTA_PACIENTES,
-    abrir_archivo_o_carpeta_nativo
+    abrir_archivo_o_carpeta_nativo, sanitizar_nombre_carpeta
 )
 from export_excel import exportar_a_excel
 from ui.pdf_preview_modal import VentanaVistaPreviaPDF
@@ -412,7 +412,7 @@ class PatientsView(ctk.CTkFrame):
 
     def _abrir_carpeta_paciente_especifica(self, paciente):
         nombre_paciente = paciente.get('nombre', 'Paciente')
-        nombre_limpio_carpeta = re.sub(r'[^a-zA-Z0-9_]', '', nombre_paciente.replace(' ', '_')) or "Paciente"
+        nombre_limpio_carpeta = sanitizar_nombre_carpeta(nombre_paciente)
         edad_num = paciente.get('edad', 0) or 18
         categoria_edad = "Pacientes_Pediatricos" if edad_num < 18 else "Pacientes_Adultos"
         nombre_carpeta = f"{nombre_limpio_carpeta}_{edad_num}_anos_ID{paciente['id']}"
