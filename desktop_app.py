@@ -301,7 +301,7 @@ class BimoBridge:
                 if tipo == "NAVEGACION_UI":
                     accion = resp.get("accion", "")
                     parametro = resp.get("parametro", "") or ""
-                    self._window.evaluate_js(
+                    self._js(
                         f"if (window.ejecutarNavegacionVoz) "
                         f"window.ejecutarNavegacionVoz({json.dumps(accion)}, {json.dumps(parametro)});"
                     )
