@@ -308,6 +308,12 @@ def obtener_ultimo_paciente_atendido() -> dict | None:
     return None
 
 def purgar_datos_prueba():
+    import sys
+    import os
+    if os.environ.get("BIMO_PURGE_TEST") != "1" and "--purge-test" not in sys.argv:
+        print("[DATABASE] Omisión de purgar_datos_prueba (protección activa de pacientes reales).")
+        return
+    print("[DATABASE WARN] Ejecutando purgar_datos_prueba explícitamente...")
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM consultas WHERE paciente_id IN (SELECT id FROM pacientes WHERE nombre LIKE '%Prueba%' OR nombre LIKE '%Carlos Mendoza%' OR nombre LIKE '%Sofia Ramirez%');")
