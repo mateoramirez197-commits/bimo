@@ -477,8 +477,17 @@ def obtener_parametro_boveda(clave: str, default=""):
         return val
     except Exception:
         # Si el HWID cambió (máquina distinta) o el archivo está corrupto,
-        # re-inicializar la bóveda para este hardware nuevo sin bloquear la ejecución.
+        # respaldar el archivo existente antes de re-inicializar para preservar datos previos
         try:
+            if os.path.exists(RUTA_VAULT):
+                import time
+                ts = int(time.time())
+                bak_path = f"{RUTA_VAULT}.bak-{ts}"
+                try:
+                    os.rename(RUTA_VAULT, bak_path)
+                    print(f"[VAULT BACKUP] Bóveda previa respaldada en: {bak_path}")
+                except Exception as e_ren:
+                    print(f"[VAULT BACKUP WARN] No se pudo renombrar bóveda previa: {e_ren}")
             inicializar_boveda_si_no_existe()
             fernet = _get_vault_fernet()
             with open(RUTA_VAULT, "rb") as f:
