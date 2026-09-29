@@ -70,7 +70,7 @@ from config import (
     sanitizar_nombre_carpeta
 )
 from mobile_mic_server import iniciar_servidor_movil, obtener_ip_local, generar_codigo_qr_url
-from audio_feedback import sonar_inicio_dictado, sonar_fin_dictado, sonar_confirmacion_exito
+from audio_feedback import sonar_inicio_dictado, sonar_fin_dictado, sonar_confirmacion_exito, sonar_error
 from wake_word_listener import BackgroundWakeListener
 from voice_assistant import (
     decir_escuchando,
@@ -121,6 +121,21 @@ class BimoBridge:
     def set_window(self, window):
         self._window = window
         threading.Thread(target=self._iniciar_wake_listener, daemon=True).start()
+
+    def _js(self, codigo):
+        """Ejecuta JavaScript en la ventana de forma segura si la ventana está disponible."""
+        if not self._window:
+            return None
+        try:
+            return self._window.evaluate_js(codigo)
+        except Exception:
+            try:
+                time.sleep(0.15)
+                if self._window:
+                    return self._window.evaluate_js(codigo)
+            except Exception:
+                pass
+            return None
 
     def minimizar_ventana(self):
         """Minimiza la ventana nativa de BIMO."""
@@ -322,6 +337,10 @@ class BimoBridge:
                     self._window.evaluate_js(f"if (window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_hora)});")
                 self._window.evaluate_js(f"if (window.onVoiceClinicalProcessed) window.onVoiceClinicalProcessed({json.dumps(resp)});")
         except Exception as e:
+            try:
+                sonar_error()
+            except Exception:
+                pass
             print(f"[BIMO DESKTOP ERROR] Error ejecutando comando de voz: {e}")
 
     # ==========================================
@@ -430,6 +449,10 @@ class BimoBridge:
             print(f"[BIMO DESKTOP] Grabación de audio iniciada a {self._frecuencia}Hz...")
             return {"status": "ok", "message": "Grabando..."}
         except Exception as e:
+            try:
+                sonar_error()
+            except Exception:
+                pass
             print(f"[BIMO DESKTOP ERROR] Error al iniciar grabación: {e}")
             if self._wake_listener and self._escucha_activa_habilitada:
                 try:
@@ -460,6 +483,10 @@ class BimoBridge:
                 time.sleep(0.08)
 
         if not stream_iniciado:
+            try:
+                sonar_error()
+            except Exception:
+                pass
             print("[BIMO DESKTOP ERROR] Error crítico: No se pudo abrir el stream de audio en ninguna frecuencia.")
 
     def detener_y_procesar(self, incluir_ortodoncia=False, *args, **kwargs):
@@ -474,10 +501,18 @@ class BimoBridge:
 
             print(f"[BIMO DESKTOP] Deteniendo grabación y procesando (ortodoncia={incluir_ortodoncia})...")
             if not self._datos_audio:
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
                 return {"status": "error", "message": "No se detectó audio del micrófono. Verifica los permisos del micrófono en Windows."}
 
             audio_np = np.concatenate(self._datos_audio, axis=0)
             if len(audio_np) < int(self._frecuencia * 0.3):
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
                 return {"status": "error", "message": "Dictado demasiado corto (menos de 0.3 segundos). Por favor habla antes de pulsar detener."}
 
             import tempfile
@@ -486,11 +521,19 @@ class BimoBridge:
 
             texto = transcribir_audio(ruta_wav)
             if not texto or not texto.strip():
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
                 return {"status": "error", "message": "No se detectó voz inteligible en el audio. Por favor intenta hablar más cerca del micrófono."}
 
             print(f"[BIMO DESKTOP TRANSCRIPCIÓN]: {texto}")
             return self.procesar_texto_clinico(texto, incluir_ortodoncia=bool(incluir_ortodoncia))
         except Exception as e:
+            try:
+                sonar_error()
+            except Exception:
+                pass
             print(f"[BIMO DESKTOP ERROR] Error al procesar dictado: {e}")
             return {"status": "error", "message": str(e)}
         finally:
@@ -864,6 +907,10 @@ class BimoBridge:
                 }
 
         if tipo == "IGNORAR":
+            try:
+                sonar_error()
+            except Exception:
+                pass
             return {
                 "status": "warning",
                 "tipo": "IGNORAR",
