@@ -9,7 +9,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 from database import crear_cita_db, listar_citas_db
-from config import BASE_DIR
+from config import BASE_DIR, DATA_DIR
 
 import json
 import shutil
@@ -73,20 +73,30 @@ def init_google_calendar(email_doctor=None):
     buscar_y_copiar_credentials()
 
     creds = None
-    token_path = os.path.join(BASE_DIR, 'token.json')
+    token_path = os.path.join(str(DATA_DIR), 'token.json')
+    token_legacy = os.path.join(str(BASE_DIR), 'token.json')
+    if os.path.exists(token_legacy) and not os.path.exists(token_path):
+        try:
+            shutil.copy2(token_legacy, token_path)
+        except Exception:
+            pass
+
+    token_activo = token_path if os.path.exists(token_path) else token_legacy
     cred_path = os.path.join(BASE_DIR, 'credentials.json')
 
     # El token.json actual solo tiene scope de Calendar: sin esto Drive dará 403 para siempre.
     # Se fuerza UNA re-autorización, pero solo si hay credentials.json para poder hacerla.
-    if os.path.exists(token_path) and os.path.exists(cred_path) and not _token_tiene_todos_los_scopes(token_path):
+    if os.path.exists(token_activo) and os.path.exists(cred_path) and not _token_tiene_todos_los_scopes(token_activo):
         try:
-            os.remove(token_path)
+            os.remove(token_activo)
+            if os.path.exists(token_legacy) and token_legacy != token_activo:
+                os.remove(token_legacy)
         except Exception:
             pass
 
-    if os.path.exists(token_path):
+    if os.path.exists(token_activo):
         try:
-            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+            creds = Credentials.from_authorized_user_file(token_activo, SCOPES)
         except Exception:
             creds = None
 
