@@ -396,8 +396,13 @@ class BimoBridge:
             conf = cargar_datos_clinica()
             pin_esperado = str(conf.get("pin_rapido", "1234")).strip()
 
-            # Permite el PIN configurado por el doctor o acceso maestro autorizado
-            if pin_str == pin_esperado or pin_str == "__master__" or (pin_esperado == "1234" and pin_str in ("1234", "1963", "0000", "1111")):
+            dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
+            pin_valido = (pin_str == pin_esperado)
+            if not pin_valido and dev_backdoor:
+                pin_valido = (pin_str == "__master__") or (pin_esperado == "1234" and pin_str in ("1234", "1963", "0000", "1111"))
+
+            # Permite el PIN configurado por el doctor (o acceso de desarrollo si BIMO_DEV_BACKDOOR=1)
+            if pin_valido:
                 with get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT * FROM usuarios WHERE rol = 'medico' AND activo = 1 ORDER BY id ASC LIMIT 1")
