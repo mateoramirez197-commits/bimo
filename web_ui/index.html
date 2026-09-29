@@ -3754,11 +3754,11 @@
         const dirTexto = dir === 'antes' ? 'antes' : 'después';
         const tiempoTexto = deltaMin >= 60 ? `${deltaMin / 60} h` : `${deltaMin} min`;
         preview.innerHTML = `
-          <div>Nueva hora calculada: <b class="text-amber-300 font-mono">${fechaCalc} ${horaCalc}</b></div>
-          <div class="text-[10px] text-slate-400 mt-1">(${tiempoTexto} ${dirTexto} de la cita de ${refCita.nombre_paciente})</div>
+          <div>Nueva hora calculada: <b class="text-amber-300 font-mono">${esc(fechaCalc)} ${esc(horaCalc)}</b></div>
+          <div class="text-[10px] text-slate-400 mt-1">(${esc(tiempoTexto)} ${esc(dirTexto)} de la cita de ${esc(refCita.nombre_paciente)})</div>
         `;
       } catch (e) {
-        preview.innerHTML = `<span class="text-rose-400">Error al calcular: ${e}</span>`;
+        preview.innerHTML = `<span class="text-rose-400">Error al calcular: ${esc(e)}</span>`;
       }
     }
 
@@ -5100,7 +5100,7 @@
           <p class="text-[11px] font-semibold text-rose-400 tracking-wider uppercase mt-1">Equipo No Autorizado (HWID Lock)</p>
           <div class="my-5 p-4 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 text-left leading-relaxed space-y-2">
             <p>Esta instalación de <strong class="text-white">BIMO Pro</strong> está firmada para otro equipo físico. Se ha detectado una ejecución no autorizada en este hardware.</p>
-            <p class="text-slate-400 text-[11px]">HWID detectado: <code class="text-rose-300 font-mono">${hwid || 'DESCONOCIDO'}</code></p>
+            <p class="text-slate-400 text-[11px]">HWID detectado: <code class="text-rose-300 font-mono">${esc(hwid || 'DESCONOCIDO')}</code></p>
           </div>
           <p class="text-[11px] text-slate-500 mb-6 leading-relaxed">
             Para habilitar la aplicación en esta computadora, ejecuta el instalador oficial autorizado o contacta directamente al desarrollador (<strong class="text-slate-300">Mateo Ramírez</strong>).
