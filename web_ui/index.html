@@ -1809,6 +1809,17 @@
 
   <!-- ================= SCRIPTS DE CONTROL & INTERACTIVIDAD ================= -->
   <script>
+    const $id = (id) => document.getElementById(id);
+    const setText = (id, v) => { const el = $id(id); if (el) el.innerText = v; };
+    const setHTML = (elOrId, html) => {
+      const el = typeof elOrId === 'string' ? $id(elOrId) : elOrId;
+      if (el) el.innerHTML = html;
+    };
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    window.__uiListo = false;
+    document.addEventListener('DOMContentLoaded', () => { window.__uiListo = true; });
+
     let isRecording = false;
     let isWidgetRecording = false;
     let isMiniCalOpen = false;
@@ -1878,36 +1889,38 @@
 
     // SISTEMA DE TOASTS
     function mostrarToast(mensaje, tipo = 'success') {
-      const toast = document.getElementById('toastNotification');
-      const msg = document.getElementById('toastMessage');
-      const icon = document.getElementById('toastIcon');
-      const content = document.getElementById('toastContent');
+      const toast = $id('toastNotification');
+      const msg = $id('toastMessage');
+      const icon = $id('toastIcon');
+      const content = $id('toastContent');
 
-      msg.innerText = mensaje;
+      if (msg) msg.innerText = mensaje;
       let toastDuration = 3000;
       if (tipo === 'success') {
-        icon.innerHTML = '<svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
-        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/40 shadow-2xl text-xs font-semibold text-emerald-300 backdrop-blur-xl';
+        if (icon) icon.innerHTML = '<svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+        if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/40 shadow-2xl text-xs font-semibold text-emerald-300 backdrop-blur-xl';
       } else if (tipo === 'warning') {
-        icon.innerHTML = '<svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
-        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-amber-500/50 shadow-2xl text-xs font-semibold text-amber-300 backdrop-blur-xl';
+        if (icon) icon.innerHTML = '<svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+        if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-amber-500/50 shadow-2xl text-xs font-semibold text-amber-300 backdrop-blur-xl';
         toastDuration = 4500;
       } else if (tipo === 'error') {
-        icon.innerHTML = '<svg class="w-4 h-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
-        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-rose-500/40 shadow-2xl text-xs font-semibold text-rose-300 backdrop-blur-xl';
+        if (icon) icon.innerHTML = '<svg class="w-4 h-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+        if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-rose-500/40 shadow-2xl text-xs font-semibold text-rose-300 backdrop-blur-xl';
       } else {
-        icon.innerHTML = '<svg class="w-4 h-4 text-indigo-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
-        content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-indigo-500/40 shadow-2xl text-xs font-semibold text-indigo-300 backdrop-blur-xl';
+        if (icon) icon.innerHTML = '<svg class="w-4 h-4 text-indigo-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-indigo-500/40 shadow-2xl text-xs font-semibold text-indigo-300 backdrop-blur-xl';
       }
 
-      toast.classList.remove('hidden');
-      toast.classList.remove('translate-y-4');
-      toast.classList.add('translate-y-0');
+      if (toast) {
+        toast.classList.remove('hidden');
+        toast.classList.remove('translate-y-4');
+        toast.classList.add('translate-y-0');
 
-      setTimeout(() => {
-        toast.classList.add('translate-y-4');
-        setTimeout(() => toast.classList.add('hidden'), 300);
-      }, toastDuration);
+        setTimeout(() => {
+          toast.classList.add('translate-y-4');
+          setTimeout(() => toast.classList.add('hidden'), 300);
+        }, toastDuration);
+      }
     }
 
     // ==========================================
@@ -2156,11 +2169,13 @@
 
     function bloquearPantalla() {
       clearPin();
-      const login = document.getElementById('loginScreen');
-      login.classList.remove('hidden');
-      setTimeout(() => {
-        login.classList.remove('opacity-0', 'pointer-events-none');
-      }, 10);
+      const login = $id('loginScreen');
+      if (login) {
+        login.classList.remove('hidden');
+        setTimeout(() => {
+          login.classList.remove('opacity-0', 'pointer-events-none');
+        }, 10);
+      }
       if (window.pywebview && window.pywebview.api) {
         window.pywebview.api.cerrar_sesion();
       }
@@ -2209,6 +2224,32 @@
       else if (tabId === 'mobile') cargarInfoMovil();
       else if (tabId === 'config') cargarConfiguracion();
     }
+
+    window.ejecutarNavegacionVoz = function (accion, parametro) {
+      const param = String(parametro || '').trim();
+      switch (accion) {
+        case 'abrir_agenda':
+          switchTab('agenda');
+          if (typeof irAHoyAgenda === 'function') irAHoyAgenda();
+          break;
+
+        case 'buscar_paciente': {
+          switchTab('pacientes');
+          const inp = $id('inputBuscarPaciente');
+          if (inp) { inp.value = param; inp.focus(); }
+          buscarPacientesEnVivo(param);
+          break;
+        }
+
+        case 'abrir_odontograma':
+          // No existe una vista de odontograma independiente: vive dentro del PDF del visor.
+          switchTab('pdf');
+          break;
+
+        default:
+          mostrarToast('No entendí a dónde ir.', 'warning');
+      }
+    };
 
     window.actualizarTodosLosMenus = function() {
       try {
@@ -2680,21 +2721,15 @@
           const exp = await fn.call(api);
           if (exp && exp.status === 'ok') {
             ultimoExpedienteCache = exp;
-            document.getElementById('cardPacNombre').innerText = exp.paciente || 'Paciente';
-            document.getElementById('cardPacDoc').innerText = `CI: ${exp.documento || 'No registrada'} • ${exp.edad || ''}`;
-            document.getElementById('cardPacDiag').innerText = exp.diagnostico || 'No especificado';
-            document.getElementById('cardPacPlan').innerText = exp.plan || 'No especificado';
-            document.getElementById('cardPacCitaPago').innerText = exp.proxima_cita || 'Control regular';
-            document.getElementById('cardPacSaldo').innerText = exp.pago || 'Al día';
-            document.getElementById('cardPacMed').innerText = exp.receta || 'Sin medicación prescrita';
-            
-            const telEl = document.getElementById('cardPacTelText');
-            if (telEl) {
-              telEl.innerText = exp.telefono ? `Tel: ${exp.telefono}` : 'Tel: No registrado';
-            }
-            
-            const prevPac = document.getElementById('previewPacName');
-            if (prevPac) prevPac.innerText = exp.paciente || 'Paciente';
+            setText('cardPacNombre', exp.paciente || 'Paciente');
+            setText('cardPacDoc', `CI: ${exp.documento || 'No registrada'} • ${exp.edad || ''}`);
+            setText('cardPacDiag', exp.diagnostico || 'No especificado');
+            setText('cardPacPlan', exp.plan || 'No especificado');
+            setText('cardPacCitaPago', exp.proxima_cita || 'Control regular');
+            setText('cardPacSaldo', exp.pago || 'Al día');
+            setText('cardPacMed', exp.receta || 'Sin medicación prescrita');
+            setText('cardPacTelText', exp.telefono ? `Tel: ${exp.telefono}` : 'Tel: No registrado');
+            setText('previewPacName', exp.paciente || 'Paciente');
           }
         }
       } catch (e) {
@@ -2856,8 +2891,10 @@
     // ==========================================
     // GESTIÓN DE PACIENTES
     // ==========================================
+    let _pacReqId = 0;
     async function cargarPacientes(filtro = "") {
-      const tbody = document.getElementById('tablaPacientesBody');
+      const reqId = ++_pacReqId;
+      const tbody = $id('tablaPacientesBody');
       try {
         let lista = [];
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
@@ -2875,16 +2912,17 @@
           ];
         }
 
+        if (reqId !== _pacReqId) return; // descartar petición obsoleta
         pacientesCache = lista;
         renderTablaPacientes(lista);
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-rose-400">Error al cargar pacientes: ${e}</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-rose-400">Error al cargar pacientes: ${esc(e)}</td></tr>`;
       }
     }
 
     function renderTablaPacientes(lista) {
-      const tbody = document.getElementById('tablaPacientesBody');
-      const badge = document.getElementById('badgeTotalPacientes');
+      const tbody = $id('tablaPacientesBody');
+      const badge = $id('badgeTotalPacientes');
       
       if (badge) badge.innerText = (lista ? lista.length : 0);
 
@@ -2895,32 +2933,33 @@
 
       if (tbody) {
         tbody.innerHTML = lista.map(p => {
-          const initials = p.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'P';
+          const initials = p.nombre ? p.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : 'P';
           const doc = p.documento && p.documento !== 'None' ? p.documento : 'Sin cédula';
           const edad = p.edad ? `${p.edad} años` : '---';
           const saldoColor = p.saldo && p.saldo !== '$0.00' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold';
+          const id = Number(p.id);
 
           return `
-            <tr onclick="abrirHistoriaClinica(${p.id})" class="hover:bg-slate-800/40 transition-colors cursor-pointer group">
+            <tr onclick="abrirHistoriaClinica(${id})" class="hover:bg-slate-800/40 transition-colors cursor-pointer group">
               <td class="py-4 font-bold text-white flex items-center gap-2.5">
                 <div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-xs shadow-inner group-hover:scale-105 transition-transform">
-                  ${initials}
+                  ${esc(initials)}
                 </div>
                 <div>
-                  <div class="group-hover:text-indigo-300 transition-colors font-bold">${p.nombre}</div>
-                  ${p.telefono && p.telefono !== 'None' ? `<div class="text-[10px] text-slate-400 font-normal">Tel: ${p.telefono}</div>` : ''}
+                  <div class="group-hover:text-indigo-300 transition-colors font-bold">${esc(p.nombre)}</div>
+                  ${p.telefono && p.telefono !== 'None' ? `<div class="text-[10px] text-slate-400 font-normal">Tel: ${esc(p.telefono)}</div>` : ''}
                 </div>
               </td>
-              <td class="py-4 text-slate-300 font-mono font-medium">${doc}</td>
-              <td class="py-4 text-slate-300">${edad}</td>
-              <td class="py-4 text-slate-400">${p.ultima_visita || 'Sin registros'}</td>
-              <td class="py-4 ${saldoColor}">${p.saldo || '$0.00'}</td>
+              <td class="py-4 text-slate-300 font-mono font-medium">${esc(doc)}</td>
+              <td class="py-4 text-slate-300">${esc(edad)}</td>
+              <td class="py-4 text-slate-400">${esc(p.ultima_visita || 'Sin registros')}</td>
+              <td class="py-4 ${saldoColor}">${esc(p.saldo || '$0.00')}</td>
               <td class="py-4 text-right space-x-2" onclick="event.stopPropagation()">
-                <button onclick="editarPaciente(${p.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">
+                <button onclick="editarPaciente(${id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   <span>Editar</span>
                 </button>
-                <button onclick="abrirHistoriaClinica(${p.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors">Ver Historia</button>
+                <button onclick="abrirHistoriaClinica(${id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors">Ver Historia</button>
               </td>
             </tr>
           `;
@@ -3047,23 +3086,28 @@
         const consultas = resp.consultas || [];
 
         const initials = (p.nombre || 'P').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-        document.getElementById('historiaInitials').innerText = initials;
-        document.getElementById('historiaNombre').innerText = p.nombre || 'Paciente';
+        setText('historiaInitials', initials);
+        setText('historiaNombre', p.nombre || 'Paciente');
         const docTxt = p.documento && p.documento !== 'None' ? `CI: ${p.documento}` : 'Sin cédula';
         const edadTxt = p.edad ? `${p.edad} años` : 'Edad no reg.';
-        document.getElementById('historiaMeta').innerText = `${docTxt} • ${edadTxt} • ${p.direccion && p.direccion !== 'No especificado' ? p.direccion : 'Consultorio Odontológico'}`;
-        document.getElementById('historiaDoc').innerText = p.documento && p.documento !== 'None' ? p.documento : 'Sin cédula';
-        document.getElementById('historiaEdadSexo').innerText = `${p.edad ? p.edad + ' años' : 'Edad no reg.'} • ${p.sexo || 'No especificado'}`;
-        document.getElementById('historiaTel').innerText = p.telefono && p.telefono !== 'No especificado' ? p.telefono : 'Sin teléfono';
+        setText('historiaMeta', `${docTxt} • ${edadTxt} • ${p.direccion && p.direccion !== 'No especificado' ? p.direccion : 'Consultorio Odontológico'}`);
+        setText('historiaDoc', p.documento && p.documento !== 'None' ? p.documento : 'Sin cédula');
+        setText('historiaEdadSexo', `${p.edad ? p.edad + ' años' : 'Edad no reg.'} • ${p.sexo || 'No especificado'}`);
+        setText('historiaTel', p.telefono && p.telefono !== 'No especificado' ? p.telefono : 'Sin teléfono');
         
         const pacEnCache = pacientesCache.find(x => x.id === pacienteId);
         const saldoTxt = pacEnCache ? pacEnCache.saldo : '$0.00';
-        document.getElementById('historiaSaldo').innerText = saldoTxt || '$0.00';
-        document.getElementById('historiaSaldo').className = (saldoTxt && saldoTxt !== '$0.00') ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold';
+        const saldoEl = $id('historiaSaldo');
+        if (saldoEl) {
+          saldoEl.innerText = saldoTxt || '$0.00';
+          saldoEl.className = (saldoTxt && saldoTxt !== '$0.00') ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold';
+        }
 
-        document.getElementById('historiaTotalConsultas').innerText = consultas.length;
+        setText('historiaTotalConsultas', consultas.length);
 
-        const cont = document.getElementById('historiaConsultasTimeline');
+        const cont = $id('historiaConsultasTimeline');
+        if (!cont) return;
+
         if (!consultas.length) {
           cont.innerHTML = `
             <div class="text-center py-12 bg-slate-950/40 rounded-2xl border border-slate-800/80">
@@ -3081,14 +3125,16 @@
             let plan = c.plan_tratamiento || 'Plan regular';
             let motivo = c.motivo_consulta || 'Consulta de rutina';
             let rutaPdf = c.ruta_pdf || '';
+            const cId = Number(c.id);
+            const pId = Number(pacienteId);
 
             return `
               <div class="p-4 bg-slate-950/70 hover:bg-slate-950 rounded-2xl border border-slate-800 transition-all">
                 <div class="flex items-center justify-between mb-2">
                   <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-bold flex items-center justify-center">#${consultas.length - idx}</span>
-                    <span class="text-xs font-bold text-white">${fechaStr}</span>
-                    <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">${motivo}</span>
+                    <span class="text-xs font-bold text-white">${esc(fechaStr)}</span>
+                    <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">${esc(motivo)}</span>
                   </div>
                   <div class="flex items-center gap-2">
                     ${rutaPdf ? `
@@ -3100,7 +3146,7 @@
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                       </button>
                     ` : `
-                      <button onclick="generarPdfDesdeHistorial(${c.id}, ${pacienteId})" class="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm" title="Generar Formulario 033 oficial en PDF">
+                      <button onclick="generarPdfDesdeHistorial(${cId}, ${pId})" class="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm" title="Generar Formulario 033 oficial en PDF">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                         <span>Generar PDF Formulario 033</span>
                       </button>
@@ -3111,11 +3157,11 @@
                 <div class="grid grid-cols-2 gap-3 text-xs mt-3 pt-3 border-t border-slate-800/80">
                   <div>
                     <span class="text-[10px] text-slate-500 font-bold uppercase block">Diagnóstico:</span>
-                    <p class="text-white font-bold text-xs mt-0.5">${diag}</p>
+                    <p class="text-white font-bold text-xs mt-0.5">${esc(diag)}</p>
                   </div>
                   <div>
                     <span class="text-[10px] text-slate-500 font-bold uppercase block">Plan / Procedimiento:</span>
-                    <p class="text-slate-300 font-normal text-xs mt-0.5">${plan}</p>
+                    <p class="text-slate-300 font-normal text-xs mt-0.5">${esc(plan)}</p>
                   </div>
                 </div>
               </div>
@@ -3123,7 +3169,8 @@
           }).join('');
         }
 
-        document.getElementById('modalHistoriaClinica').classList.remove('hidden');
+        const mHist = $id('modalHistoriaClinica');
+        if (mHist) mHist.classList.remove('hidden');
       } catch (e) {
         console.error('Error al abrir historia clínica:', e);
         mostrarToast('Error al abrir historia clínica: ' + e, 'error');
@@ -3419,8 +3466,75 @@
     // ==========================================
     // AGENDA Y CITAS
     // ==========================================
+    let filtroFechaCitas = null; // 'YYYY-MM-DD' o null
+
+    window.renderizarListaCitas = function (citas) {
+      const cont = $id('listaCitasContenedor');
+      if (!cont) return false; // pestaña aún no montada
+      const lista = Array.isArray(citas) ? citas : [];
+
+      if (lista.length === 0) {
+        cont.innerHTML = '<div class="text-xs text-slate-500 text-center py-8">' +
+          (filtroFechaCitas ? 'No hay citas para esa fecha.' : 'No hay citas pendientes agendadas.') + '</div>';
+        return true;
+      }
+
+      const html = lista.map(c => {
+        const f = c.fecha_hora_inicio || '';
+        const hora = f.includes(' ') ? f.split(' ')[1] : f;
+        const fechaCorta = f.includes(' ') ? f.split(' ')[0] : '';
+        const badge = c.recordatorio_enviado
+          ? `<span class="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono font-medium" title="Recordatorio enviado: ${esc(c.recordatorio_enviado_at || '')}">Enviado</span>`
+          : '';
+        const id = Number(c.id); // fuerza número: nada de inyección en onclick
+        return `
+          <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors flex justify-between items-center group">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-white">${esc(c.nombre_paciente)}</span>
+                <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-mono font-bold">${esc(hora)}</span>
+                ${badge}
+              </div>
+              <p class="text-xs text-slate-400 mt-1">${esc(c.descripcion || 'Consulta odontológica')}</p>
+              <div class="text-[10px] text-slate-500 mt-0.5 font-mono">${esc(fechaCorta)}${c.telefono ? ` • Tel: ${esc(c.telefono)}` : ''}</div>
+            </div>
+            <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onclick="enviarRecordatorioWhatsappCita(${id})" title="Recordatorio WhatsApp" class="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-400 cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3l2 5-2.5 1.5a11 11 0 005 5L14 12l5 2v3a2 2 0 01-2 2h-1C8.8 19 3 13.2 3 6V5z"/></svg>
+              </button>
+              <button onclick="abrirModalReprogramarCita(${id})" title="Reprogramar" class="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </button>
+              <button onclick="cancelarCitaId(${id})" title="Cancelar" class="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+          </div>`;
+      }).join('');
+
+      cont.innerHTML = html; // una sola escritura al DOM
+      return true;
+    };
+
+    function aplicarFiltroCitas() {
+      const base = Array.isArray(citasCache) ? citasCache : [];
+      const lista = filtroFechaCitas
+        ? base.filter(c => (c.fecha_hora_inicio || '').startsWith(filtroFechaCitas))
+        : base;
+      window.renderizarListaCitas(lista);
+    }
+    window.filtrarCitasPorFecha = function (yyyy_mm_dd) {
+      filtroFechaCitas = yyy_mm_dd || null;
+      aplicarFiltroCitas();
+    };
+    window.restablecerFiltroCitas = function () {
+      filtroFechaCitas = null;
+      const inp = $id('filtroFechaCitas');
+      if (inp) inp.value = '';
+      aplicarFiltroCitas();
+    };
+
     async function cargarCitas() {
-      const cont = document.getElementById('listaCitasContenedor');
       try {
         let citas = [];
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
@@ -3436,64 +3550,26 @@
         }
 
         citasCache = citas;
-        document.getElementById('badgeTotalCitas').innerText = citas.length;
-        document.getElementById('miniCalCitasCount').innerText = `${citas.length} citas registradas`;
+        setText('badgeTotalCitas', (citas || []).length);
+        setText('miniCalCitasCount', `${(citas || []).length} citas registradas`);
         renderizarCalendarioAgenda();
         renderizarMiniCalendario();
 
-        if (!citas || citas.length === 0) {
-          cont.innerHTML = '<div class="text-xs text-slate-500 text-center py-8">No hay citas pendientes agendadas.</div>';
-          return;
-        }
-
-        cont.innerHTML = citas.map(c => {
-          const f = c.fecha_hora_inicio || '';
-          const hora = f.includes(' ') ? f.split(' ')[1] : f;
-          const fechaCorta = f.includes(' ') ? f.split(' ')[0] : '';
-          const badgeEnviado = c.recordatorio_enviado 
-            ? `<span class="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono font-medium flex items-center gap-1" title="Recordatorio enviado: ${c.recordatorio_enviado_at || ''} (${c.recordatorio_metodo || 'WhatsApp'})"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Avisado</span>`
-            : '';
-          return `
-            <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors flex justify-between items-center group">
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-bold text-white">${c.nombre_paciente}</span>
-                  <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-mono font-bold">${hora}</span>
-                  ${badgeEnviado}
-                </div>
-                <p class="text-xs text-slate-400 mt-1">${c.descripcion || 'Consulta odontológica'}</p>
-                <div class="text-[10px] text-slate-500 mt-0.5 font-mono flex items-center gap-2">
-                  <span>${fechaCorta}</span>
-                  ${c.telefono ? `<span class="text-slate-400 font-sans text-[11px]">• Tel: ${c.telefono}</span>` : ''}
-                </div>
-              </div>
-              <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onclick="enviarRecordatorioWhatsappCita(${c.id})" title="Enviar recordatorio de WhatsApp a ${c.nombre_paciente}" class="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-400 transition-all cursor-pointer flex items-center justify-center">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
-                </button>
-                <button onclick="abrirModalReprogramarCita(${c.id})" title="Reprogramar cita" class="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 transition-all cursor-pointer flex items-center justify-center">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                </button>
-                <button onclick="cancelarCitaId(${c.id})" title="Cancelar cita" class="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 transition-all cursor-pointer flex items-center justify-center">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
-
+        aplicarFiltroCitas();
       } catch (e) {
-        cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-6">Error al cargar citas: ${e}</div>`;
+        const c = $id('listaCitasContenedor');
+        if (c) c.innerHTML = `<div class="text-xs text-rose-400 text-center py-6">Error al cargar citas: ${esc(e)}</div>`;
       }
     }
 
     function abrirModalNuevaCita() {
-      const hoy = new Date().toISOString().split('T')[0];
-      document.getElementById('citaFecha').value = hoy;
-      document.getElementById('citaPacienteNombre').value = '';
-      document.getElementById('citaTelefono').value = '';
-      document.getElementById('citaDescripcion').value = '';
-      document.getElementById('modalCita').classList.remove('hidden');
+      const d = new Date();
+      const hoy = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const fInp = $id('citaFecha'); if (fInp) fInp.value = hoy;
+      const pInp = $id('citaPacienteNombre'); if (pInp) pInp.value = '';
+      const tInp = $id('citaTelefono'); if (tInp) tInp.value = '';
+      const dInp = $id('citaDescripcion'); if (dInp) dInp.value = '';
+      const m = $id('modalCita'); if (m) m.classList.remove('hidden');
     }
 
     function cerrarModalCita() {
@@ -3635,10 +3711,11 @@
     }
 
     function actualizarCalculoReprogRelativo() {
-      const refId = document.getElementById('reprogSelectCitaRef').value;
-      const dir = document.getElementById('reprogSelectDireccion').value;
-      const deltaMin = parseInt(document.getElementById('reprogSelectDelta').value, 10) || 60;
-      const preview = document.getElementById('reprogRelativoPreview');
+      const refId = ($id('reprogSelectCitaRef') || {}).value;
+      const dir = ($id('reprogSelectDireccion') || {}).value;
+      const deltaMin = parseInt(($id('reprogSelectDelta') || {}).value, 10) || 60;
+      const preview = $id('reprogRelativoPreview');
+      if (!preview) return;
 
       if (!refId) {
         preview.innerHTML = '<span class="text-slate-400">Selecciona una cita de referencia para calcular la nueva hora.</span>';
@@ -3771,7 +3848,7 @@
           // Fallback en desarrollo
           const manana = new Date();
           manana.setDate(manana.getDate() + 1);
-          const fStr = manana.toISOString().split('T')[0];
+          const fStr = `${manana.getFullYear()}-${String(manana.getMonth()+1).padStart(2,'0')}-${String(manana.getDate()).padStart(2,'0')}`;
           citas = (citasCache || []).filter(c => (c.fecha_hora_inicio || '').startsWith(fStr));
         }
 
@@ -3798,31 +3875,32 @@
           const hora = f.includes(' ') ? f.split(' ')[1] : f;
           const yaEnviado = Boolean(c.recordatorio_enviado);
           const badge = yaEnviado
-            ? `<span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">✓ Notificado (${c.recordatorio_metodo || 'WA'})</span>`
+            ? `<span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">✓ Notificado (${esc(c.recordatorio_metodo || 'WA')})</span>`
             : `<span class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md font-bold">Pendiente</span>`;
 
-          const telText = c.telefono ? `<span class="font-mono text-slate-300">${c.telefono}</span>` : '<span class="text-rose-400 italic">Sin teléfono registrado</span>';
+          const telText = c.telefono ? `<span class="font-mono text-slate-300">${esc(c.telefono)}</span>` : '<span class="text-rose-400 italic">Sin teléfono registrado</span>';
+          const id = Number(c.id);
 
           return `
             <div class="p-3.5 bg-slate-950/70 rounded-2xl border ${yaEnviado ? 'border-slate-800/80' : 'border-emerald-500/20'} flex items-center justify-between gap-3">
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span class="text-xs font-bold text-white">${c.nombre_paciente}</span>
-                  <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-mono font-bold">${hora}</span>
+                  <span class="text-xs font-bold text-white">${esc(c.nombre_paciente)}</span>
+                  <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-mono font-bold">${esc(hora)}</span>
                   ${badge}
                 </div>
-                <div class="text-[11px] text-slate-400 mt-1 truncate">${c.descripcion || 'Consulta odontológica'}</div>
+                <div class="text-[11px] text-slate-400 mt-1 truncate">${esc(c.descripcion || 'Consulta odontológica')}</div>
                 <div class="text-[10px] text-slate-500 mt-0.5 flex items-center gap-2">
                   <span>Tel: ${telText}</span>
-                  ${c.recordatorio_enviado_at ? `<span>• Enviado: ${c.recordatorio_enviado_at}</span>` : ''}
+                  ${c.recordatorio_enviado_at ? `<span>• Enviado: ${esc(c.recordatorio_enviado_at)}</span>` : ''}
                 </div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
-                <button onclick="enviarRecordatorioWhatsappCita(${c.id}, false)" title="Enviar recordatorio (Automático según configuración)" class="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5">
+                <button onclick="enviarRecordatorioWhatsappCita(${id}, false)" title="Enviar recordatorio (Automático según configuración)" class="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                   <span>${yaEnviado ? 'Reenviar' : 'Enviar'}</span>
                 </button>
-                <button onclick="enviarRecordatorioWhatsappCita(${c.id}, true)" title="Abrir en WhatsApp Web / Desktop directamente" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl cursor-pointer transition-colors">
+                <button onclick="enviarRecordatorioWhatsappCita(${id}, true)" title="Abrir en WhatsApp Web / Desktop directamente" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl cursor-pointer transition-colors">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                 </button>
               </div>
@@ -3831,7 +3909,7 @@
         }).join('');
 
       } catch (e) {
-        cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-6">Error al cargar recordatorios: ${e}</div>`;
+        if (cont) cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-6">Error al cargar recordatorios: ${esc(e)}</div>`;
       }
     }
 
@@ -4165,7 +4243,8 @@
     let pdfAjusteModo = 'fit-width';
 
     async function cargarPdfs() {
-      const cont = document.getElementById('listaPdfsContenedor');
+      const cont = $id('listaPdfsContenedor');
+      if (!cont) return;
       try {
         let pdfs = [];
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
@@ -4180,12 +4259,13 @@
         }
 
         pdfsCache = pdfs;
-        document.getElementById('badgeTotalPdfs').innerText = pdfs.length;
+        const badge = $id('badgeTotalPdfs');
+        if (badge) badge.innerText = (pdfs || []).length;
 
         if (!pdfs || pdfs.length === 0) {
           cont.innerHTML = '<div class="text-xs text-slate-500 text-center py-12">Aún no hay historias clínicas en PDF generadas.</div>';
-          document.getElementById('previewPdfEmpty').classList.remove('hidden');
-          document.getElementById('previewPdfImg').classList.add('hidden');
+          const vacio = $id('previewPdfEmpty'); if (vacio) vacio.classList.remove('hidden');
+          const img = $id('previewPdfImg'); if (img) img.classList.add('hidden');
           return;
         }
 
@@ -4200,8 +4280,8 @@
                 PDF
               </div>
               <div class="overflow-hidden">
-                <div class="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">${pacNom}</div>
-                <div class="text-[10px] text-slate-400 mt-0.5 truncate"><b class="text-slate-200">CI: ${cedTxt}</b>${edadTxt} • <span class="font-mono text-slate-300">${p.tamano}</span></div>
+                <div class="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">${esc(pacNom)}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5 truncate"><b class="text-slate-200">CI: ${esc(cedTxt)}</b>${esc(edadTxt)} • <span class="font-mono text-slate-300">${esc(p.tamano)}</span></div>
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0 ml-2">
@@ -4217,7 +4297,7 @@
         }
 
       } catch (e) {
-        cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-8">Error al listar PDFs: ${e}</div>`;
+        if (cont) cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-8">Error al listar PDFs: ${esc(e)}</div>`;
       }
     }
 
@@ -4241,11 +4321,11 @@
         cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
       }
 
-      const imgEl = document.getElementById('previewPdfImg');
-      const emptyEl = document.getElementById('previewPdfEmpty');
-      const titleEl = document.getElementById('previewDocTitle');
-      const metaEl = document.getElementById('previewDocMeta');
-      const pageInd = document.getElementById('previewPageIndicator');
+      const imgEl = $id('previewPdfImg');
+      const emptyEl = $id('previewPdfEmpty');
+      const titleEl = $id('previewDocTitle');
+      const metaEl = $id('previewDocMeta');
+      const pageInd = $id('previewPageIndicator');
 
       try {
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
@@ -4262,19 +4342,21 @@
             const pacEdad = preview.edad ? ` • ${preview.edad}` : '';
             const docDr = preview.doctor ? ` • ${preview.doctor}` : ' • Mateo';
 
-            titleEl.innerText = pacNom;
-            metaEl.innerText = `CI: ${pacDoc}${pacEdad}${docDr} • Pág: ${preview.total_paginas} • ${preview.tamano}`;
-            pageInd.innerText = `1 / ${preview.total_paginas}`;
+            if (titleEl) titleEl.innerText = pacNom;
+            if (metaEl) metaEl.innerText = `CI: ${pacDoc}${pacEdad}${docDr} • Pág: ${preview.total_paginas} • ${preview.tamano}`;
+            if (pageInd) pageInd.innerText = `1 / ${preview.total_paginas}`;
 
-            aplicarModoAjustePdf(imgEl);
-            imgEl.classList.remove('viewer-fade-in');
-            void imgEl.offsetWidth;
-            imgEl.src = currentPdfPages[0];
-            imgEl.classList.add('viewer-fade-in');
-            imgEl.classList.remove('hidden');
-            emptyEl.classList.add('hidden');
+            if (imgEl) {
+              aplicarModoAjustePdf(imgEl);
+              imgEl.classList.remove('viewer-fade-in');
+              void imgEl.offsetWidth;
+              imgEl.src = currentPdfPages[0];
+              imgEl.classList.add('viewer-fade-in');
+              imgEl.classList.remove('hidden');
+            }
+            if (emptyEl) emptyEl.classList.add('hidden');
 
-            const viewerArea = document.getElementById('pdfViewerArea');
+            const viewerArea = $id('pdfViewerArea');
             if (viewerArea) {
               viewerArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
@@ -4285,11 +4367,11 @@
         console.warn('Error al obtener preview PDF:', e);
       }
 
-      titleEl.innerText = ruta.split('\\').pop().split('/').pop() || 'Expediente Clínico';
-      metaEl.innerText = 'Documento generado • Listo para abrir';
-      pageInd.innerText = '1 / 1';
-      imgEl.classList.add('hidden');
-      emptyEl.classList.remove('hidden');
+      if (titleEl) titleEl.innerText = ruta.split('\\').pop().split('/').pop() || 'Expediente Clínico';
+      if (metaEl) metaEl.innerText = 'Documento generado • Listo para abrir';
+      if (pageInd) pageInd.innerText = '1 / 1';
+      if (imgEl) imgEl.classList.add('hidden');
+      if (emptyEl) emptyEl.classList.remove('hidden');
     }
 
     function cargarPreviewPdf(ruta) {
@@ -4352,13 +4434,16 @@
     function cambiarPaginaPdf(delta) {
       if (!currentPdfPages || currentPdfPages.length === 0) return;
       currentPdfPageIndex = Math.max(0, Math.min(currentPdfPages.length - 1, currentPdfPageIndex + delta));
-      const imgEl = document.getElementById('previewPdfImg');
-      aplicarModoAjustePdf(imgEl);
-      imgEl.classList.remove('viewer-fade-in');
-      void imgEl.offsetWidth;
-      imgEl.src = currentPdfPages[currentPdfPageIndex];
-      imgEl.classList.add('viewer-fade-in');
-      document.getElementById('previewPageIndicator').innerText = `${currentPdfPageIndex + 1} / ${currentPdfPages.length}`;
+      const imgEl = $id('previewPdfImg');
+      if (imgEl) {
+        aplicarModoAjustePdf(imgEl);
+        imgEl.classList.remove('viewer-fade-in');
+        void imgEl.offsetWidth;
+        imgEl.src = currentPdfPages[currentPdfPageIndex];
+        imgEl.classList.add('viewer-fade-in');
+      }
+      const ind = $id('previewPageIndicator');
+      if (ind) ind.innerText = `${currentPdfPageIndex + 1} / ${currentPdfPages.length}`;
     }
 
     function abrirPdfActual() {
