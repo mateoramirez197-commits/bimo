@@ -11,11 +11,32 @@ from googleapiclient.discovery import build
 from database import crear_cita_db, listar_citas_db
 from config import BASE_DIR
 
-SCOPES = ['https://www.googleapis.com/auth/calendar']
+import json
+import shutil
+
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/drive.file',
+]
 _CALENDAR_SERVICE = None
 _DOCTOR_EMAIL = None
+_GOOGLE_CREDS = None
 
-import shutil
+
+def _token_tiene_todos_los_scopes(token_path):
+    try:
+        with open(token_path, encoding='utf-8') as f:
+            otorgados = set(json.load(f).get('scopes') or [])
+        return set(SCOPES).issubset(otorgados)
+    except Exception:
+        return False
+
+
+def obtener_credenciales_google():
+    """Credenciales vigentes con scope de Drive, o None."""
+    if _GOOGLE_CREDS and _GOOGLE_CREDS.valid and 'https://www.googleapis.com/auth/drive.file' in (_GOOGLE_CREDS.scopes or []):
+        return _GOOGLE_CREDS
+    return None
 
 def buscar_y_copiar_credentials():
     """
@@ -38,7 +59,7 @@ def buscar_y_copiar_credentials():
     return False
 
 def init_google_calendar(email_doctor=None):
-    global _CALENDAR_SERVICE, _DOCTOR_EMAIL
+    global _CALENDAR_SERVICE, _DOCTOR_EMAIL, _GOOGLE_CREDS
     if not email_doctor:
         try:
             from config import cargar_datos_clinica
@@ -54,6 +75,14 @@ def init_google_calendar(email_doctor=None):
     creds = None
     token_path = os.path.join(BASE_DIR, 'token.json')
     cred_path = os.path.join(BASE_DIR, 'credentials.json')
+
+    # El token.json actual solo tiene scope de Calendar: sin esto Drive dará 403 para siempre.
+    # Se fuerza UNA re-autorización, pero solo si hay credentials.json para poder hacerla.
+    if os.path.exists(token_path) and os.path.exists(cred_path) and not _token_tiene_todos_los_scopes(token_path):
+        try:
+            os.remove(token_path)
+        except Exception:
+            pass
 
     if os.path.exists(token_path):
         try:
@@ -82,6 +111,7 @@ def init_google_calendar(email_doctor=None):
 
     if creds and creds.valid:
         try:
+            _GOOGLE_CREDS = creds
             _CALENDAR_SERVICE = build('calendar', 'v3', credentials=creds)
             print(f"[CALENDAR] Sincronización oficial activa con Google Calendar de {_DOCTOR_EMAIL or 'doctor'}.")
             return True

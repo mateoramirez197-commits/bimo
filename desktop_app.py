@@ -352,6 +352,20 @@ class BimoBridge:
                 pass
             print(f"[BIMO DESKTOP ERROR] Error ejecutando comando de voz: {e}")
 
+    def _disparar_respaldo_drive(self, al_cerrar=False):
+        """Silencioso: nunca interrumpe login ni cierre."""
+        try:
+            from calendar_sync import obtener_credenciales_google
+            from drive_backup import respaldar_en_drive
+            creds = obtener_credenciales_google()
+            if not creds:
+                return None
+            # passphrase=None => zip sin cifrar. Recomendado: leerla de la bóveda/ajustes.
+            return respaldar_en_drive(creds, daemon=not al_cerrar)
+        except Exception as e:
+            print(f"[DRIVE BACKUP WARN] {e}")
+            return None
+
     # ==========================================
     # AUTENTICACIÓN & SESIÓN
     # ==========================================
@@ -361,6 +375,7 @@ class BimoBridge:
             if user:
                 self._usuario_actual = user
                 set_sesion_activa(user)
+                self._disparar_respaldo_drive()
                 return {
                     "status": "ok",
                     "usuario": {
@@ -400,6 +415,7 @@ class BimoBridge:
                         }
                 self._usuario_actual = user
                 set_sesion_activa(user)
+                self._disparar_respaldo_drive()
                 return {
                     "status": "ok",
                     "usuario": {
@@ -2668,6 +2684,13 @@ def iniciar_desktop():
             print(f"[DWM STYLE WARN] {e_dwm}")
 
     window.events.shown += aplicar_estilo_dwm_ventana
+
+    def on_closing():
+        t = bridge._disparar_respaldo_drive(al_cerrar=True)
+        if t:
+            t.join(timeout=25)
+
+    window.events.closing += on_closing
 
     def on_closed():
         limpiar_procesos()
