@@ -220,3 +220,47 @@ def respaldar_en_drive(credenciales, forzar=False, passphrase=None, daemon=True)
                          name="bimo-drive-backup", daemon=daemon)
     t.start()
     return t
+
+
+def respaldo_local_diario():
+    """
+    Crea un respaldo local diario de bimo.db en DATA_DIR/Respaldos_Locales/
+    con sqlite3.backup() y rotación de los últimos 7 días.
+    Totalmente independiente de Google Drive (C1).
+    """
+    try:
+        carpeta_respaldos = os.path.join(str(DATA_DIR), "Respaldos_Locales")
+        os.makedirs(carpeta_respaldos, exist_ok=True)
+
+        hoy_str = datetime.date.today().isoformat()
+        archivo_hoy = os.path.join(carpeta_respaldos, f"bimo_{hoy_str}.db")
+
+        # Si ya se respaldó hoy, no repetir innecesariamente
+        if os.path.exists(archivo_hoy):
+            return archivo_hoy
+
+        tmp_dest = archivo_hoy + ".tmp"
+        _snapshot_db(tmp_dest)
+        if os.path.exists(archivo_hoy):
+            os.remove(archivo_hoy)
+        os.rename(tmp_dest, archivo_hoy)
+        _log(f"Respaldo local diario creado exitosamente: {archivo_hoy}")
+
+        # Rotación: conservar solo los últimos 7 respaldos
+        archivos = sorted([
+            os.path.join(carpeta_respaldos, f)
+            for f in os.listdir(carpeta_respaldos)
+            if f.startswith("bimo_") and f.endswith(".db")
+        ])
+        while len(archivos) > 7:
+            antiguo = archivos.pop(0)
+            try:
+                os.remove(antiguo)
+                _log(f"Rotación de respaldo local antiguo eliminado: {antiguo}")
+            except Exception:
+                pass
+
+        return archivo_hoy
+    except Exception as e:
+        _log(f"Error en respaldo local diario: {e}")
+        return None

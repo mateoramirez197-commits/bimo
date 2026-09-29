@@ -355,6 +355,11 @@ class BimoBridge:
     def _disparar_respaldo_drive(self, al_cerrar=False):
         """Silencioso: nunca interrumpe login ni cierre."""
         try:
+            from drive_backup import respaldo_local_diario
+            respaldo_local_diario()
+        except Exception:
+            pass
+        try:
             from calendar_sync import obtener_credenciales_google
             from drive_backup import respaldar_en_drive
             creds = obtener_credenciales_google()
