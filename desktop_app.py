@@ -286,7 +286,7 @@ class BimoBridge:
                 self._wake_listener.activar_ventana_activa(8.0)
             if self._window:
                 try:
-                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast('Te escucho {nom_doc}...', 'info');")
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'Te escucho {nom_doc}...')}, 'info');")
                 except Exception:
                     pass
             return
@@ -298,7 +298,16 @@ class BimoBridge:
             resp = self.procesar_texto_clinico(texto_comando)
             if self._window:
                 tipo = resp.get("tipo", "")
-                if tipo == "COMANDO_HORA":
+                if tipo == "NAVEGACION_UI":
+                    accion = resp.get("accion", "")
+                    parametro = resp.get("parametro", "") or ""
+                    self._window.evaluate_js(
+                        f"if (window.ejecutarNavegacionVoz) "
+                        f"window.ejecutarNavegacionVoz({json.dumps(accion)}, {json.dumps(parametro)});"
+                    )
+                    sonar_confirmacion_exito()
+                    return          # no llamar a onVoiceClinicalProcessed para navegación
+                elif tipo == "COMANDO_HORA":
                     frase_h = resp.get("frase") or resp.get("mensaje", "")
                     self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(frase_h)}, 'info');")
                 elif tipo in ("COMANDO_CITA", "REPROGRAMAR_CITA"):
@@ -330,7 +339,7 @@ class BimoBridge:
                             res_wa = despachar_recordatorio_cita(cid)
                             self._window.evaluate_js(f"if (window.onWhatsAppReminderSent) window.onWhatsAppReminderSent({json.dumps(res_wa)});")
                         else:
-                            self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast('No se encontró cita activa para {nom_pac}', 'error');")
+                            self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'No se encontró cita activa para {nom_pac}')}, 'error');")
                 elif resp.get("cita_programada"):
                     pac_nom = resp.get("paciente", "Paciente")
                     f_hora = resp.get("cita_programada", "")
@@ -905,6 +914,20 @@ class BimoBridge:
                     "mensaje": msg,
                     "detalles": res_act
                 }
+
+        if tipo == "NAVEGACION_UI":
+            accion = str(resultado_ia.get("accion", "")).strip()
+            if accion not in ("abrir_agenda", "buscar_paciente", "abrir_odontograma"):
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
+                return {"status": "warning", "tipo": "IGNORAR", "texto": texto,
+                        "resultado": resultado_ia, "mensaje": "No entendí a qué pantalla ir."}
+            return {"status": "ok", "tipo": "NAVEGACION_UI", "texto": texto,
+                    "accion": accion,
+                    "parametro": str(resultado_ia.get("parametro") or "").strip(),
+                    "resultado": resultado_ia, "mensaje": "Navegando..."}
 
         if tipo == "IGNORAR":
             try:

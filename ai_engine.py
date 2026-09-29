@@ -1190,11 +1190,40 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
         "mensaje_confirmacion": msg_conf
     }
 
+_NAV_PREFIJO = r"(?:abre|abrir|muestra|muéstrame|muestrame|mostrar|ve a|ir a|llévame a|llevame a|busca|buscar|encuentra|encontrar)"
+
+def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
+    if not texto_crudo:
+        return None
+    t = texto_crudo.lower().replace("bimo", "").strip(" ,.?!¿¡")
+    t = re.sub(r"^(hola|oye|por favor)[, ]+", "", t).strip()
+    if len(t.split()) > 10:                    # un dictado clínico largo NUNCA es navegación
+        return None
+
+    m = re.match(rf"^{_NAV_PREFIJO}\s+(?:al\s+|a\s+la\s+|el\s+|la\s+)?(?:paciente|expediente|historia(?: clínica)?)(?:\s+de|\s+del|\s+de\s+la)?\s+(.+)$", t)
+    if m:
+        return {"tipo": "NAVEGACION_UI", "accion": "buscar_paciente", "parametro": m.group(1).strip().title()}
+
+    if re.match(rf"^{_NAV_PREFIJO}\s+(?:a\s+|a\s+la\s+|el\s+|la\s+|los\s+)?pacientes$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "buscar_paciente", "parametro": ""}
+
+    if re.match(rf"^{_NAV_PREFIJO}\s+(?:el\s+|la\s+|mi\s+)?odontograma\b", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_odontograma", "parametro": ""}
+
+    if re.match(rf"^{_NAV_PREFIJO}\s+(?:la\s+|mi\s+|el\s+)?(?:agenda|citas|calendario)\b", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_agenda", "parametro": ""}
+    return None
+
 def procesar_comando_o_dictado(texto_crudo: str) -> dict:
     # 0. Verificación determinista instantánea de comando de hora
     cmd_hora = resolver_comando_hora(texto_crudo)
     if cmd_hora:
         return cmd_hora
+
+    # 0.02 Verificación determinista de navegación de interfaz por voz (0ms, 0 tokens)
+    nav_ui = resolver_navegacion_ui(texto_crudo)
+    if nav_ui:
+        return nav_ui
 
     # 0.05 Verificación determinista instantánea de agendamiento de citas (0ms, 0 tokens)
     cmd_cita = resolver_comando_agendar_cita(texto_crudo)
@@ -1299,6 +1328,7 @@ Analiza la siguiente transcripción de voz y clasifícala estrictamente en una d
 5. CONSULTA_MEDICA: Si el doctor hace una pregunta puntual médica o farmacológica (máximo 2 oraciones).
 6. HISTORIA_CLINICA: Si el doctor está dictando una consulta clínica dental (síntomas, motivo, examen clínico, piezas dentales, diagnóstico CIE-10, plan de tratamiento, ortodoncia o indicaciones). ATENCIÓN: Es MUY COMÚN que el doctor comience dictando la filiación completa ('Paciente [Nombre], [Edad] años, cédula [X], teléfono [Y]... Consulta por...') y que al final mencione una próxima cita o control (ej: 'cita en 15 días'). En todos esos casos, la intención es OBLIGATORIAMENTE HISTORIA_CLINICA (la cita futura se guarda dentro del campo 'cita_programada', NUNCA clasificar la consulta general como COMANDO_CITA).
 7. IGNORAR: Si el audio trata sobre cualquier tema ajeno a la odontología, medicina o citas clínicas.
+8. NAVEGACION_UI: Orden CORTA y directa para mover la interfaz (ej: 'abre la agenda', 'muéstrame el odontograma', 'busca al paciente Juan Pérez', 'ir a pacientes'). NUNCA si el texto contiene síntomas, piezas dentales, diagnóstico, tratamiento o filiación: eso es HISTORIA_CLINICA.
 
 Devuelve ÚNICAMENTE un formato JSON válido según la intención:
 
@@ -1350,6 +1380,13 @@ Si es IGNORAR:
 {{
     "tipo": "IGNORAR",
     "respuesta_asistente": ""
+}}
+
+Si es NAVEGACION_UI:
+{{
+    "tipo": "NAVEGACION_UI",
+    "accion": "abrir_agenda | buscar_paciente | abrir_odontograma",
+    "parametro": "Nombre del paciente si aplica, si no cadena vacía"
 }}
 
 Si es HISTORIA_CLINICA:
@@ -1691,6 +1728,10 @@ Texto dictado:
                 if not resultado.get("nombre_paciente") or resultado.get("nombre_paciente") in ("Paciente", "Cita", "No especificado"):
                     resultado["nombre_paciente"] = pac_det.get("nombre")
                 resultado["documento"] = pac_det.get("documento") or ""
+
+        elif resultado.get("tipo") == "NAVEGACION_UI":
+            resultado["accion"] = str(resultado.get("accion") or "").strip()
+            resultado["parametro"] = str(resultado.get("parametro") or "").strip()
 
         return resultado
     except Exception as e:
