@@ -6,8 +6,11 @@ from pathlib import Path
 import qrcode
 from PIL import Image
 import re
+import secrets
+import hmac
+import tempfile
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 import uvicorn
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -17,7 +20,28 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from config import MOBILE_SERVER_PORT, BASE_DIR, sanitizar_nombre_carpeta
 from database import buscar_pacientes, listar_consultas_paciente, obtener_consulta_por_id
 
+def obtener_o_crear_movil_token() -> str:
+    from config import obtener_parametro_boveda, guardar_parametro_boveda
+    tok = obtener_parametro_boveda("movil_token")
+    if not tok or len(str(tok).strip()) < 16:
+        tok = secrets.token_urlsafe(24)
+        guardar_parametro_boveda("movil_token", tok)
+    return str(tok).strip()
+
 app = FastAPI(title="BIMO Mobile Bridge & Clinical Viewer")
+
+@app.middleware("http")
+async def verificar_autenticacion_movil(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/"):
+        token_esperado = obtener_o_crear_movil_token()
+        cookie_t = request.cookies.get("bimo_t", "")
+        header_t = request.headers.get("X-Bimo-Token", "")
+        query_t = request.query_params.get("t", "")
+        present_tok = header_t or cookie_t or query_t
+        if not present_tok or not hmac.compare_digest(str(present_tok), str(token_esperado)):
+            return JSONResponse({"status": "error", "message": "No autorizado. Dispositivo móvil no emparejado."}, status_code=401)
+    return await call_next(request)
 
 _CALLBACK_AUDIO = None
 _SERVIDOR_HILO = None
@@ -654,22 +678,45 @@ HTML_MOVIL = """<!DOCTYPE html>
 </html>
 """
 
+CATEGORIAS_PERMITIDAS = ("radiografia", "fotografia", "intraoral", "perfil", "panoramica", "otro")
+EXTS_PERMITIDAS = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".pdf")
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/mobile", response_class=HTMLResponse)
-async def serve_mobile_app():
+async def serve_mobile_app(request: Request, t: str = ""):
+    token_esperado = obtener_o_crear_movil_token()
+    if t:
+        if hmac.compare_digest(str(t).strip(), str(token_esperado).strip()):
+            resp = RedirectResponse(url="/mobile", status_code=303)
+            resp.set_cookie(key="bimo_t", value=str(t).strip(), httponly=True, secure=True, samesite="strict", max_age=86400 * 30)
+            return resp
+        else:
+            return HTMLResponse(
+                "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>BIMO Acceso</title><style>body{background:#080C14;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center}.card{background:#101622;border:1px solid #e11d48;padding:2rem;border-radius:1rem;max-width:400px}</style></head><body><div class='card'><h2 style='color:#fb7185'>Acceso no autorizado</h2><p style='color:#94a3b8;margin-top:1rem'>El código de emparejamiento es inválido o ha expirado. Por favor, escanea nuevamente el código QR desde BIMO en tu computadora.</p></div></body></html>",
+                status_code=401
+            )
+
+    cookie_t = request.cookies.get("bimo_t", "")
+    if not cookie_t or not hmac.compare_digest(str(cookie_t).strip(), str(token_esperado).strip()):
+        return HTMLResponse(
+            "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>BIMO Emparejamiento</title><style>body{background:#080C14;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center}.card{background:#101622;border:1px solid #1E293B;padding:2rem;border-radius:1rem;max-width:400px}</style></head><body><div class='card'><h2 style='color:#00F5D4'>Dispositivo no emparejado</h2><p style='color:#94a3b8;margin-top:1rem'>Para utilizar el micrófono clínico y consultar pacientes desde tu smartphone, abre BIMO en tu computadora y escanea el código QR que aparece en pantalla.</p></div></body></html>",
+            status_code=401
+        )
+
     from config import obtener_tema_activo_dict
-    t = obtener_tema_activo_dict()
-    logo_cols = t.get("logo_colors", [t.get("aqua", "#00F5D4"), t.get("azul_pastel", "#70D6FF"), t.get("fucsia", "#FF006E"), t.get("amarillo", "#FFBE0B")])
+    t_dict = obtener_tema_activo_dict()
+    logo_cols = t_dict.get("logo_colors", [t_dict.get("aqua", "#00F5D4"), t_dict.get("azul_pastel", "#70D6FF"), t_dict.get("fucsia", "#FF006E"), t_dict.get("amarillo", "#FFBE0B")])
     css_override = f"""
     <style id="theme-override">
         :root {{
-            --bg-app: {t['bg_dark']};
-            --card-app: {t['card_dark']};
-            --accent-app: {t['aqua']};
-            --border-app: {t['border']};
-            --btn-app: {t['azul_acero']};
-            --txt-app: {t['text_primary']};
-            --txt-muted: {t['text_muted']};
+            --bg-app: {t_dict['bg_dark']};
+            --card-app: {t_dict['card_dark']};
+            --accent-app: {t_dict['aqua']};
+            --border-app: {t_dict['border']};
+            --btn-app: {t_dict['azul_acero']};
+            --txt-app: {t_dict['text_primary']};
+            --txt-muted: {t_dict['text_muted']};
             --logo-b: {logo_cols[0]};
             --logo-i: {logo_cols[1]};
             --logo-m: {logo_cols[2]};
@@ -686,16 +733,26 @@ async def serve_mobile_app():
 
 @app.post("/api/upload-audio")
 async def upload_audio(file: UploadFile = File(...)):
+    temp_path = None
     try:
         contents = await file.read()
-        with open(_ULTIMO_AUDIO_RUTA, "wb") as f:
-            f.write(contents)
+        if len(contents) > MAX_UPLOAD_BYTES:
+            return JSONResponse({"ok": False, "error": "El archivo de audio excede el límite permitido de 25 MB."}, status_code=400)
+
+        fd, temp_path = tempfile.mkstemp(prefix="bimo_mobile_", suffix=".wav")
+        with os.fdopen(fd, "wb") as f_out:
+            f_out.write(contents)
 
         if _CALLBACK_AUDIO:
-            threading.Thread(target=_CALLBACK_AUDIO, args=(_ULTIMO_AUDIO_RUTA,)).start()
+            threading.Thread(target=_CALLBACK_AUDIO, args=(temp_path,), daemon=True).start()
 
         return JSONResponse({"ok": True, "message": "Audio recibido en Bimo PC."})
     except Exception as e:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 @app.get("/api/pacientes")
@@ -725,13 +782,16 @@ async def api_obtener_pdf_consulta(consulta_id: int):
         raise HTTPException(status_code=404, detail="Historia clínica no encontrada")
     
     ruta_pdf = consulta["ruta_pdf"]
-    if not os.path.exists(ruta_pdf):
-        raise HTTPException(status_code=404, detail="Archivo físico PDF no encontrado en el servidor")
+    real_pdf = os.path.realpath(str(ruta_pdf))
+    from config import RUTA_PACIENTES
+    real_pac = os.path.realpath(str(RUTA_PACIENTES))
+    if not os.path.exists(real_pdf) or not (real_pdf.startswith(real_pac + os.sep) or real_pdf == real_pac):
+        raise HTTPException(status_code=404, detail="Archivo físico PDF no encontrado o no accesible")
 
     return FileResponse(
-        ruta_pdf,
+        real_pdf,
         media_type="application/pdf",
-        filename=os.path.basename(ruta_pdf)
+        filename=os.path.basename(real_pdf)
     )
 
 @app.post("/api/upload-foto")
@@ -747,6 +807,22 @@ async def upload_foto_clinica(
         from generador_pdf import crear_historia_clinica
         import json
 
+        # 1. Sanitizar y validar categoría
+        cat_clean = re.sub(r'[^a-zA-Z0-9_]', '', str(categoria).lower().strip())
+        if cat_clean not in CATEGORIAS_PERMITIDAS:
+            cat_clean = "otro"
+
+        # 2. Validar extensión permitida
+        nom_orig = file.filename or "archivo.jpg"
+        ext = os.path.splitext(nom_orig)[1].lower()
+        if ext not in EXTS_PERMITIDAS:
+            return JSONResponse({"ok": False, "error": f"Extensión '{ext}' no permitida. Formatos válidos: {', '.join(EXTS_PERMITIDAS)}"}, status_code=400)
+
+        # 3. Validar tamaño de archivo
+        contents = await file.read()
+        if len(contents) > MAX_UPLOAD_BYTES:
+            return JSONResponse({"ok": False, "error": "El archivo excede el tamaño máximo permitido de 25 MB."}, status_code=400)
+
         paciente = obtener_paciente_por_id(paciente_id)
         if not paciente:
             raise HTTPException(status_code=404, detail="Paciente no encontrado")
@@ -760,22 +836,33 @@ async def upload_foto_clinica(
             f"{nom_limpio}_{edad_num}_anos_ID{paciente_id}",
             "Fotos_Radiografias"
         )
+
+        # 4. Blindaje contra Path Traversal: asegurar que carpeta_paciente está dentro de RUTA_PACIENTES
+        real_base = os.path.realpath(str(RUTA_PACIENTES))
+        real_dir = os.path.realpath(carpeta_paciente)
+        if not (real_dir.startswith(real_base + os.sep) or real_dir == real_base):
+            return JSONResponse({"ok": False, "error": "Ruta de almacenamiento inválida."}, status_code=400)
+
         os.makedirs(carpeta_paciente, exist_ok=True)
 
-        ext = os.path.splitext(file.filename)[1] or ".jpg"
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        nom_archivo = f"{categoria}_{ts}{ext}"
+        nom_archivo = f"{cat_clean}_{ts}{ext}"
         ruta_destino = os.path.join(carpeta_paciente, nom_archivo)
 
-        contents = await file.read()
+        real_dest = os.path.realpath(ruta_destino)
+        if not real_dest.startswith(real_dir + os.sep):
+            return JSONResponse({"ok": False, "error": "Intento de escritura fuera de la carpeta del paciente."}, status_code=400)
+
         with open(ruta_destino, "wb") as f_out:
             f_out.write(contents)
+
+        desc_clean = str(descripcion or "").strip()[:500]
 
         foto_id = guardar_foto_paciente_db(
             paciente_id=paciente_id,
             ruta_archivo=ruta_destino,
-            categoria=categoria,
-            descripcion=descripcion
+            categoria=cat_clean,
+            descripcion=desc_clean
         )
 
         # Regenerar automáticamente el PDF de hoy para incrustar la nueva foto en la Página 3
@@ -795,6 +882,8 @@ async def upload_foto_clinica(
             "mensaje": "Estudio fotográfico / radiográfico adjuntado con éxito al expediente.",
             "ruta": ruta_destino
         })
+    except HTTPException:
+        raise
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -816,13 +905,18 @@ async def api_fotos_paciente(paciente_id: int):
 @app.get("/api/foto-archivo/{foto_id}")
 async def api_obtener_archivo_foto(foto_id: int):
     from database import get_connection
+    from config import RUTA_PACIENTES
     with get_connection() as conn:
         c = conn.cursor()
         c.execute("SELECT ruta_archivo FROM fotos_pacientes WHERE id = ?", (foto_id,))
         row = c.fetchone()
-        if not row or not os.path.exists(row["ruta_archivo"]):
+        if not row:
             raise HTTPException(status_code=404, detail="Archivo fotográfico no encontrado")
-        return FileResponse(row["ruta_archivo"])
+        real_foto = os.path.realpath(str(row["ruta_archivo"]))
+        real_pac = os.path.realpath(str(RUTA_PACIENTES))
+        if not os.path.exists(real_foto) or not (real_foto.startswith(real_pac + os.sep) or real_foto == real_pac):
+            raise HTTPException(status_code=404, detail="Archivo fotográfico no encontrado o no accesible")
+        return FileResponse(real_foto)
 
 def iniciar_servidor_movil(callback_audio=None):
     global _CALLBACK_AUDIO, _SERVIDOR_HILO
@@ -830,7 +924,8 @@ def iniciar_servidor_movil(callback_audio=None):
 
     _asegurar_certificados_ssl()
     ip = obtener_ip_local()
-    url_movil = f"https://{ip}:{MOBILE_SERVER_PORT}"
+    tok = obtener_o_crear_movil_token()
+    url_movil = f"https://{ip}:{MOBILE_SERVER_PORT}/?t={tok}"
 
     if _SERVIDOR_HILO is None or not _SERVIDOR_HILO.is_alive():
         def run():
@@ -845,6 +940,6 @@ def iniciar_servidor_movil(callback_audio=None):
         
         _SERVIDOR_HILO = threading.Thread(target=run, daemon=True)
         _SERVIDOR_HILO.start()
-        print(f"[MOBILE BRIDGE] Servidor HTTPS seguro iniciado en LAN: {url_movil}")
+        print(f"[MOBILE BRIDGE] Servidor HTTPS seguro iniciado en LAN con emparejamiento: {url_movil}")
 
     return url_movil

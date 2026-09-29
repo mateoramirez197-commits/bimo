@@ -1088,6 +1088,12 @@ class BimoBridge:
                     self._window.evaluate_js(f"if (window.onMobileAudioProcessed) window.onMobileAudioProcessed({json.dumps(resp)});")
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] procesar_audio_externo: {e}")
+        finally:
+            if ruta_wav and os.path.exists(ruta_wav) and "bimo_mobile_" in os.path.basename(ruta_wav):
+                try:
+                    os.remove(ruta_wav)
+                except Exception:
+                    pass
 
     def obtener_ultimo_expediente(self):
         try:
@@ -2186,9 +2192,11 @@ class BimoBridge:
     # ==========================================
     def obtener_info_movil(self):
         try:
+            from mobile_mic_server import obtener_o_crear_movil_token
             ip = obtener_ip_local()
             puerto = MOBILE_SERVER_PORT
-            url = f"https://{ip}:{puerto}/"
+            tok = obtener_o_crear_movil_token()
+            url = f"https://{ip}:{puerto}/?t={tok}"
             return {
                 "status": "ok",
                 "ip": ip,
@@ -2202,13 +2210,16 @@ class BimoBridge:
                 "message": str(e),
                 "ip": "127.0.0.1",
                 "puerto": 8765,
-                "url": "https://127.0.0.1:8765/"
+                "url": "https://127.0.0.1:8765/",
+                "online": False
             }
 
     def obtener_qr_movil_base64(self):
         try:
+            from mobile_mic_server import obtener_o_crear_movil_token
             ip = obtener_ip_local()
-            url = f"https://{ip}:{MOBILE_SERVER_PORT}/"
+            tok = obtener_o_crear_movil_token()
+            url = f"https://{ip}:{MOBILE_SERVER_PORT}/?t={tok}"
             pil_img = generar_codigo_qr_url(url)
             buf = io.BytesIO()
             pil_img.save(buf, format="PNG")
