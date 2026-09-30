@@ -3152,11 +3152,11 @@
                   </div>
                   <div class="flex items-center gap-2">
                     ${rutaPdf ? `
-                      <button onclick="verPdfDesdeHistoria('${rutaPdf.replace(/\\/g, '\\\\')}')" class="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+                      <button data-ruta="${esc(rutaPdf)}" onclick="verPdfDesdeHistoria(this.dataset.ruta)" class="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         <span>Ver en Visor PDF</span>
                       </button>
-                      <button onclick="abrirPdfExternoDesdeHistoria('${rutaPdf.replace(/\\/g, '\\\\')}')" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs cursor-pointer transition-colors flex items-center justify-center" title="Abrir en Windows">
+                      <button data-ruta="${esc(rutaPdf)}" onclick="abrirPdfExternoDesdeHistoria(this.dataset.ruta)" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs cursor-pointer transition-colors flex items-center justify-center" title="Abrir en Windows">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                       </button>
                     ` : `
@@ -3197,10 +3197,8 @@
 
     function verPdfDesdeHistoria(rutaPdf) {
       cerrarModalHistoria();
-      switchTab('pdf');
-      if (rutaPdf) {
-        setTimeout(() => seleccionarPdfItem(encodeURIComponent(rutaPdf)), 50);
-      }
+      pdfObjetivoRuta = rutaPdf || null; // cargarPdfs() lo respeta al terminar
+      switchTab('pdf'); // dispara cargarPdfs()
     }
 
     async function abrirPdfExternoDesdeHistoria(rutaPdf) {
@@ -4308,12 +4306,15 @@
     let currentPdfPages = [];
     let currentPdfPageIndex = 0;
     let currentPdfRuta = null;
+    let pdfObjetivoRuta = null;
     let currentPdfPreviewMeta = null;
     let pdfAjusteModo = 'fit-width';
 
     async function cargarPdfs() {
       const cont = $id('listaPdfsContenedor');
       if (!cont) return;
+      const objetivo = pdfObjetivoRuta;
+      pdfObjetivoRuta = null; // se consume siempre para no quedar pegado a visitas futuras
       try {
         let pdfs = [];
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
@@ -4335,15 +4336,19 @@
           cont.innerHTML = '<div class="text-xs text-slate-500 text-center py-12">Aún no hay historias clínicas en PDF generadas.</div>';
           const vacio = $id('previewPdfEmpty'); if (vacio) vacio.classList.remove('hidden');
           const img = $id('previewPdfImg'); if (img) img.classList.add('hidden');
+          if (objetivo) seleccionarPdfItem(encodeURIComponent(objetivo));
           return;
         }
+
+        const rutaInicial = objetivo || ((pdfs.length > 0 && pdfs[0].ruta) ? pdfs[0].ruta : '');
 
         cont.innerHTML = pdfs.map((p, idx) => {
           const pacNom = p.paciente && p.paciente !== 'General' ? p.paciente : p.nombre;
           const cedTxt = p.cedula || 'Sin cédula';
           const edadTxt = p.edad ? ` • ${p.edad}` : '';
+          const esActivo = (p.ruta && p.ruta === rutaInicial) || (!rutaInicial && idx === 0);
           return `
-          <div onclick="seleccionarPdfItem('${encodeURIComponent(p.ruta)}', this)" class="pdf-list-card min-w-[260px] max-w-[285px] shrink-0 p-3 bg-slate-950/80 hover:bg-slate-800/80 rounded-2xl border border-slate-800 hover:border-indigo-500/50 transition-all flex items-center justify-between group cursor-pointer select-none shadow-sm ${idx === 0 ? 'border-indigo-500/80 bg-indigo-950/30 ring-1 ring-indigo-500/30' : ''}">
+          <div onclick="seleccionarPdfItem('${encodeURIComponent(p.ruta)}', this)" class="pdf-list-card min-w-[260px] max-w-[285px] shrink-0 p-3 bg-slate-950/80 hover:bg-slate-800/80 rounded-2xl border border-slate-800 hover:border-indigo-500/50 transition-all flex items-center justify-between group cursor-pointer select-none shadow-sm ${esActivo ? 'border-indigo-500/80 bg-indigo-950/30 ring-1 ring-indigo-500/30' : ''}">
             <div class="flex items-center gap-2.5 overflow-hidden">
               <div class="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center font-black text-[10px] shrink-0">
                 PDF
@@ -4361,8 +4366,8 @@
           </div>
         `}).join('');
 
-        if (pdfs.length > 0 && pdfs[0].ruta) {
-          seleccionarPdfItem(encodeURIComponent(pdfs[0].ruta));
+        if (rutaInicial) {
+          seleccionarPdfItem(encodeURIComponent(rutaInicial));
         }
 
       } catch (e) {
