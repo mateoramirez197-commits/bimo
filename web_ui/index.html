@@ -2047,7 +2047,14 @@
 
     async function submitPin() {
       const err = document.getElementById('loginErrorMsg');
-      const pinTarget = pinBuffer || "1234";
+      const pinTarget = pinBuffer;
+      if (!pinTarget) {
+        if (err) {
+          err.innerText = 'Por favor, ingresa tu PIN.';
+          err.classList.remove('hidden');
+        }
+        return;
+      }
       try {
         if (window.pywebview && window.pywebview.api) {
           const resp = await window.pywebview.api.autenticar_pin(pinTarget);
@@ -2055,7 +2062,7 @@
             desbloquearApp(resp.usuario);
             return;
           } else {
-            err.innerText = (resp && resp.message) || 'PIN incorrecto. Intenta de nuevo o usa Acceso Rápido Maestro.';
+            err.innerText = (resp && resp.message) || 'PIN incorrecto.';
             err.classList.remove('hidden');
             clearPin();
           }
@@ -2064,8 +2071,8 @@
           desbloquearApp({ nombre: 'Mateo Ramírez', rol: 'medico' });
         }
       } catch (e) {
-        console.warn('submitPin fallback:', e);
-        err.innerText = 'Error al validar PIN: ' + e;
+        console.warn('submitPin error:', e);
+        err.innerText = 'Error al validar PIN.';
         err.classList.remove('hidden');
         clearPin();
       }
@@ -2083,10 +2090,6 @@
             desbloquearApp(resp.usuario);
             return;
           } else {
-            if (email.includes('admin') || email.includes('mateo') || pwd === 'admin123' || pwd === '1234') {
-              desbloquearApp({ nombre: 'Mateo Ramírez', email: email || 'admin@bimo.local', rol: 'medico' });
-              return;
-            }
             err.innerText = (resp && resp.message) || 'Credenciales incorrectas.';
             err.classList.remove('hidden');
           }
@@ -2094,8 +2097,9 @@
           desbloquearApp({ nombre: 'Mateo Ramírez', email: email || 'admin@bimo.local', rol: 'medico' });
         }
       } catch (e) {
-        console.warn('submitLoginCreds fallback:', e);
-        desbloquearApp({ nombre: 'Mateo Ramírez', email: email || 'admin@bimo.local', rol: 'medico' });
+        console.warn('submitLoginCreds error:', e);
+        err.innerText = 'Error al conectar con el servicio de autenticación.';
+        err.classList.remove('hidden');
       }
     }
 
@@ -2106,10 +2110,19 @@
           if (resp && resp.status === 'ok') {
             desbloquearApp(resp.usuario);
             return;
+          } else {
+            const err = document.getElementById('loginErrorMsg');
+            if (err) {
+              err.innerText = (resp && resp.message) || 'Acceso de desarrollo no disponible.';
+              err.classList.remove('hidden');
+            }
           }
-        } catch(e) {}
+        } catch(e) {
+          console.warn('accesoDirectoDoctor error:', e);
+        }
+      } else {
+        desbloquearApp({ nombre: 'Mateo Ramírez', email: 'admin@bimo.local', rol: 'medico' });
       }
-      desbloquearApp({ nombre: 'Mateo Ramírez', email: 'admin@bimo.local', rol: 'medico' });
     }
 
     let _pendingUserForTerms = null;

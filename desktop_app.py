@@ -393,18 +393,25 @@ class BimoBridge:
             return {"status": "error", "message": "Correo o contraseña incorrectos."}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] autenticar: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Error interno al iniciar sesión."}
 
     def autenticar_pin(self, pin):
         try:
             pin_str = str(pin).strip()
             conf = cargar_datos_clinica()
-            pin_esperado = str(conf.get("pin_rapido", "1234")).strip()
+            pin_esperado = str(conf.get("pin_rapido", "")).strip()
 
             dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
-            pin_valido = (pin_str == pin_esperado)
-            if not pin_valido and dev_backdoor:
-                pin_valido = (pin_str == "__master__") or (pin_esperado == "1234" and pin_str in ("1234", "1963", "0000", "1111"))
+
+            if not pin_esperado:
+                if dev_backdoor and pin_str in ("1234", "__master__", "1963", "0000", "1111"):
+                    pin_valido = True
+                else:
+                    return {"status": "error", "message": "No hay PIN configurado. Inicia sesión con correo y contraseña o configura un PIN."}
+            else:
+                pin_valido = (pin_str == pin_esperado)
+                if not pin_valido and dev_backdoor:
+                    pin_valido = (pin_str == "__master__") or (pin_esperado == "1234" and pin_str in ("1234", "1963", "0000", "1111"))
 
             # Permite el PIN configurado por el doctor (o acceso de desarrollo si BIMO_DEV_BACKDOOR=1)
             if pin_valido:
@@ -417,12 +424,15 @@ class BimoBridge:
                         if "password_hash" in user:
                             del user["password_hash"]
                     else:
-                        user = {
-                            "id": 1,
-                            "nombre": conf.get("nombre_doctor", "Mateo Ramírez"),
-                            "email": "admin@bimo.local",
-                            "rol": "medico"
-                        }
+                        if dev_backdoor:
+                            user = {
+                                "id": 1,
+                                "nombre": conf.get("nombre_doctor", "Mateo Ramírez"),
+                                "email": "admin@bimo.local",
+                                "rol": "medico"
+                            }
+                        else:
+                            return {"status": "error", "message": "No se encontró ningún médico registrado en el sistema."}
                 self._usuario_actual = user
                 set_sesion_activa(user)
                 self._disparar_respaldo_drive()
@@ -435,10 +445,10 @@ class BimoBridge:
                         "rol": user.get("rol")
                     }
                 }
-            return {"status": "error", "message": "PIN maestro incorrecto."}
+            return {"status": "error", "message": "PIN incorrecto."}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] autenticar_pin: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Error interno al autenticar PIN."}
 
     def cerrar_sesion(self):
         try:
@@ -2031,15 +2041,63 @@ class BimoBridge:
             print(f"[BIMO DESKTOP ERROR] listar_pdfs_recientes: {e}")
             return []
 
+    def _ruta_pdf_permitida(self, ruta):
+        """
+        Verifica que la ruta sea un archivo PDF válido, existente en disco y
+        ubicado estrictamente dentro de los directorios permitidos de pacientes (C5/R3).
+        Evita Path Traversal y ejecución arbitraria de binarios a través de os.startfile.
+        """
+        if not ruta or not isinstance(ruta, str):
+            return False, ""
+        try:
+            real_ruta = os.path.realpath(os.path.abspath(str(ruta).strip()))
+            if not real_ruta.lower().endswith(".pdf"):
+                return False, ""
+            if not os.path.isfile(real_ruta):
+                return False, ""
+
+            # Directorios permitidos
+            dirs_permitidos = [
+                os.path.realpath(str(RUTA_PACIENTES)),
+                os.path.realpath(str(BASE_DIR / "Pacientes"))
+            ]
+            dev_pac = Path.home() / "Desktop" / "Bimo_Project" / "Pacientes"
+            if dev_pac.exists():
+                dirs_permitidos.append(os.path.realpath(str(dev_pac)))
+
+            for d in dirs_permitidos:
+                if not os.path.exists(d):
+                    continue
+                try:
+                    if os.path.commonpath([real_ruta, d]) == d:
+                        return True, real_ruta
+                except ValueError:
+                    continue
+            return False, ""
+        except Exception as e:
+            print(f"[RUTA_PDF_VALIDATION WARN]: {e}")
+            return False, ""
+
     def obtener_preview_pdf(self, ruta_pdf=None):
         try:
-            target = ruta_pdf or self._ultima_ruta_pdf
-            if target:
-                target = os.path.normpath(str(target))
-            if not target or not os.path.exists(target):
+            target = None
+            if ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(ruta_pdf)
+                if not ok:
+                    return {"status": "error", "message": "Ruta no permitida"}
+                target = real_r
+            elif self._ultima_ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(self._ultima_ruta_pdf)
+                if ok:
+                    target = real_r
+
+            if not target:
                 recientes = self.listar_pdfs_recientes()
                 if recientes:
-                    target = os.path.normpath(str(recientes[0]["ruta"]))
+                    ok, real_r = self._ruta_pdf_permitida(recientes[0]["ruta"])
+                    if ok:
+                        target = real_r
+
             if not target or not os.path.exists(target):
                 return {"status": "error", "message": "No se encontró ningún PDF generado aún."}
 
@@ -2153,22 +2211,29 @@ class BimoBridge:
 
     def abrir_pdf(self, ruta):
         try:
-            if ruta and os.path.exists(ruta):
-                os.startfile(ruta)
-                return {"status": "ok"}
-            return {"status": "error", "message": "El archivo PDF no fue encontrado en el disco."}
+            ok, real_ruta = self._ruta_pdf_permitida(ruta)
+            if not ok:
+                return {"status": "error", "message": "Ruta no permitida"}
+            os.startfile(real_ruta)
+            return {"status": "ok"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] abrir_pdf: {e}")
             return {"status": "error", "message": str(e)}
 
     def abrir_ultimo_pdf(self, abrir_externo=False):
         try:
-            target = self._ultima_ruta_pdf
-            if not target or not os.path.exists(target):
+            target = None
+            if self._ultima_ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(self._ultima_ruta_pdf)
+                if ok:
+                    target = real_r
+            if not target:
                 lista = self.listar_pdfs_recientes()
                 if lista:
-                    target = lista[0]["ruta"]
-                    self._ultima_ruta_pdf = target
+                    ok, real_r = self._ruta_pdf_permitida(lista[0]["ruta"])
+                    if ok:
+                        target = real_r
+                        self._ultima_ruta_pdf = target
             if target and os.path.exists(target):
                 if abrir_externo:
                     try:
@@ -2182,11 +2247,24 @@ class BimoBridge:
 
     def imprimir_pdf(self, ruta=None):
         try:
-            target = ruta or self._ultima_ruta_pdf
-            if not target or not os.path.exists(target):
+            target = None
+            if ruta:
+                ok, real_r = self._ruta_pdf_permitida(ruta)
+                if not ok:
+                    return {"status": "error", "message": "Ruta no permitida"}
+                target = real_r
+            elif self._ultima_ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(self._ultima_ruta_pdf)
+                if ok:
+                    target = real_r
+
+            if not target:
                 lista = self.listar_pdfs_recientes()
                 if lista:
-                    target = lista[0]["ruta"]
+                    ok, real_r = self._ruta_pdf_permitida(lista[0]["ruta"])
+                    if ok:
+                        target = real_r
+
             if target and os.path.exists(target):
                 try:
                     os.startfile(target, "print")
