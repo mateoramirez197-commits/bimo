@@ -3,8 +3,10 @@ setlocal enabledelayedexpansion
 title BIMO Pro
 cd /d "%~dp0"
 
-:: 1. Si existe la distribución binaria compilada BIMO_Pro.exe, lanzarla directamente sin consola
+:: 1. Si existe la distribución binaria compilada BIMO_Pro.exe, advertir y lanzarla
 if exist "dist\BIMO_Pro\BIMO_Pro.exe" (
+    echo [AVISO] Ejecutando binario compilado dist\BIMO_Pro\BIMO_Pro.exe.
+    echo Si modifico codigo fuente recientemente, ejecute 'ejecutar_bimo_dev.bat' para probar los cambios.
     start "" "dist\BIMO_Pro\BIMO_Pro.exe"
     exit /b 0
 )

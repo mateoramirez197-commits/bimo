@@ -23,6 +23,10 @@ def compilar_bimo_exe():
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
+    incluir_env = "--incluir-env" in sys.argv
+    if incluir_env:
+        print("[ADVERTENCIA SEGURIDAD] Se ha especificado --incluir-env. El archivo .env con credenciales se empaquetara en la distribucion.")
+
     import customtkinter
     ctk_path = os.path.dirname(customtkinter.__file__)
 
@@ -32,12 +36,35 @@ def compilar_bimo_exe():
         f"{ctk_path};customtkinter"
     ]
 
-    for archivo_extra in ["cert.pem", "key.pem", "clinica.json", "credentials.json", ".env", "vocabulario_aprendido.json", "base_odontograma.png", "mascaras_odontograma.npz"]:
+    archivos_permitidos = [
+        "credentials.json",
+        "base_odontograma.png",
+        "mascaras_odontograma.npz",
+        "clinica.default.json",
+    ]
+    if os.path.exists(os.path.join(base_dir, "vocabulario_aprendido.default.json")):
+        archivos_permitidos.append("vocabulario_aprendido.default.json")
+    elif os.path.exists(os.path.join(base_dir, "vocabulario_aprendido.json")):
+        archivos_permitidos.append("vocabulario_aprendido.json")
+
+    if incluir_env and os.path.exists(os.path.join(base_dir, ".env")):
+        archivos_permitidos.append(".env")
+
+    for archivo_extra in archivos_permitidos:
         p = os.path.join(base_dir, archivo_extra)
         if os.path.exists(p):
             add_data.append(f"{p};.")
 
     ico_path = os.path.join(base_dir, "assets", "bimo_icon.ico")
+
+    # Limpiar dist/BIMO_Pro antes de compilar para no arrastrar residuos de ejecuciones previas
+    dist_bimo = os.path.join(base_dir, "dist", "BIMO_Pro")
+    if os.path.exists(dist_bimo):
+        print("[INFO] Limpiando carpeta dist/BIMO_Pro existente...")
+        try:
+            shutil.rmtree(dist_bimo, ignore_errors=True)
+        except Exception as e_rm:
+            print(f"[WARN] No se pudo limpiar dist/BIMO_Pro por completo: {e_rm}")
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -53,6 +80,9 @@ def compilar_bimo_exe():
         "--collect-all=customtkinter",
         "--collect-all=faster_whisper",
         "--collect-all=onnxruntime",
+        "--collect-all=googleapiclient",
+        "--collect-all=google_auth_oauthlib",
+        "--collect-data=google",
         "--hidden-import=webview",
         "--hidden-import=webview.platforms.winforms",
         "--hidden-import=webview.platforms.edgechromium",
@@ -74,6 +104,12 @@ def compilar_bimo_exe():
         "--hidden-import=scipy.io.wavfile",
         "--hidden-import=google_auth_oauthlib",
         "--hidden-import=googleapiclient",
+        "--hidden-import=google.oauth2",
+        "--hidden-import=httplib2",
+        "--hidden-import=uritemplate",
+        "--hidden-import=drive_backup",
+        "--hidden-import=audio_feedback",
+        "--hidden-import=calendar_sync",
         "--hidden-import=openpyxl",
         "--hidden-import=qrcode",
         "--hidden-import=cryptography",
@@ -99,7 +135,6 @@ def compilar_bimo_exe():
         print(os.path.join(base_dir, "dist", "BIMO_Pro", "BIMO_Pro.exe"))
         print("=======================================================")
         
-        dist_bimo = os.path.join(base_dir, "dist", "BIMO_Pro")
         uninstall_src = os.path.join(base_dir, "dist", "Uninstall.exe")
         uninstall_dst = os.path.join(dist_bimo, "Uninstall.exe")
         if os.path.exists(uninstall_src):
@@ -118,37 +153,23 @@ def compilar_bimo_exe():
         shutil.copytree(os.path.join(base_dir, "assets"), assets_dst)
         print("[OK] assets sincronizado directamente en dist/BIMO_Pro/assets")
 
-        # Sincronizar base de datos con todos los pacientes y consultas históricas
-        db_src = os.path.join(base_dir, "bimo.db")
-        db_dst = os.path.join(dist_bimo, "bimo.db")
-        if os.path.exists(db_src):
-            shutil.copy2(db_src, db_dst)
-            print("[OK] bimo.db con historial de pacientes copiado a dist/BIMO_Pro/")
+        # Copiar solo archivos plantilla permitidos directamente a dist/BIMO_Pro (P-A: sin bimo.db, sin Pacientes, sin .env, sin clinica.json)
+        archivos_copia_dist = ["base_odontograma.png", "mascaras_odontograma.npz", "credentials.json", "clinica.default.json"]
+        if os.path.exists(os.path.join(base_dir, "vocabulario_aprendido.default.json")):
+            archivos_copia_dist.append("vocabulario_aprendido.default.json")
+        elif os.path.exists(os.path.join(base_dir, "vocabulario_aprendido.json")):
+            archivos_copia_dist.append("vocabulario_aprendido.json")
 
-        # Sincronizar expedientes y PDFs de pacientes
-        pac_src = os.path.join(base_dir, "Pacientes")
-        pac_dst = os.path.join(dist_bimo, "Pacientes")
-        if os.path.exists(pac_src):
-            if not os.path.exists(pac_dst):
-                shutil.copytree(pac_src, pac_dst)
-            else:
-                for root, dirs, files in os.walk(pac_src):
-                    rel = os.path.relpath(root, pac_src)
-                    dest_sub = os.path.join(pac_dst, rel)
-                    os.makedirs(dest_sub, exist_ok=True)
-                    for f in files:
-                        s_file = os.path.join(root, f)
-                        d_file = os.path.join(dest_sub, f)
-                        if not os.path.exists(d_file):
-                            shutil.copy2(s_file, d_file)
-            print("[OK] Pacientes/ (expedientes clínicos y PDFs) sincronizado en dist/BIMO_Pro/Pacientes")
+        if incluir_env and os.path.exists(os.path.join(base_dir, ".env")):
+            archivos_copia_dist.append(".env")
 
-        # Copiar archivos raíz del sistema directamente a dist/BIMO_Pro
-        for f_extra in [".env", "clinica.json", "base_odontograma.png", "mascaras_odontograma.npz", "credentials.json", "vocabulario_aprendido.json", "cert.pem", "key.pem"]:
+        for f_extra in archivos_copia_dist:
             src_f = os.path.join(base_dir, f_extra)
             dst_f = os.path.join(dist_bimo, f_extra)
             if os.path.exists(src_f):
                 shutil.copy2(src_f, dst_f)
+
+        print("[OK] Archivos de plantilla y dependencias seguras copiados a dist/BIMO_Pro")
 
         # Garantizar que los modelos ONNX de VAD de faster_whisper estén en su ruta de assets
         try:

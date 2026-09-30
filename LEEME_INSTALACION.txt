@@ -1,51 +1,58 @@
 ======================================================================
-      GUIA RAPIDA DE INSTALACION Y PRUEBA EN OTRA PC - BIMO PRO
+      GUIA OFICIAL DE INSTALACION Y EMPAQUETADO SEGURO - BIMO PRO
 ======================================================================
 
-Para probar BIMO Pro en otra computadora, el proceso esta automatizado
-al 100%. Solo sigue estos sencillos pasos:
+BIMO Pro cuenta con dos modalidades de despliegue y pruebas:
 
 ----------------------------------------------------------------------
-PASO 1: COPIAR LA CARPETA
+MODALIDAD 1: INSTALADOR OFICIAL PARA OTRA COMPUTADORA (USB / PRODUCCION)
 ----------------------------------------------------------------------
-- Pasa toda la carpeta "Bimo_Project" a la otra PC (mediante memoria USB,
-  disco externo, Google Drive, OneDrive, etc.).
-- Puedes colocar la carpeta en el Escritorio o en cualquier disco (C:\, D:\).
+Para instalar BIMO Pro en una computadora nueva o en el consultorio:
+
+1. Ejecute 'crear_setup_exe.py' (o 'compilar_exe.bat') en la maquina de desarrollo.
+2. Copie unicamente el archivo generado en su memoria USB:
+       dist\Setup_BIMO_Pro.exe
+   * Este instalador ha sido auditado mediante 'verificar_payload.py'
+     y NO CONTIENE datos de pacientes (bimo.db, Pacientes/), secretos (.env)
+     ni licencias ajenas.
+3. (Opcional) Si desea que la IA funcione de inmediato sin tener que teclear
+   la clave de Groq en la pantalla de bienvenida, coloque un archivo:
+       bimo_secrets.env
+   en la MISMA carpeta del USB junto a 'Setup_BIMO_Pro.exe'. El instalador
+   importara la clave directamente a la boveda cifrada local sin copiar el archivo.
+4. En la computadora destino, ejecute 'Setup_BIMO_Pro.exe':
+   - Siga el asistente paso a paso.
+   - En instalaciones nuevas se le solicitara definir su Nombre, Correo,
+     Contrasena personal (8+ caracteres) y PIN rapido (4-6 digitos).
+   - En actualizaciones sobre una instalacion existente, los datos clinicos
+     y expedientes previos se conservan intactos y se crea un respaldo
+     automatico previo en 'Respaldos_Locales/'.
 
 ----------------------------------------------------------------------
-PASO 2: EJECUTAR EL INSTALADOR AUTOMATICO
+MODALIDAD 2: PRUEBAS EN DESARROLLO (EJECUTAR CODIGO FUENTE)
 ----------------------------------------------------------------------
-- Entra en la carpeta "Bimo_Project" en la nueva PC.
-- Haz doble clic en el archivo:
-      
-      INSTALAR_BIMO.bat
+Para probar de inmediato las modificaciones de codigo fuente sin esperar
+a recompilar el ejecutable:
 
-- El instalador realizara todo de forma automatica:
-  1. Detecta si Python esta instalado.
-     * Si no esta instalado, abrira la pagina oficial de descarga.
-     * IMPORTANTE: Si instalas Python, recuerda marcar la casilla:
-       [X] "Add python.exe to PATH"
-  2. Actualiza pip e instala todas las librerias (faster-whisper, groq,
-     pywebview, etc.).
-  3. Inicializa la base de datos clinica SQLite en modo seguro.
-  4. Auto-activa la licencia PRO y la boveda segura para ese equipo.
-  5. Crea el Acceso Directo oficial "BIMO Pro" en el Escritorio con su icono.
+- Ejecute:
+       ejecutar_bimo_dev.bat
+- Este lanzador garantiza que se ejecute directamente el codigo Python
+  de 'main.py' con el interprete del entorno virtual (.venv/venv).
 
 ----------------------------------------------------------------------
-PASO 3: INICIAR Y PROBAR
+RECUPERACION DE ACCESO LOCAL (--reset-acceso)
 ----------------------------------------------------------------------
-- Para abrir el programa:
-  * Opcion A: Haz doble clic en el icono "BIMO Pro" de tu Escritorio.
-  * Opcion B: Haz doble clic en "ejecutar_bimo.bat" dentro de la carpeta.
+Si el profesional medico olvida su contrasena o PIN de acceso rapido:
+- Con acceso fisico a la maquina, ejecute desde consola o acceso directo:
+       python main.py --reset-acceso
+  (o 'BIMO_Pro.exe --reset-acceso')
+- Se abrira la ventana segura de recuperacion local para asignar nuevas
+  credenciales maestras sin requerir conexion a internet.
 
 ----------------------------------------------------------------------
-RECOMENDACIONES PARA LA PRUEBA EN CLINICA / CONSULTORIO:
+DESINSTALACION SEGURA
 ----------------------------------------------------------------------
-1. Microfono: Asegurate de que la PC tenga microfono habilitado en
-   Windows (Configuracion -> Privacidad -> Microfono).
-2. Escucha Activa: Al decir "Bimo" (ej: "Bimo, hora actual", "Bimo, genera una
-   cita para el ultimo paciente", o dictar la evolucion clinica), el sistema
-   captura con ganancia automatica y responde.
-3. Diccionario Andino: La IA ya viene precargada con fonetica y apellidos
-   de la region (Otavalo, Ibarra, etc.) y auto-aprende nombres nuevos.
+El desinstalador 'Uninstall.exe' (disponible tambien desde Panel de Control /
+Configuracion de Windows) protege por defecto todos los datos del paciente:
+- bimo.db, bimo.vault, clinica.json, token.json, Respaldos_Locales y Pacientes/.
 ======================================================================
