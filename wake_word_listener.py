@@ -1,5 +1,6 @@
 import os
 import time
+import queue
 import tempfile
 import threading
 from collections import deque
@@ -13,9 +14,10 @@ class BackgroundWakeListener:
     Escucha activa continua ultra-reactiva a 16000Hz nativos:
     1. 100% en memoria RAM sin escritura a disco (cero latencia de I/O).
     2. VAD de reacción rápida (~190ms de pausa tras decir 'Bimo').
-    3. Ventana temporal optimizada (0.20s a 5.5s) captando pronunciaciones veloces.
-    4. Umbral adaptativo sensible con anti-retroalimentación de altavoces.
-    5. Perro guardián (Watchdog) auto-recuperable.
+    3. Ventana temporal optimizada y búfer de hasta 120s para dictados continuos.
+    4. Cola de procesamiento asíncrono (hasta 3 segmentos) sin pérdida de voz.
+    5. Paridad con transcripción clínica manual (>3s).
+    6. Perro guardián (Watchdog) auto-recuperable adaptativo.
     """
     def __init__(self, callback_comando, samplerate=16000):
         self.callback_comando = callback_comando
@@ -34,6 +36,9 @@ class BackgroundWakeListener:
         self._startup_skip_frames = 2    # Descartar primeros bloques tras iniciar stream
         self._lock = threading.Lock()
         self._hilo_watchdog = None
+        self._cola_audio = queue.Queue(maxsize=3)
+        self._hilo_worker = None
+        self._duracion_actual_analisis = 4.0
 
     def activar_ventana_activa(self, segundos=7.5):
         """Abre una ventana activa de escucha para recibir órdenes directas sin exigir repetir 'Bimo'."""
@@ -50,6 +55,9 @@ class BackgroundWakeListener:
                 self.activo = True
                 self.pausado = False
                 self._iniciar_stream()
+                if not self._hilo_worker or not self._hilo_worker.is_alive():
+                    self._hilo_worker = threading.Thread(target=self._worker_loop, daemon=True)
+                    self._hilo_worker.start()
                 if not self._hilo_watchdog or not self._hilo_watchdog.is_alive():
                     self._hilo_watchdog = threading.Thread(target=self._watchdog_loop, daemon=True)
                     self._hilo_watchdog.start()
@@ -91,6 +99,11 @@ class BackgroundWakeListener:
             self.silencio_frames = 0
             self.en_proceso = False
             self.tiempo_ventana_activa = 0.0
+            while not self._cola_audio.empty():
+                try:
+                    self._cola_audio.get_nowait()
+                except Exception:
+                    break
             if self.stream:
                 try:
                     self.stream.stop()
@@ -109,6 +122,11 @@ class BackgroundWakeListener:
             self.silencio_frames = 0
             self.en_proceso = False
             self.tiempo_ventana_activa = 0.0
+            while not self._cola_audio.empty():
+                try:
+                    self._cola_audio.get_nowait()
+                except Exception:
+                    break
 
     def reanudar(self):
         """Reanuda la escucha activa con buffers limpios y supresión de transitorio inicial."""
@@ -144,9 +162,6 @@ class BackgroundWakeListener:
         datos_centrados = datos - np.mean(datos)
         vol = float(np.abs(datos_centrados).mean())
         self.pre_roll.append(datos)
-
-        if self.en_proceso:
-            return
 
         if not self.hablando:
             # Calibración adaptativa en reposo con piso mínimo de 12.0 y techo de 50.0
@@ -186,9 +201,8 @@ class BackgroundWakeListener:
             else:
                 self.silencio_frames = 0
                 total_samples = sum(len(b) for b in self.acumulador_voz)
-                # En ambientes ruidosos o frases largas continuas, NO DESCARTAR EL BUFFER:
-                # Se despacha a análisis tras 8.0 segundos para no perder lo hablado!
-                if total_samples >= int(self.samplerate * 8.0):
+                # Búfer de hasta 120 segundos para dictados continuos sin corte prematuro:
+                if total_samples >= int(self.samplerate * 120.0):
                     audio_np = np.concatenate(self.acumulador_voz)
                     self._despachar_analisis(audio_np)
                     self.acumulador_voz = []
@@ -196,17 +210,47 @@ class BackgroundWakeListener:
                     self.silencio_frames = 0
 
     def _despachar_analisis(self, audio_np):
-        if self.en_proceso:
-            return
-        self.en_proceso = True
-        self.tiempo_inicio_proceso = time.time()
-        threading.Thread(target=self._analizar_audio, args=(audio_np,), daemon=True).start()
+        """Encola el audio para procesamiento asíncrono (cola de hasta 3 segmentos)."""
+        try:
+            self._cola_audio.put_nowait(audio_np)
+        except queue.Full:
+            print("[VOICE LISTENER WARN] Cola de audio llena (3 segmentos). Descartando el más antiguo.")
+            try:
+                self._cola_audio.get_nowait()
+            except Exception:
+                pass
+            try:
+                self._cola_audio.put_nowait(audio_np)
+            except Exception:
+                pass
+
+    def _worker_loop(self):
+        """Hilo dedicado a procesar secuencialmente la cola de audio sin bloquear el callback de sonido."""
+        while self.activo:
+            try:
+                audio_np = self._cola_audio.get(timeout=1.0)
+            except queue.Empty:
+                continue
+
+            try:
+                self.en_proceso = True
+                self.tiempo_inicio_proceso = time.time()
+                self._analizar_audio(audio_np)
+            except Exception as e_w:
+                print(f"[VOICE LISTENER WORKER ERROR]: {e_w}")
+            finally:
+                self.en_proceso = False
+                try:
+                    self._cola_audio.task_done()
+                except Exception:
+                    pass
 
     def _analizar_audio(self, audio_np):
         try:
-            # 1. Filtro de energía acústica y duración en memoria RAM
+            # 1. Filtro de energía acústica y duración en memoria RAM (hasta 120s)
             duracion_seg = len(audio_np) / self.samplerate
-            if duracion_seg < 0.20 or duracion_seg > 9.0:
+            self._duracion_actual_analisis = duracion_seg
+            if duracion_seg < 0.20 or duracion_seg > 120.0:
                 return
 
             # Resampleo de seguridad a 16000Hz si la captura fue en otra frecuencia
@@ -241,41 +285,52 @@ class BackgroundWakeListener:
                 if ganancia > 1.0:
                     audio_float = audio_float * ganancia
 
-            # 2. Transcripción con Faster-Whisper instantánea a 16kHz nativos
-            model = get_whisper_engine()
-            
-            # Inyección dinámica de vocabulario aprendido en el prompt de Whisper
-            vocab_aprendido = ""
-            try:
-                from database import obtener_vocabulario_aprendido
-                aprendidos = obtener_vocabulario_aprendido(limite=40)
-                if aprendidos:
-                    vocab_aprendido = " Apellidos aprendidos: " + ", ".join(aprendidos) + "."
-            except Exception:
+            # 2. Transcripción con paridad respecto al dictado manual para clips > 3s
+            texto = ""
+            if duracion_seg > 3.0:
+                try:
+                    from ai_engine import transcribir_audio
+                    texto = transcribir_audio(audio_float)
+                except Exception as e_man_par:
+                    print(f"[VOICE LISTENER PARIDAD WARN]: Fallback a transcripción directa ({e_man_par})")
+                    texto = ""
+
+            if not texto:
+                # Transcripción rápida optimizada para activación y órdenes cortas
+                model = get_whisper_engine()
+                
+                # Inyección dinámica de vocabulario aprendido en el prompt de Whisper
                 vocab_aprendido = ""
+                try:
+                    from database import obtener_vocabulario_aprendido
+                    aprendidos = obtener_vocabulario_aprendido(limite=40)
+                    if aprendidos:
+                        vocab_aprendido = " Apellidos aprendidos: " + ", ".join(aprendidos) + "."
+                except Exception:
+                    vocab_aprendido = ""
 
-            prompt_sesgo = f"Bimo, asistente clínico de odontología. Oye Bimo, Hola Bimo. Citas, pacientes, Llumiquinga, Guaminga, Toapanta, Quispe, Simbaña, Tituaña, Chiluisa, Pilataxi.{vocab_aprendido}"
-            segmentos, _ = model.transcribe(
-                audio_float,
-                language="es",
-                initial_prompt=prompt_sesgo,
-                vad_filter=False,  # El VAD por energía ya aisló la frase; evitar recorte de clips cortos
-                beam_size=1,
-                temperature=0.0,
-                condition_on_previous_text=False
-            )
+                prompt_sesgo = f"Bimo, asistente clínico de odontología. Oye Bimo, Hola Bimo. Citas, pacientes, Llumiquinga, Guaminga, Toapanta, Quispe, Simbaña, Tituaña, Chiluisa, Pilataxi.{vocab_aprendido}"
+                segmentos, _ = model.transcribe(
+                    audio_float,
+                    language="es",
+                    initial_prompt=prompt_sesgo,
+                    vad_filter=False,  # El VAD por energía ya aisló la frase; evitar recorte de clips cortos
+                    beam_size=1,
+                    temperature=0.0,
+                    condition_on_previous_text=False
+                )
 
-            texto_partes = []
-            for s in segmentos:
-                # Filtrar solo si Whisper tiene certeza casi total de que no es voz
-                if s.no_speech_prob > 0.88:
-                    continue
-                texto_partes.append(s.text)
+                texto_partes = []
+                for s in segmentos:
+                    # Filtrar solo si Whisper tiene certeza casi total de que no es voz
+                    if s.no_speech_prob > 0.88:
+                        continue
+                    texto_partes.append(s.text)
 
-            if not texto_partes:
-                return
+                if not texto_partes:
+                    return
 
-            texto = " ".join(texto_partes).strip()
+                texto = " ".join(texto_partes).strip()
             if not texto or len(texto) < 3:
                 return
 
@@ -354,9 +409,10 @@ class BackgroundWakeListener:
             if not self.activo:
                 break
 
-            # 1. Recuperar en caso de bloqueo en procesamiento
-            if self.en_proceso and (time.time() - self.tiempo_inicio_proceso) > 6.0:
-                print("[VOICE LISTENER WATCHDOG] Reiniciando bandera de proceso bloqueada...")
+            # 1. Recuperar en caso de bloqueo en procesamiento (watchdog adaptativo)
+            timeout_adaptativo = max(6.0, getattr(self, "_duracion_actual_analisis", 4.0) * 1.5)
+            if self.en_proceso and (time.time() - self.tiempo_inicio_proceso) > timeout_adaptativo:
+                print(f"[VOICE LISTENER WATCHDOG] Reiniciando bandera de proceso tras timeout adaptativo ({timeout_adaptativo:.1f}s)...")
                 self.en_proceso = False
 
             # 2. Recuperar stream si se detuvo o fue desconectado por Windows

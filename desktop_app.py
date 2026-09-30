@@ -1172,18 +1172,33 @@ class BimoBridge:
         else:
             num_exp = obtener_siguiente_num_expediente_paciente(pac_id)
         resultado_ia["num_expediente"] = num_exp
+        avisos = []
+
+        # 1. Guardar o actualizar consulta en base de datos
+        cid = None
+        try:
+            medico_id = self._usuario_actual.get("id", 1) if self._usuario_actual else 1
+            if consulta_hoy:
+                cid = consulta_hoy["id"]
+                actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=None)
+            else:
+                cid = guardar_consulta_db(paciente_id=pac_id, json_clinico=resultado_ia, ruta_pdf=None, medico_id=medico_id)
+        except Exception as e_db:
+            print(f"[HISTORIA CLINICA DB ERROR]: {e_db}")
+            avisos.append(f"Error al guardar consulta en base de datos: {e_db}")
+
+        # 2. Generar o actualizar PDF
         ruta_pdf = None
-        if generar_pdf:
-            ruta_pdf = crear_historia_clinica(resultado_ia, paciente_id=pac_id, num_expediente=num_exp)
-            self._ultima_ruta_pdf = ruta_pdf
+        if generar_pdf and cid:
+            try:
+                ruta_pdf = crear_historia_clinica(resultado_ia, paciente_id=pac_id, num_expediente=num_exp)
+                self._ultima_ruta_pdf = ruta_pdf
+                actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf)
+            except Exception as e_pdf:
+                print(f"[HISTORIA CLINICA PDF ERROR]: {e_pdf}")
+                avisos.append(f"No se pudo generar el documento PDF: {e_pdf}")
 
-        medico_id = self._usuario_actual.get("id", 1) if self._usuario_actual else 1
-        if consulta_hoy:
-            cid = consulta_hoy["id"]
-            actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf)
-        else:
-            cid = guardar_consulta_db(paciente_id=pac_id, json_clinico=resultado_ia, ruta_pdf=ruta_pdf, medico_id=medico_id)
-
+        # 3. Registrar / agendar cita si viene cita_programada (con anti-duplicado)
         cita_info = resultado_ia.get("cita_programada", {})
         cita_programada_str = None
         url_gcal_creada = ""
@@ -1191,17 +1206,78 @@ class BimoBridge:
             f_c = cita_info.get("fecha_hora", "")
             m_c = cita_info.get("motivo") or f"Control post-tratamiento de {nombre}"
             tel_c = str(filiacion.get("telefono") or cita_info.get("telefono") or "").strip()
-            if f_c:
+            if f_c and str(f_c).lower() not in ("no especificado", "none", "null"):
                 cita_programada_str = f_c
                 try:
-                    res_ag = agendar_cita(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c, abrir_en_navegador=True)
-                    url_gcal_creada = res_ag.get("url_gcal") if isinstance(res_ag, dict) else ""
-                except Exception as e_ag:
-                    print(f"[AGENDAR CITA WARN] {e_ag}")
-                    try:
-                        crear_cita_db(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c)
-                    except Exception as e_c:
-                        print(f"[CREAR CITA DB WARN] {e_c}")
+                    # Prevención de citas duplicadas: verificar si ya existe cita para este paciente en fecha/hora cercana
+                    from database import get_connection
+                    cita_duplicada = False
+                    with get_connection() as conn_cchk:
+                        cur_cchk = conn_cchk.cursor()
+                        cur_cchk.execute("""
+                            SELECT id FROM citas_agenda
+                            WHERE (paciente_id = ? OR LOWER(TRIM(nombre_paciente)) = LOWER(TRIM(?)))
+                              AND estado != 'cancelada'
+                              AND (fecha_hora_inicio = ? OR SUBSTR(fecha_hora_inicio, 1, 13) = SUBSTR(?, 1, 13))
+                            LIMIT 1
+                        """, (pac_id, nombre, f_c, f_c))
+                        row_cdup = cur_cchk.fetchone()
+                        if row_cdup:
+                            cita_duplicada = True
+                            avisos.append(f"Cita ya existente para {nombre} el {f_c} (ID {row_cdup['id']}). No se duplicó.")
+
+                    if not cita_duplicada:
+                        try:
+                            res_ag = agendar_cita(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c, abrir_en_navegador=True)
+                            url_gcal_creada = res_ag.get("url_gcal") if isinstance(res_ag, dict) else ""
+                        except Exception as e_ag:
+                            print(f"[AGENDAR CITA WARN] {e_ag}")
+                            crear_cita_db(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c)
+                except Exception as e_c_all:
+                    print(f"[CITA PROGRAMADA ERROR]: {e_c_all}")
+                    avisos.append(f"Error al agendar cita: {e_c_all}")
+
+        # 4. Registrar pagos si vienen en la historia clínica (con anti-duplicado)
+        pagos_info = resultado_ia.get("pagos", {})
+        if pagos_info and isinstance(pagos_info, dict) and cid:
+            try:
+                costo_tot = float(pagos_info.get("costo_total") or 0.0)
+                abono_val = float(pagos_info.get("abono") or 0.0)
+                saldo_val = pagos_info.get("saldo_pendiente")
+                saldo_pend = float(saldo_val) if saldo_val is not None else max(0.0, costo_tot - abono_val)
+                est_pago = pagos_info.get("estado") or ("Cancelado" if saldo_pend <= 0 else "Saldo Pendiente")
+                metodo_p = pagos_info.get("metodo_pago") or "Efectivo"
+                notas_p = pagos_info.get("notas") or "Dictado en consulta clínica"
+
+                if costo_tot > 0 or abono_val > 0:
+                    from database import registrar_o_actualizar_pago_db, obtener_pago_consulta
+                    pago_previo = obtener_pago_consulta(cid)
+                    if pago_previo:
+                        registrar_o_actualizar_pago_db(
+                            paciente_id=pac_id,
+                            consulta_id=cid,
+                            costo_total=costo_tot,
+                            abono=abono_val,
+                            saldo_pendiente=saldo_pend,
+                            estado=est_pago,
+                            metodo_pago=metodo_p,
+                            notas=notas_p
+                        )
+                        avisos.append(f"Pago de consulta actualizado (Costo: {costo_tot}, Abono: {abono_val}).")
+                    else:
+                        registrar_o_actualizar_pago_db(
+                            paciente_id=pac_id,
+                            consulta_id=cid,
+                            costo_total=costo_tot,
+                            abono=abono_val,
+                            saldo_pendiente=saldo_pend,
+                            estado=est_pago,
+                            metodo_pago=metodo_p,
+                            notas=notas_p
+                        )
+            except Exception as e_pago:
+                print(f"[PAGOS DB WARN]: {e_pago}")
+                avisos.append(f"Error al registrar pago: {e_pago}")
 
         if not alerta_cedula:
             try:
@@ -1226,7 +1302,8 @@ class BimoBridge:
             "consulta_id": cid,
             "alerta_cedula_requerida": alerta_cedula,
             "cita_programada": cita_programada_str,
-            "url_gcal": url_gcal_creada
+            "url_gcal": url_gcal_creada,
+            "avisos": avisos
         }
 
     def procesar_audio_externo(self, ruta_wav):
