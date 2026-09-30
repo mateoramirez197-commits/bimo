@@ -293,6 +293,105 @@ class BimoBridge:
 
         threading.Thread(target=self._ejecutar_comando_detectado, args=(texto_comando,), daemon=True).start()
 
+    def _resolver_ruteo_paciente(self, nombre_busqueda, abrir_pdf=False):
+        """
+        Ruteo inteligente de pacientes (U2):
+        - Único paciente: si abrir_pdf, busca el PDF más reciente y lo abre en el visor sin clics.
+        - Homónimos: abre pacientes con el filtro y notifica con toast.
+        - Inexistente: abre pacientes con el filtro y notifica que no existe.
+        """
+        from database import buscar_pacientes_por_nombre, get_connection
+        from config import RUTA_PACIENTES
+
+        nombre_clean = str(nombre_busqueda or "").strip()
+        matches = buscar_pacientes_por_nombre(nombre_clean) if nombre_clean else []
+
+        if not matches:
+            return {
+                "estado": "no_encontrado",
+                "mensaje": f"No se encontró ningún paciente con el nombre '{nombre_clean}'.",
+                "accion_ui": "buscar_paciente",
+                "parametro": nombre_clean,
+                "ruta_pdf": None
+            }
+
+        if len(matches) > 1:
+            return {
+                "estado": "homonimos",
+                "mensaje": f"Se encontraron {len(matches)} pacientes para '{nombre_clean}'. Seleccione el deseado.",
+                "accion_ui": "buscar_paciente",
+                "parametro": nombre_clean,
+                "total_coincidencias": len(matches),
+                "ruta_pdf": None
+            }
+
+        # Paciente único
+        pac = matches[0]
+        pac_id = pac.get("id")
+        pac_nombre = pac.get("nombre", nombre_clean)
+
+        ruta_pdf_valida = None
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT ruta_pdf FROM consultas WHERE paciente_id = ? AND ruta_pdf IS NOT NULL AND ruta_pdf != '' ORDER BY id DESC LIMIT 1",
+                    (pac_id,)
+                )
+                row = cursor.fetchone()
+                if row and row["ruta_pdf"]:
+                    cand = row["ruta_pdf"]
+                    if os.path.exists(cand):
+                        ruta_pdf_valida = cand
+                    else:
+                        b_name = os.path.basename(cand)
+                        if RUTA_PACIENTES.exists():
+                            for p_cand in RUTA_PACIENTES.rglob(b_name):
+                                if p_cand.is_file():
+                                    ruta_pdf_valida = str(p_cand)
+                                    break
+        except Exception as e_q:
+            print(f"[RUTEO PDF DB WARN]: {e_q}")
+
+        if not ruta_pdf_valida and RUTA_PACIENTES.exists():
+            try:
+                nombre_carpeta = pac_nombre.replace(" ", "_")
+                for sub in ["Pacientes_Adultos", "Pacientes_Pediatricos"]:
+                    pac_dir = RUTA_PACIENTES / sub / nombre_carpeta
+                    if pac_dir.exists():
+                        pdfs_encontrados = sorted(pac_dir.glob("*.pdf"), key=lambda f: f.stat().st_mtime, reverse=True)
+                        if pdfs_encontrados:
+                            ruta_pdf_valida = str(pdfs_encontrados[0])
+                            break
+            except Exception:
+                pass
+
+        if abrir_pdf and ruta_pdf_valida:
+            return {
+                "estado": "pdf_encontrado",
+                "mensaje": f"Abriendo historia clínica de {pac_nombre}.",
+                "accion_ui": "abrir_pdf_especifico",
+                "parametro": ruta_pdf_valida,
+                "nombre_paciente": pac_nombre,
+                "ruta_pdf": ruta_pdf_valida
+            }
+        elif abrir_pdf and not ruta_pdf_valida:
+            return {
+                "estado": "sin_pdf",
+                "mensaje": f"El paciente {pac_nombre} no tiene historias clínicas en PDF aún.",
+                "accion_ui": "buscar_paciente",
+                "parametro": pac_nombre,
+                "ruta_pdf": None
+            }
+        else:
+            return {
+                "estado": "paciente_unico",
+                "mensaje": f"Mostrando ficha de {pac_nombre}.",
+                "accion_ui": "buscar_paciente",
+                "parametro": pac_nombre,
+                "ruta_pdf": ruta_pdf_valida
+            }
+
     def _ejecutar_comando_detectado(self, texto_comando):
         try:
             resp = self.procesar_texto_clinico(texto_comando)
@@ -301,10 +400,25 @@ class BimoBridge:
                 if tipo == "NAVEGACION_UI":
                     accion = resp.get("accion", "")
                     parametro = resp.get("parametro", "") or ""
-                    self._js(
-                        f"if (window.ejecutarNavegacionVoz) "
-                        f"window.ejecutarNavegacionVoz({json.dumps(accion)}, {json.dumps(parametro)});"
-                    )
+                    if accion in ("abrir_pdf_paciente", "buscar_paciente") and parametro:
+                        r_info = self._resolver_ruteo_paciente(parametro, abrir_pdf=(accion == "abrir_pdf_paciente"))
+                        if r_info.get("accion_ui") == "abrir_pdf_especifico" and r_info.get("ruta_pdf"):
+                            self._js(
+                                f"if (window.abrirPdfEspecifico) "
+                                f"window.abrirPdfEspecifico({json.dumps(r_info['ruta_pdf'])}, {json.dumps(r_info.get('nombre_paciente', parametro))});"
+                            )
+                        else:
+                            self._js(
+                                f"if (window.ejecutarNavegacionVoz) "
+                                f"window.ejecutarNavegacionVoz('buscar_paciente', {json.dumps(r_info['parametro'])});"
+                                f"if (window.mostrarToast) "
+                                f"window.mostrarToast({json.dumps(r_info['mensaje'])}, 'info');"
+                            )
+                    else:
+                        self._js(
+                            f"if (window.ejecutarNavegacionVoz) "
+                            f"window.ejecutarNavegacionVoz({json.dumps(accion)}, {json.dumps(parametro)});"
+                        )
                     sonar_confirmacion_exito()
                     return          # no llamar a onVoiceClinicalProcessed para navegación
                 elif tipo == "COMANDO_HORA":
@@ -953,17 +1067,34 @@ class BimoBridge:
 
         if tipo == "NAVEGACION_UI":
             accion = str(resultado_ia.get("accion", "")).strip()
-            if accion not in ("abrir_agenda", "buscar_paciente", "abrir_odontograma"):
+            ACCIONES_PERMITIDAS = (
+                "abrir_dictado", "abrir_agenda", "abrir_pacientes", "buscar_paciente",
+                "abrir_mobile", "abrir_pdf", "abrir_pdf_paciente", "abrir_widget",
+                "abrir_configuracion", "abrir_odontograma"
+            )
+            if accion not in ACCIONES_PERMITIDAS:
                 try:
                     sonar_error()
                 except Exception:
                     pass
                 return {"status": "warning", "tipo": "IGNORAR", "texto": texto,
                         "resultado": resultado_ia, "mensaje": "No entendí a qué pantalla ir."}
-            return {"status": "ok", "tipo": "NAVEGACION_UI", "texto": texto,
-                    "accion": accion,
-                    "parametro": str(resultado_ia.get("parametro") or "").strip(),
-                    "resultado": resultado_ia, "mensaje": "Navegando..."}
+
+            param = str(resultado_ia.get("parametro") or "").strip()
+            ruteo_info = None
+            if accion in ("abrir_pdf_paciente", "buscar_paciente") and param:
+                ruteo_info = self._resolver_ruteo_paciente(param, abrir_pdf=(accion == "abrir_pdf_paciente"))
+
+            return {
+                "status": "ok",
+                "tipo": "NAVEGACION_UI",
+                "texto": texto,
+                "accion": accion,
+                "parametro": param,
+                "ruteo_info": ruteo_info,
+                "resultado": resultado_ia,
+                "mensaje": ruteo_info["mensaje"] if ruteo_info else "Navegando..."
+            }
 
         if tipo == "IGNORAR":
             try:

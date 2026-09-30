@@ -2250,12 +2250,33 @@
       else if (tabId === 'config') cargarConfiguracion();
     }
 
+    window.abrirPdfEspecifico = function(rutaPdf, nombrePaciente) {
+      if (!rutaPdf) return;
+      switchTab('pdf');
+      if (typeof seleccionarPdfItem === 'function') {
+        seleccionarPdfItem(encodeURIComponent(rutaPdf));
+      } else if (typeof cargarPreviewPdf === 'function') {
+        cargarPreviewPdf(rutaPdf);
+      }
+      if (nombrePaciente) {
+        mostrarToast('Abriendo historia de ' + nombrePaciente, 'success');
+      }
+    };
+
     window.ejecutarNavegacionVoz = function (accion, parametro) {
       const param = String(parametro || '').trim();
       switch (accion) {
+        case 'abrir_dictado':
+          switchTab('dictado');
+          break;
+
         case 'abrir_agenda':
           switchTab('agenda');
           if (typeof irAHoyAgenda === 'function') irAHoyAgenda();
+          break;
+
+        case 'abrir_pacientes':
+          switchTab('pacientes');
           break;
 
         case 'buscar_paciente': {
@@ -2265,6 +2286,33 @@
           buscarPacientesEnVivo(param);
           break;
         }
+
+        case 'abrir_mobile':
+          switchTab('mobile');
+          break;
+
+        case 'abrir_pdf':
+          switchTab('pdf');
+          break;
+
+        case 'abrir_pdf_paciente':
+          if (param) {
+            switchTab('pacientes');
+            const inp = $id('inputBuscarPaciente');
+            if (inp) { inp.value = param; inp.focus(); }
+            buscarPacientesEnVivo(param);
+          } else {
+            switchTab('pdf');
+          }
+          break;
+
+        case 'abrir_widget':
+          switchTab('widget');
+          break;
+
+        case 'abrir_configuracion':
+          switchTab('config');
+          break;
 
         case 'abrir_odontograma':
           // No existe una vista de odontograma independiente: vive dentro del PDF del visor.

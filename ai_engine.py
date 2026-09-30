@@ -1190,28 +1190,98 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
         "mensaje_confirmacion": msg_conf
     }
 
-_NAV_PREFIJO = r"(?:abre|abrir|muestra|muéstrame|muestrame|mostrar|ve a|ir a|llévame a|llevame a|busca|buscar|encuentra|encontrar)"
+_NAV_PREFIJO = r"(?:abre|abrir|muestra|muéstrame|muestrame|mostrar|ve a|ir a|llévame a|llevame a|busca|buscar|encuentra|encontrar|ver|pon|pantalla de|modo)"
 
 def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
     if not texto_crudo:
         return None
     t = texto_crudo.lower().replace("bimo", "").strip(" ,.?!¿¡")
     t = re.sub(r"^(hola|oye|por favor)[, ]+", "", t).strip()
-    if len(t.split()) > 10:                    # un dictado clínico largo NUNCA es navegación
+    if len(t.split()) > 12:                    # un dictado clínico largo NUNCA es navegación
         return None
 
-    m = re.match(rf"^{_NAV_PREFIJO}\s+(?:al\s+|a\s+la\s+|el\s+|la\s+)?(?:paciente|expediente|historia(?: clínica)?)(?:\s+de|\s+del|\s+de\s+la)?\s+(.+)$", t)
-    if m:
-        return {"tipo": "NAVEGACION_UI", "accion": "buscar_paciente", "parametro": m.group(1).strip().title()}
+    # Exclusión estricta de dictados clínicos
+    if any(cl in t for cl in ["dolor", "pieza", "caries", "consulta por", "acude por", "diagnóstico", "diagnostico", "tratamiento", "receta", "obturación", "endodoncia", "resina"]):
+        return None
 
-    if re.match(rf"^{_NAV_PREFIJO}\s+(?:a\s+|a\s+la\s+|el\s+|la\s+|los\s+)?pacientes$", t):
-        return {"tipo": "NAVEGACION_UI", "accion": "buscar_paciente", "parametro": ""}
+    # 1. Abrir PDF de paciente específico
+    m_pdf = re.match(
+        rf"^{_NAV_PREFIJO}\s+(?:al\s+|a\s+la\s+|el\s+|la\s+)?(?:pdf|documento|historia(?:\s+clínica)?(?:\s+en\s+pdf)?)(?:\s+de|\s+del|\s+de\s+la)?\s+(.+)$",
+        t
+    )
+    if m_pdf:
+        nom = m_pdf.group(1).strip()
+        nom = re.sub(r"^(?:de|del|de la)\s+", "", nom, flags=re.IGNORECASE)
+        nom = re.sub(r"^(?:paciente|sr\.|sra\.|don|doña)\s+", "", nom, flags=re.IGNORECASE)
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf_paciente", "parametro": nom.strip().title()}
 
-    if re.match(rf"^{_NAV_PREFIJO}\s+(?:el\s+|la\s+|mi\s+)?odontograma\b", t):
+    # 2. Buscar paciente específico por nombre
+    # 2a. Con mención explícita de paciente / expediente / ficha / historial
+    _VERBOS_EXPLORAR = r"(?:busca|buscar|encuentra|encontrar|ver|muestra|muéstrame|muestrame|mostrar|abre|abrir|consulta|consultar)"
+    m_pac = re.match(
+        rf"^{_VERBOS_EXPLORAR}\s+(?:al\s+|a\s+la\s+|el\s+|la\s+)?(?:paciente|expediente|ficha(?:\s+de\s+paciente)?|historial)(?:\s+de|\s+del|\s+de\s+la)?\s+(.+)$",
+        t
+    )
+    # 2b. Con verbo exclusivo de búsqueda (busca / buscar / encuentra)
+    if not m_pac:
+        m_pac = re.match(
+            rf"^(?:busca|buscar|encuentra|encontrar)\s+(?:a\s+|al\s+)?(?:paciente\s+)?(.+)$",
+            t
+        )
+
+    if m_pac:
+        nom = m_pac.group(1).strip()
+        nom = re.sub(r"^(?:de|del|de la)\s+", "", nom, flags=re.IGNORECASE)
+        nom = re.sub(r"^(?:paciente|sr\.|sra\.|don|doña)\s+", "", nom, flags=re.IGNORECASE)
+        # Si el resultado es vacío o es una pestaña general, dejar que sigan las reglas siguientes
+        if nom and nom.lower() not in ("pacientes", "citas", "agenda", "calendario", "pdf", "pdfs", "widget", "configuracion", "configuración"):
+            return {"tipo": "NAVEGACION_UI", "accion": "buscar_paciente", "parametro": nom.strip().title()}
+
+    # 3. Odontograma independiente
+    if re.search(rf"\b(?:odontograma)\b", t):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_odontograma", "parametro": ""}
 
-    if re.match(rf"^{_NAV_PREFIJO}\s+(?:la\s+|mi\s+|el\s+)?(?:agenda|citas|calendario)\b", t):
+    # 4. Pestaña Pacientes (general)
+    if re.search(rf"\b(?:pacientes|fichas|lista\s+de\s+pacientes|directorio\s+de\s+pacientes)\b", t):
+        if any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver", "lista", "directorio"]):
+            return {"tipo": "NAVEGACION_UI", "accion": "abrir_pacientes", "parametro": ""}
+    if re.match(rf"^(?:pacientes|fichas de pacientes|lista de pacientes|directorio de pacientes)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pacientes", "parametro": ""}
+
+    # 5. Pestaña Agenda / Calendario / Citas
+    if re.search(rf"\b(?:agenda|citas|calendario)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver", "hoy", "mis"]):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_agenda", "parametro": ""}
+    if re.match(rf"^(?:agenda|citas|calendario|ver citas)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_agenda", "parametro": ""}
+
+    # 6. Pestaña Dictado / Inicio
+    if re.search(rf"\b(?:dictado|dictar|inicio|pantalla\s+principal)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "volver", "pantalla", "modo"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_dictado", "parametro": ""}
+    if re.match(rf"^(?:dictado|inicio|modo dictado|ir a dictar|ve a dictar)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_dictado", "parametro": ""}
+
+    # 7. Pestaña Móvil / Celular / QR
+    if re.search(rf"\b(?:móvil|movil|mobile|qr|código\s+qr|codigo\s+qr|celular|teléfono|telefono)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "conectar", "cámara", "camara"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_mobile", "parametro": ""}
+    if re.match(rf"^(?:móvil|movil|mobile|código qr|codigo qr|conectar celular|conectar teléfono|cámara móvil|camara movil)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_mobile", "parametro": ""}
+
+    # 8. Pestaña PDF / Visor
+    if re.search(rf"\b(?:visor|visor\s+de\s+pdf|pdf|pdfs|documentos|historias\s+clínicas|historias\s+clinicas)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf", "parametro": ""}
+    if re.match(rf"^(?:visor de pdf|ver pdf|ver pdfs|pdf|pdfs|historias clínicas|historias clinicas)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf", "parametro": ""}
+
+    # 9. Pestaña Widget / Modo flotante
+    if re.search(rf"\b(?:widget|modo\s+flotante|ventana\s+flotante|flotante)\b", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_widget", "parametro": ""}
+
+    # 10. Pestaña Configuración / Temas / Ajustes
+    if re.search(rf"\b(?:configuración|configuracion|ajustes|temas?|cambiar\s+temas?|opciones)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver", "cambiar"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_configuracion", "parametro": ""}
+    if re.match(rf"^(?:configuración|configuracion|ajustes|temas|cambiar temas?)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_configuracion", "parametro": ""}
+
     return None
 
 def procesar_comando_o_dictado(texto_crudo: str) -> dict:
@@ -1385,7 +1455,7 @@ Si es IGNORAR:
 Si es NAVEGACION_UI:
 {{
     "tipo": "NAVEGACION_UI",
-    "accion": "abrir_agenda | buscar_paciente | abrir_odontograma",
+    "accion": "abrir_dictado | abrir_agenda | abrir_pacientes | buscar_paciente | abrir_mobile | abrir_pdf | abrir_pdf_paciente | abrir_widget | abrir_configuracion | abrir_odontograma",
     "parametro": "Nombre del paciente si aplica, si no cadena vacía"
 }}
 
