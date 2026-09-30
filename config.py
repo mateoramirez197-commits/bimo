@@ -8,28 +8,52 @@ from license_manager import obtener_hwid_equipo
 
 import sys
 
-# Directorio raíz del proyecto y directorio de datos clínicos persistentes
-dev_project_dir = Path.home() / "Desktop" / "Bimo_Project"
+# Directorio raíz del proyecto y directorio de datos clínicos persistentes (L-A)
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys.executable).resolve().parent
-    # Si se ejecuta dentro de dist/ o en la máquina de Mateo, sincronizar con la fuente de datos real
-    if (BASE_DIR.parent.parent / "bimo.db").exists() and (BASE_DIR.parent.parent / "Pacientes").exists():
+    env_data = os.environ.get("BIMO_DATA_DIR")
+    if env_data and Path(env_data).exists():
+        DATA_DIR = Path(env_data).resolve()
+    elif (BASE_DIR.parent.parent / "main.py").exists():
+        # Modo desarrollo (ej. dist/BIMO_Pro dentro del árbol del proyecto fuente)
         DATA_DIR = BASE_DIR.parent.parent
-    elif dev_project_dir.exists() and (dev_project_dir / "bimo.db").exists():
-        DATA_DIR = dev_project_dir
     else:
         DATA_DIR = BASE_DIR
 else:
     BASE_DIR = Path(__file__).resolve().parent
-    DATA_DIR = BASE_DIR
+    env_data = os.environ.get("BIMO_DATA_DIR")
+    if env_data and Path(env_data).exists():
+        DATA_DIR = Path(env_data).resolve()
+    else:
+        DATA_DIR = BASE_DIR
+
+# Comprobación de permisos de escritura en DATA_DIR
+def _verificar_y_asegurar_data_dir(d_dir: Path) -> Path:
+    try:
+        d_dir.mkdir(parents=True, exist_ok=True)
+        test_file = d_dir / f".bimo_write_test_{os.getpid()}"
+        with open(test_file, "w") as tf:
+            tf.write("ok")
+        test_file.unlink()
+        return d_dir
+    except Exception:
+        local_app = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        fallback = Path(local_app) / "BIMO_Pro" / "data"
+        try:
+            fallback.mkdir(parents=True, exist_ok=True)
+            print(f"[DATA DIR WARN] '{d_dir}' no es escribible. Redirigiendo datos a '{fallback}'")
+            return fallback
+        except Exception:
+            return d_dir
+
+DATA_DIR = _verificar_y_asegurar_data_dir(DATA_DIR)
 
 # Cargar variables de entorno desde .env buscando en todas las ubicaciones posibles
 _candidatos_env = [
     BASE_DIR / ".env",
     BASE_DIR / "_internal" / ".env",
     DATA_DIR / ".env",
-    Path(getattr(sys, '_MEIPASS', BASE_DIR)) / ".env",
-    dev_project_dir / ".env"
+    Path(getattr(sys, '_MEIPASS', BASE_DIR)) / ".env"
 ]
 for _cand_env in _candidatos_env:
     if _cand_env.exists():
@@ -48,7 +72,7 @@ for _cand_env in _candidatos_env:
 
 # Archivos del sistema y persistencia clínica
 def _resolver_archivo(nombre_archivo):
-    for d in [BASE_DIR, BASE_DIR / "_internal", DATA_DIR, dev_project_dir, Path(getattr(sys, '_MEIPASS', BASE_DIR))]:
+    for d in [BASE_DIR, BASE_DIR / "_internal", DATA_DIR, Path(getattr(sys, '_MEIPASS', BASE_DIR))]:
         p = d / nombre_archivo
         if p.exists():
             return p
@@ -423,8 +447,8 @@ def aplicar_tema_config(nombre_tema: str) -> dict:
 # Impide que la API Key o los modelos queden expuestos en texto plano
 _VAULT_SALT = b"BIMO_VAULT_ENCRYPTED_PARAM_SALT_2026"
 
-def _get_vault_fernet() -> Fernet:
-    hwid = obtener_hwid_equipo()
+def _get_vault_fernet(hwid_override=None) -> Fernet:
+    hwid = hwid_override or obtener_hwid_equipo()
     key = base64.urlsafe_b64encode(hashlib.pbkdf2_hmac("sha256", hwid.encode(), _VAULT_SALT, 30_000))
     return Fernet(key)
 
@@ -449,7 +473,13 @@ def guardar_parametro_boveda(clave: str, valor: str) -> bool:
         if os.path.exists(RUTA_VAULT):
             try:
                 with open(RUTA_VAULT, "rb") as f:
-                    params = json.loads(fernet.decrypt(f.read()).decode("utf-8"))
+                    raw_v = f.read()
+                try:
+                    params = json.loads(fernet.decrypt(raw_v).decode("utf-8"))
+                except Exception:
+                    from license_manager import obtener_hwid_legado
+                    fernet_leg = _get_vault_fernet(hwid_override=obtener_hwid_legado())
+                    params = json.loads(fernet_leg.decrypt(raw_v).decode("utf-8"))
             except Exception:
                 params = {}
         params[clave] = valor
@@ -467,7 +497,23 @@ def obtener_parametro_boveda(clave: str, default=""):
             inicializar_boveda_si_no_existe()
         fernet = _get_vault_fernet()
         with open(RUTA_VAULT, "rb") as f:
-            data = fernet.decrypt(f.read())
+            raw_vault = f.read()
+
+        try:
+            data = fernet.decrypt(raw_vault)
+        except Exception:
+            # Intento de migración desde HWID legado (con MAC) hacia HWID MachineGuid puro (L-C)
+            from license_manager import obtener_hwid_legado
+            hwid_legado = obtener_hwid_legado()
+            fernet_legado = _get_vault_fernet(hwid_override=hwid_legado)
+            data = fernet_legado.decrypt(raw_vault)
+            # Re-cifrar inmediatamente con el HWID nuevo
+            params_migrados = json.loads(data.decode("utf-8"))
+            re_enc = fernet.encrypt(json.dumps(params_migrados).encode("utf-8"))
+            with open(RUTA_VAULT, "wb") as f_re:
+                f_re.write(re_enc)
+            print("[VAULT MIGRATION] Bóveda migrada exitosamente desde HWID legado a MachineGuid.")
+
         params = json.loads(data.decode("utf-8"))
         val = params.get(clave, default)
         if not val and clave == "groq_api_key":
@@ -537,15 +583,30 @@ def cargar_datos_clinica() -> dict:
                 return json.load(f)
         except Exception:
             pass
+
+    # Si no existe clinica.json, verificar si existe clinica.default.json como plantilla (L-E)
+    ruta_default = DATA_DIR / "clinica.default.json"
+    if not ruta_default.exists():
+        ruta_default = BASE_DIR / "clinica.default.json"
+    if ruta_default.exists():
+        try:
+            with open(ruta_default, "r", encoding="utf-8") as f_def:
+                data_def = json.load(f_def)
+            with open(RUTA_CLINICA_CONF, "w", encoding="utf-8") as f_out:
+                json.dump(data_def, f_out, ensure_ascii=False, indent=2)
+            return data_def
+        except Exception:
+            pass
+
     return {
         "nombre_clinica": "BIMO Dental Clinic",
-        "nombre_doctor": "Dr. Mateo",
-        "registro_profesional": "RP-ODONT-2026",
-        "telefono_contacto": "+57 300 123 4567",
+        "nombre_doctor": "Dr. Odontólogo",
+        "registro_profesional": "",
+        "telefono_contacto": "",
         "modo_bajo_rendimiento": False,
         "onboarding_completado": False,
         "email_google": "",
-        "pin_rapido": "1234"
+        "pin_rapido": ""
     }
 
 def guardar_datos_clinica(datos: dict):

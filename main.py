@@ -241,6 +241,7 @@ def main():
                             d_pwd = str(d_info.get("password", "")).strip()
                             d_pin = str(d_info.get("pin", "")).strip()
 
+                            d_api_key = str(d_info.get("api_key", "")).strip()
                             if d_pwd:
                                 from auth import registrar_usuario
                                 registrar_usuario(d_nom, d_mail, d_pwd, rol="medico")
@@ -251,6 +252,9 @@ def main():
                                 c_info["correo_doctor"] = d_mail
                                 c_info["onboarding_completado"] = True
                                 guardar_datos_clinica(c_info)
+                            if d_api_key:
+                                from config import guardar_parametro_boveda
+                                guardar_parametro_boveda("groq_api_key", d_api_key)
                         finally:
                             try:
                                 with open(doc_path, "wb") as df:
@@ -258,6 +262,26 @@ def main():
                                 os.remove(doc_path)
                             except Exception:
                                 pass
+
+            # Procesar archivo de secretos si se pasó --secrets-file
+            if "--secrets-file" in sys.argv:
+                idx = sys.argv.index("--secrets-file")
+                if idx + 1 < len(sys.argv):
+                    sec_file = sys.argv[idx + 1]
+                    if os.path.exists(sec_file):
+                        try:
+                            from config import guardar_parametro_boveda
+                            with open(sec_file, "r", encoding="utf-8", errors="replace") as sf:
+                                for sline in sf:
+                                    sline = sline.strip()
+                                    if sline and not sline.startswith("#") and "=" in sline:
+                                        sk, sv = sline.split("=", 1)
+                                        sk = sk.strip()
+                                        sv = sv.strip().strip('"').strip("'")
+                                        if sk:
+                                            guardar_parametro_boveda(sk.lower(), sv)
+                        except Exception as e_sec:
+                            print(f"[WARN SECRETS FILE]: {e_sec}")
 
             with open(log_path, "a", encoding="utf-8") as lf:
                 lf.write(f"[{datetime.datetime.now().isoformat()}] Setup-init completado con exito (codigo 0)\n")

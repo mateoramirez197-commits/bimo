@@ -81,7 +81,12 @@ def inicializar_usuarios_default():
     Crea los usuarios predeterminados de prueba comercial si no existen.
     - Dr. Mateo (Médico): admin@bimo.local / admin123
     - Asistente Clínica (Asistente): asistente@bimo.local / asistente123
+    En instalaciones empaquetadas de producción (frozen) NO se crean usuarios por defecto (L-E).
     """
+    import sys
+    if getattr(sys, 'frozen', False) and os.environ.get("BIMO_DEV_BACKDOOR") != "1":
+        return
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) AS total FROM usuarios;")

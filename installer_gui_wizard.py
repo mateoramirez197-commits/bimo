@@ -132,6 +132,14 @@ class BimoSetupWizard(tk.Tk):
         self.crear_shortcut = tk.BooleanVar(value=True)
         self.ejecutar_al_finalizar = tk.BooleanVar(value=True)
 
+        # Variables de credenciales del doctor (L-E)
+        self.doc_nombre = tk.StringVar(value="Dr. Odontólogo")
+        self.doc_email = tk.StringVar(value="doctor@bimo.local")
+        self.doc_password = tk.StringVar(value="")
+        self.doc_password_conf = tk.StringVar(value="")
+        self.doc_pin = tk.StringVar(value="")
+        self.groq_api_key = tk.StringVar(value="")
+
         self.payload_zip = self._localizar_payload()
 
         # Construir estructura UI
@@ -199,8 +207,9 @@ class BimoSetupWizard(tk.Tk):
             "1. Bienvenida",
             "2. Acuerdos y Licencia",
             "3. Carpeta de Destino",
-            "4. Instalación",
-            "5. Finalizar"
+            "4. Acceso del Doctor",
+            "5. Instalación",
+            "6. Finalizar"
         ]
         for idx, nom in enumerate(pasos_nombres, 1):
             lbl = tk.Label(self.sidebar, text=nom, font=("Segoe UI", 9), fg="#64748b", bg=COLOR_BG_DARK, anchor="w", padx=22)
@@ -258,9 +267,11 @@ class BimoSetupWizard(tk.Tk):
         elif paso == 3:
             self._construir_paso_3()
         elif paso == 4:
-            self._construir_paso_4()
+            self._construir_paso_4_doctor()
         elif paso == 5:
             self._construir_paso_5()
+        elif paso == 6:
+            self._construir_paso_6()
 
     # --- PASO 1: BIENVENIDA ---
     def _construir_paso_1(self):
@@ -450,7 +461,7 @@ class BimoSetupWizard(tk.Tk):
     # --- PASO 3: RUTA DE INSTALACIÓN Y OPCIONES ---
     def _construir_paso_3(self):
         self.btn_atras.config(state=tk.NORMAL)
-        self.btn_siguiente.config(text="Instalar", state=tk.NORMAL)
+        self.btn_siguiente.config(text="Siguiente >", state=tk.NORMAL)
         self.btn_cancelar.config(state=tk.NORMAL)
 
         lbl_tit = tk.Label(
@@ -530,8 +541,90 @@ class BimoSetupWizard(tk.Tk):
         if sel:
             self.ruta_destino.set(os.path.normpath(sel))
 
-    # --- PASO 4: PROGRESO DE INSTALACIÓN ---
-    def _construir_paso_4(self):
+    # --- PASO 4: ACCESO DEL DOCTOR Y SEGURIDAD (L-E) ---
+    def _construir_paso_4_doctor(self):
+        self.btn_atras.config(state=tk.NORMAL)
+        self.btn_siguiente.config(text="Siguiente >", state=tk.NORMAL)
+        self.btn_cancelar.config(state=tk.NORMAL)
+
+        lbl_tit = tk.Label(
+            self.content_frame,
+            text="Crear Acceso del Profesional Médico",
+            font=("Segoe UI", 13, "bold"),
+            fg=COLOR_TEXT_DARK,
+            bg=COLOR_BG_LIGHT
+        )
+        lbl_tit.pack(anchor="w", pady=(0, 4))
+
+        lbl_desc = tk.Label(
+            self.content_frame,
+            text="Configure sus credenciales maestras de acceso clínico. Se almacenarán localmente bajo hash PBKDF2 sin claves por defecto públicas:",
+            font=("Segoe UI", 8),
+            fg=COLOR_TEXT_MUTED,
+            bg=COLOR_BG_LIGHT,
+            wraplength=ANCHO_WRAP,
+            justify="left"
+        )
+        lbl_desc.pack(anchor="w", pady=(0, 10))
+
+        card_form = tk.Frame(self.content_frame, bg="#ffffff", bd=1, relief="solid", highlightbackground=COLOR_BORDER)
+        card_form.pack(fill=tk.X, pady=(0, 10))
+
+        # Nombre
+        f1 = tk.Frame(card_form, bg="#ffffff")
+        f1.pack(fill=tk.X, padx=14, pady=4)
+        tk.Label(f1, text="Nombre Completo:", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_DARK, bg="#ffffff", width=18, anchor="w").pack(side=tk.LEFT)
+        ent_nom = tk.Entry(f1, textvariable=self.doc_nombre, font=("Segoe UI", 9), relief="solid", bd=1)
+        ent_nom.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
+
+        # Correo / Usuario
+        f2 = tk.Frame(card_form, bg="#ffffff")
+        f2.pack(fill=tk.X, padx=14, pady=4)
+        tk.Label(f2, text="Correo / Usuario:", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_DARK, bg="#ffffff", width=18, anchor="w").pack(side=tk.LEFT)
+        ent_mail = tk.Entry(f2, textvariable=self.doc_email, font=("Segoe UI", 9), relief="solid", bd=1)
+        ent_mail.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
+
+        # Contraseña
+        f3 = tk.Frame(card_form, bg="#ffffff")
+        f3.pack(fill=tk.X, padx=14, pady=4)
+        tk.Label(f3, text="Contraseña (8+ car.):", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_DARK, bg="#ffffff", width=18, anchor="w").pack(side=tk.LEFT)
+        ent_pwd = tk.Entry(f3, textvariable=self.doc_password, font=("Segoe UI", 9), relief="solid", bd=1, show="*")
+        ent_pwd.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
+
+        # Confirmar Contraseña
+        f4 = tk.Frame(card_form, bg="#ffffff")
+        f4.pack(fill=tk.X, padx=14, pady=4)
+        tk.Label(f4, text="Confirmar Clave:", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_DARK, bg="#ffffff", width=18, anchor="w").pack(side=tk.LEFT)
+        ent_pwd_c = tk.Entry(f4, textvariable=self.doc_password_conf, font=("Segoe UI", 9), relief="solid", bd=1, show="*")
+        ent_pwd_c.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
+
+        # PIN Rápido
+        f5 = tk.Frame(card_form, bg="#ffffff")
+        f5.pack(fill=tk.X, padx=14, pady=4)
+        tk.Label(f5, text="PIN Rápido (4-6 díg.):", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_DARK, bg="#ffffff", width=18, anchor="w").pack(side=tk.LEFT)
+        ent_pin = tk.Entry(f5, textvariable=self.doc_pin, font=("Segoe UI", 9), relief="solid", bd=1, show="*")
+        ent_pin.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
+
+        # Clave Groq Opcional
+        f6 = tk.Frame(card_form, bg="#ffffff")
+        f6.pack(fill=tk.X, padx=14, pady=4)
+        tk.Label(f6, text="Clave API Groq (Opc.):", font=("Segoe UI", 8), fg=COLOR_TEXT_MUTED, bg="#ffffff", width=18, anchor="w").pack(side=tk.LEFT)
+        ent_groq = tk.Entry(f6, textvariable=self.groq_api_key, font=("Segoe UI", 9), relief="solid", bd=1, show="*")
+        ent_groq.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
+
+        lbl_info = tk.Label(
+            self.content_frame,
+            text="* El PIN permite iniciar sesión ágilmente en el consultorio. Si no configura un PIN numérico, el ingreso será por correo y contraseña.",
+            font=("Segoe UI", 8, "italic"),
+            fg="#64748b",
+            bg=COLOR_BG_LIGHT,
+            wraplength=ANCHO_WRAP,
+            justify="left"
+        )
+        lbl_info.pack(anchor="w")
+
+    # --- PASO 5: PROGRESO DE INSTALACIÓN ---
+    def _construir_paso_5(self):
         self.btn_atras.config(state=tk.DISABLED)
         self.btn_siguiente.config(state=tk.DISABLED)
         self.btn_cancelar.config(state=tk.DISABLED)
@@ -577,18 +670,45 @@ class BimoSetupWizard(tk.Tk):
 
     def _ejecutar_instalacion_hilo(self):
         try:
-            destino = self.ruta_destino.get()
+            destino = os.path.normpath(self.ruta_destino.get())
             os.makedirs(destino, exist_ok=True)
 
             # 1. Extraer payload zip
             if not self.payload_zip or not os.path.exists(self.payload_zip):
                 raise FileNotFoundError("No se encontró el archivo de paquete bimo_payload.zip.")
 
+            dest_db = os.path.join(destino, "bimo.db")
+            es_actualizacion = os.path.exists(dest_db)
+
+            # Si es actualización, crear respaldo previo con sqlite3.backup()
+            if es_actualizacion:
+                self.lbl_estado.config(text="Creando respaldo previo de la base de datos existente...")
+                resp_dir = os.path.join(destino, "Respaldos_Locales")
+                os.makedirs(resp_dir, exist_ok=True)
+                ts_bk = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                bk_dest = os.path.join(resp_dir, f"bimo_pre_update_{ts_bk}.db")
+                try:
+                    import sqlite3
+                    with sqlite3.connect(dest_db) as src, sqlite3.connect(bk_dest) as dst:
+                        src.backup(dst)
+                except Exception as e_bk:
+                    print(f"[WARN BACKUP PRE-UPDATE]: {e_bk}")
+
             self.lbl_estado.config(text="Desempaquetando archivos binarios del sistema...")
+            PROTECTED_FILES = {
+                "bimo.db", "bimo.db-wal", "bimo.db-shm", "bimo.vault",
+                "clinica.json", "vocabulario_aprendido.json", "token.json", "bimo.lic"
+            }
             with zipfile.ZipFile(self.payload_zip, 'r') as zf:
                 miembros = zf.infolist()
                 total = len(miembros)
                 for idx, miembro in enumerate(miembros):
+                    m_norm = os.path.normpath(miembro.filename)
+                    # Protección: nunca sobrescribir archivos clínicos existentes
+                    if os.path.basename(m_norm) in PROTECTED_FILES and os.path.exists(os.path.join(destino, m_norm)):
+                        continue
+                    if (m_norm.startswith("Pacientes\\") or m_norm.startswith("Pacientes/")) and os.path.exists(os.path.join(destino, m_norm)):
+                        continue
                     zf.extract(miembro, destino)
                     if idx % 15 == 0 or idx == total - 1:
                         pct = int((idx / total) * 70)
@@ -596,7 +716,7 @@ class BimoSetupWizard(tk.Tk):
                         self.lbl_detalles.config(text=f"Extrayendo: {miembro.filename[:45]}")
                         self.update_idletasks()
 
-            # 2. Inicializar carpetas de datos y migrar registros si existen en la máquina
+            # 2. Inicializar carpetas de datos
             self.lbl_estado.config(text="Configurando carpetas de expedientes clínicos...")
             self.progress["value"] = 75
             pac_dest = os.path.join(destino, "Pacientes")
@@ -604,69 +724,82 @@ class BimoSetupWizard(tk.Tk):
             os.makedirs(os.path.join(pac_dest, "Pacientes_Pediatricos"), exist_ok=True)
             os.makedirs(os.path.join(destino, "assets", "sounds"), exist_ok=True)
             os.makedirs(os.path.join(destino, "data"), exist_ok=True)
+            os.makedirs(os.path.join(destino, "Respaldos_Locales"), exist_ok=True)
 
-            dev_project = os.path.join(os.path.expanduser("~"), "Desktop", "Bimo_Project")
-            dev_db = os.path.join(dev_project, "bimo.db")
-            dest_db = os.path.join(destino, "bimo.db")
-            if os.path.exists(dev_db) and (not os.path.exists(dest_db) or os.path.getsize(dest_db) < os.path.getsize(dev_db)):
+            # Si clinica.json no existe pero vino clinica.default.json, copiarlo
+            clinica_dest = os.path.join(destino, "clinica.json")
+            clinica_def = os.path.join(destino, "clinica.default.json")
+            if not os.path.exists(clinica_dest) and os.path.exists(clinica_def):
                 import shutil
-                try:
-                    shutil.copy2(dev_db, dest_db)
-                except Exception:
-                    pass
+                shutil.copy2(clinica_def, clinica_dest)
 
-            dev_pac = os.path.join(dev_project, "Pacientes")
-            if os.path.exists(dev_pac):
-                import shutil
-                for root, dirs, files in os.walk(dev_pac):
-                    rel = os.path.relpath(root, dev_pac)
-                    dest_sub = os.path.join(pac_dest, rel)
-                    os.makedirs(dest_sub, exist_ok=True)
-                    for f in files:
-                        s_file = os.path.join(root, f)
-                        d_file = os.path.join(dest_sub, f)
-                        if not os.path.exists(d_file):
-                            try:
-                                shutil.copy2(s_file, d_file)
-                            except Exception:
-                                pass
-            self.update_idletasks()
-            time.sleep(0.3)
-
-            # 3. Registrar aceptación legal en clinica.json directamente
-            self.lbl_estado.config(text="Registrando aceptación de acuerdos clínicos en la base de datos...")
-            self.progress["value"] = 82
-            clinica_json_path = os.path.join(destino, "clinica.json")
+            # 3. Registrar aceptación legal en clinica.json
+            self.lbl_estado.config(text="Registrando aceptación de acuerdos clínicos...")
+            self.progress["value"] = 80
             clinica_data = {}
-            if os.path.exists(clinica_json_path):
+            if os.path.exists(clinica_dest):
                 try:
-                    with open(clinica_json_path, "r", encoding="utf-8") as f:
+                    with open(clinica_dest, "r", encoding="utf-8") as f:
                         clinica_data = json.load(f)
                 except Exception:
                     clinica_data = {}
-
             clinica_data["terminos_aceptados"] = True
             clinica_data["fecha_aceptacion_terminos"] = datetime.datetime.now().isoformat()
             clinica_data["version_terminos"] = "1.0"
             try:
-                with open(clinica_json_path, "w", encoding="utf-8") as f:
+                with open(clinica_dest, "w", encoding="utf-8") as f:
                     json.dump(clinica_data, f, ensure_ascii=False, indent=2)
             except Exception as e_cl:
                 print(f"[WARN clinica.json] {e_cl}")
 
-            self.update_idletasks()
-            time.sleep(0.3)
-
-            # 4. Vincular licencia HWID local
-            self.lbl_estado.config(text="Vinculando licencia de hardware (HWID Lock)...")
-            self.progress["value"] = 88
+            # 4. Vincular licencia HWID local y configurar base de datos / credenciales
+            self.lbl_estado.config(text="Inicializando base de datos y autorizando hardware...")
+            self.progress["value"] = 85
             exe_path = os.path.join(destino, "BIMO_Pro.exe")
             flags = 0x08000000 if sys.platform == "win32" else 0
+
+            cmd_init = []
             if os.path.exists(exe_path):
+                cmd_init = [exe_path, "--setup-init"]
+            elif os.path.exists(os.path.join(destino, "main.py")):
+                cmd_init = [sys.executable, os.path.join(destino, "main.py"), "--setup-init"]
+
+            doc_temp_path = None
+            if not es_actualizacion and self.doc_password.get().strip():
+                doc_info = {
+                    "nombre": self.doc_nombre.get().strip() or "Dr. Odontólogo",
+                    "email": self.doc_email.get().strip().lower() or "doctor@bimo.local",
+                    "password": self.doc_password.get().strip(),
+                    "pin": self.doc_pin.get().strip(),
+                    "api_key": self.groq_api_key.get().strip()
+                }
+                import tempfile
+                fd, doc_temp_path = tempfile.mkstemp(prefix="bimo_doc_", suffix=".json")
+                with os.fdopen(fd, "w", encoding="utf-8") as tf:
+                    json.dump(doc_info, tf)
+                cmd_init.extend(["--doctor-file", doc_temp_path])
+
+            # Buscar bimo_secrets.env junto al instalador o en directorio actual
+            installer_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+            cand_sec = os.path.join(installer_dir, "bimo_secrets.env")
+            if not os.path.exists(cand_sec):
+                cand_sec = os.path.join(os.getcwd(), "bimo_secrets.env")
+            if os.path.exists(cand_sec):
+                cmd_init.extend(["--secrets-file", cand_sec])
+
+            if cmd_init:
                 try:
-                    subprocess.run([exe_path, "--setup-init"], cwd=destino, timeout=20, creationflags=flags)
-                except Exception as e_hwid:
-                    print(f"[WARN HWID INIT] {e_hwid}")
+                    proc = subprocess.run(cmd_init, cwd=destino, timeout=120, creationflags=flags)
+                    if proc.returncode != 0:
+                        raise RuntimeError(f"--setup-init devolvió código {proc.returncode}. Revise bimo_install.log.")
+                finally:
+                    if doc_temp_path and os.path.exists(doc_temp_path):
+                        try:
+                            with open(doc_temp_path, "wb") as f_del:
+                                f_del.write(os.urandom(1024))
+                            os.remove(doc_temp_path)
+                        except Exception:
+                            pass
 
             self.update_idletasks()
             time.sleep(0.3)
@@ -689,17 +822,17 @@ class BimoSetupWizard(tk.Tk):
             self.lbl_estado.config(text="¡Instalación completada exitosamente!")
             self.lbl_detalles.config(text="Todos los componentes fueron verificados.")
             self.update_idletasks()
-            time.sleep(0.6)
+            time.sleep(0.5)
 
-            # Pasar automáticamente al paso 5
-            self.after(200, lambda: self._mostrar_paso(5))
+            # Pasar automáticamente al paso 6 (Finalizar)
+            self.after(200, lambda: self._mostrar_paso(6))
 
         except Exception as e:
-            messagebox.showerror("Error en la Instalación", f"Ocurrió un problema durante la extracción:\n{e}")
+            messagebox.showerror("Error en la Instalación", f"Ocurrió un problema durante la instalación:\n{e}")
             self.btn_cancelar.config(state=tk.NORMAL)
 
-    # --- PASO 5: FINALIZAR ---
-    def _construir_paso_5(self):
+    # --- PASO 6: FINALIZAR ---
+    def _construir_paso_6(self):
         self.btn_atras.config(state=tk.DISABLED)
         self.btn_cancelar.config(state=tk.DISABLED)
         self.btn_siguiente.config(text="Finalizar", state=tk.NORMAL)
@@ -722,7 +855,7 @@ class BimoSetupWizard(tk.Tk):
             "BIMO Pro ha sido instalado y configurado correctamente en su computadora.\n\n"
             f"Carpeta de la aplicación:\n{destino}\n\n"
             "Los acuerdos de responsabilidad médica y la licencia por hardware han quedado registrados permanentemente.\n\n"
-            "Al iniciar BIMO Pro, ingresará directamente a la interfaz clínica de atención sin pantallas intermedias ni interrupciones."
+            "Al iniciar BIMO Pro, ingresará directamente a la interfaz clínica de atención con sus credenciales seguras."
         )
         lbl_body = tk.Label(
             card_fin,
@@ -754,7 +887,55 @@ class BimoSetupWizard(tk.Tk):
         if self.paso_actual == 2 and not self.acepta_terminos.get():
             messagebox.showwarning("Atención", "Debe aceptar los acuerdos y compromisos para continuar con la instalación.")
             return
-        if self.paso_actual < 5:
+
+        if self.paso_actual == 3:
+            dest = os.path.normpath(self.ruta_destino.get().strip())
+            dest_lower = dest.lower()
+            if "program files" in dest_lower or "windows" in dest_lower:
+                if not messagebox.askyesno(
+                    "Advertencia de Ubicación",
+                    "Ha seleccionado una carpeta del sistema (Program Files o Windows).\n\n"
+                    "Instalar en esta ubicación puede causar problemas de permisos de escritura para la base de datos local y expedientes clínicos.\n\n"
+                    "¿Desea continuar con esta ubicación a pesar de la advertencia?",
+                    parent=self
+                ):
+                    return
+
+            dest_db = os.path.join(dest, "bimo.db")
+            if os.path.exists(dest_db):
+                # Actualización detectada: saltar paso 4 y pasar a instalación
+                self._mostrar_paso(5)
+            else:
+                self._mostrar_paso(4)
+            return
+
+        if self.paso_actual == 4:
+            nom = self.doc_nombre.get().strip()
+            mail = self.doc_email.get().strip()
+            pwd = self.doc_password.get().strip()
+            pwd_c = self.doc_password_conf.get().strip()
+            pin = self.doc_pin.get().strip()
+
+            if not nom:
+                messagebox.showwarning("Atención", "Por favor ingrese el nombre del profesional.", parent=self)
+                return
+            if not mail or "@" not in mail:
+                messagebox.showwarning("Atención", "Por favor ingrese un correo electrónico válido.", parent=self)
+                return
+            if len(pwd) < 8:
+                messagebox.showwarning("Atención", "La contraseña de acceso debe tener al menos 8 caracteres.", parent=self)
+                return
+            if pwd != pwd_c:
+                messagebox.showwarning("Atención", "Las contraseñas ingresadas no coinciden.", parent=self)
+                return
+            if pin and (not pin.isdigit() or not (4 <= len(pin) <= 6)):
+                messagebox.showwarning("Atención", "El PIN debe ser numérico y contener entre 4 y 6 dígitos.", parent=self)
+                return
+
+            self._mostrar_paso(5)
+            return
+
+        if self.paso_actual < 6:
             self._mostrar_paso(self.paso_actual + 1)
         else:
             # Finalizar
@@ -766,17 +947,153 @@ class BimoSetupWizard(tk.Tk):
             self.destroy()
 
     def _atras(self):
-        if self.paso_actual > 1:
+        if self.paso_actual == 5:
+            # En instalación, atrás deshabilitado
+            return
+        elif self.paso_actual == 4:
+            self._mostrar_paso(3)
+        elif self.paso_actual > 1:
             self._mostrar_paso(self.paso_actual - 1)
 
     def _cancelar(self):
-        if self.paso_actual < 4 or self.paso_actual == 5:
-            if self.paso_actual < 4:
+        if self.paso_actual < 5 or self.paso_actual == 6:
+            if self.paso_actual < 5:
                 if messagebox.askyesno("Cancelar Instalación", "¿Está seguro de que desea salir del asistente de instalación?"):
                     self.destroy()
             else:
                 self.destroy()
 
+def ejecutar_instalacion_silenciosa(destino, sin_acceso=False):
+    """
+    Modo silencioso para pruebas automatizadas e instalaciones desatendidas:
+    Setup_BIMO_Pro.exe --silent --dest <ruta> [--sin-acceso]
+    """
+    try:
+        destino = os.path.normpath(destino)
+        print(f"[SETUP SILENT] Iniciando instalación en: {destino}")
+        os.makedirs(destino, exist_ok=True)
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+        payload_zip = os.path.join(base_dir, "bimo_payload.zip")
+        if not os.path.exists(payload_zip):
+            alt = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist", "bimo_payload.zip")
+            if os.path.exists(alt):
+                payload_zip = alt
+            else:
+                print("[SETUP SILENT ERROR] No se encontró bimo_payload.zip")
+                return 1
+
+        dest_db = os.path.join(destino, "bimo.db")
+        es_actualizacion = os.path.exists(dest_db)
+        if es_actualizacion:
+            resp_dir = os.path.join(destino, "Respaldos_Locales")
+            os.makedirs(resp_dir, exist_ok=True)
+            ts_bk = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            bk_dest = os.path.join(resp_dir, f"bimo_pre_update_{ts_bk}.db")
+            try:
+                import sqlite3
+                with sqlite3.connect(dest_db) as src, sqlite3.connect(bk_dest) as dst:
+                    src.backup(dst)
+                print(f"[SETUP SILENT] Backup pre-update guardado en: {bk_dest}")
+            except Exception as e_bk:
+                print(f"[SETUP SILENT WARN] Error en backup pre-update: {e_bk}")
+
+        PROTECTED_FILES = {
+            "bimo.db", "bimo.db-wal", "bimo.db-shm", "bimo.vault",
+            "clinica.json", "vocabulario_aprendido.json", "token.json", "bimo.lic"
+        }
+        with zipfile.ZipFile(payload_zip, 'r') as zf:
+            for m in zf.infolist():
+                m_norm = os.path.normpath(m.filename)
+                if os.path.basename(m_norm) in PROTECTED_FILES and os.path.exists(os.path.join(destino, m_norm)):
+                    continue
+                if (m_norm.startswith("Pacientes\\") or m_norm.startswith("Pacientes/")) and os.path.exists(os.path.join(destino, m_norm)):
+                    continue
+                zf.extract(m, destino)
+
+        pac_dest = os.path.join(destino, "Pacientes")
+        os.makedirs(os.path.join(pac_dest, "Pacientes_Adultos"), exist_ok=True)
+        os.makedirs(os.path.join(pac_dest, "Pacientes_Pediatricos"), exist_ok=True)
+        os.makedirs(os.path.join(destino, "assets", "sounds"), exist_ok=True)
+        os.makedirs(os.path.join(destino, "data"), exist_ok=True)
+        os.makedirs(os.path.join(destino, "Respaldos_Locales"), exist_ok=True)
+
+        clinica_dest = os.path.join(destino, "clinica.json")
+        clinica_def = os.path.join(destino, "clinica.default.json")
+        if not os.path.exists(clinica_dest) and os.path.exists(clinica_def):
+            import shutil
+            shutil.copy2(clinica_def, clinica_dest)
+
+        clinica_data = {}
+        if os.path.exists(clinica_dest):
+            try:
+                with open(clinica_dest, "r", encoding="utf-8") as f:
+                    clinica_data = json.load(f)
+            except Exception:
+                pass
+        clinica_data["terminos_aceptados"] = True
+        clinica_data["fecha_aceptacion_terminos"] = datetime.datetime.now().isoformat()
+        clinica_data["version_terminos"] = "1.0"
+        try:
+            with open(clinica_dest, "w", encoding="utf-8") as f:
+                json.dump(clinica_data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+        exe_path = os.path.join(destino, "BIMO_Pro.exe")
+        cmd_init = []
+        if os.path.exists(exe_path):
+            cmd_init = [exe_path, "--setup-init"]
+        elif os.path.exists(os.path.join(destino, "main.py")):
+            cmd_init = [sys.executable, os.path.join(destino, "main.py"), "--setup-init"]
+
+        doc_temp_path = None
+        if not sin_acceso and not es_actualizacion:
+            doc_info = {
+                "nombre": "Dr. Pruebas Automáticas",
+                "email": "doctor@bimo.local",
+                "password": "PasswordPrueba123",
+                "pin": "1234"
+            }
+            import tempfile
+            fd, doc_temp_path = tempfile.mkstemp(prefix="bimo_doc_", suffix=".json")
+            with os.fdopen(fd, "w", encoding="utf-8") as tf:
+                json.dump(doc_info, tf)
+            cmd_init.extend(["--doctor-file", doc_temp_path])
+
+        if cmd_init:
+            flags = 0x08000000 if sys.platform == "win32" else 0
+            try:
+                proc = subprocess.run(cmd_init, cwd=destino, timeout=120, creationflags=flags)
+                if proc.returncode != 0:
+                    print(f"[SETUP SILENT ERROR] --setup-init retornó código {proc.returncode}")
+                    return 1
+            finally:
+                if doc_temp_path and os.path.exists(doc_temp_path):
+                    try:
+                        with open(doc_temp_path, "wb") as f_del:
+                            f_del.write(os.urandom(1024))
+                        os.remove(doc_temp_path)
+                    except Exception:
+                        pass
+
+        ico_path = os.path.join(destino, "assets", "bimo_icon.ico")
+        registrar_desinstalador_windows(destino, exe_path, ico_path)
+        crear_acceso_directo(destino, exe_path, ico_path)
+        print("[SETUP SILENT OK] Instalación silenciosa completada con éxito.")
+        return 0
+    except Exception as e:
+        print(f"[SETUP SILENT FATAL]: {e}")
+        return 1
+
 if __name__ == "__main__":
-    app = BimoSetupWizard()
-    app.mainloop()
+    if "--silent" in sys.argv:
+        dest_arg = obtener_ruta_instalacion_default()
+        if "--dest" in sys.argv:
+            idx = sys.argv.index("--dest")
+            if idx + 1 < len(sys.argv):
+                dest_arg = sys.argv[idx + 1]
+        sin_acc = "--sin-acceso" in sys.argv
+        sys.exit(ejecutar_instalacion_silenciosa(dest_arg, sin_acceso=sin_acc))
+    else:
+        app = BimoSetupWizard()
+        app.mainloop()
