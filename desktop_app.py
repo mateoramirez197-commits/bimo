@@ -548,7 +548,7 @@ class BimoBridge:
                     sonar_error()
                 except Exception:
                     pass
-                return {"status": "error", "message": "Dictado demasiado corto (menos de 0.3 segundos). Por favor habla antes de pulsar detener."}
+                return {"status": "error", "message": "Dictado muy corto. Habla y luego pulsa detener."}
 
             import tempfile
             ruta_wav = os.path.join(tempfile.gettempdir(), f"bimo_dictado_{int(time.time() * 1000)}.wav")
@@ -1363,7 +1363,7 @@ class BimoBridge:
 
             return {
                 "status": "ok",
-                "message": "Expediente corregido y PDF regenerado con éxito",
+                "message": "Expediente actualizado",
                 "ruta_pdf": nueva_ruta,
                 "paciente": nuevo_nombre,
                 "paciente_id": pid,
@@ -1667,7 +1667,7 @@ class BimoBridge:
 
             return {
                 "status": "ok",
-                "message": "Historia Clínica Oficial en PDF generada exitosamente",
+                "message": "Expediente guardado",
                 "ruta_pdf": nueva_ruta,
                 "paciente": paciente_nombre,
                 "consulta_id": cid,

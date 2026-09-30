@@ -323,12 +323,12 @@
   <div id="appBodyContainer" class="flex flex-1 w-full overflow-hidden relative z-10">
 
     <!-- ================= BARRA LATERAL ================= -->
-    <aside class="w-72 bg-slate-900/80 border-r border-slate-800/80 flex flex-col justify-between relative shadow-2xl backdrop-blur-2xl z-30 transition-all duration-300">
+    <aside class="w-24 bg-slate-900/80 border-r border-slate-800/80 flex flex-col justify-between relative shadow-2xl backdrop-blur-2xl z-30 transition-all duration-300">
     
-    <div class="p-6 relative z-10">
+    <div class="p-3 relative z-10">
       
-      <!-- LOGO OFICIAL: DOS OCHOS ENTRELAZADOS (INFINITO) + BIMO BY MATSWORD -->
-      <div class="flex items-center gap-3.5 mb-8 px-1 group cursor-pointer" onclick="switchTab('dictado')">
+      <!-- LOGO OFICIAL: DOS OCHOS ENTRELAZADOS (INFINITO) -->
+      <div class="flex flex-col items-center gap-2 mb-6 px-1 group cursor-pointer" onclick="switchTab('dictado')">
         
         <!-- ISOTIPO DE CRISTAL: DOS OCHOS ENTRELAZADOS EN FORMA DE INFINITO (88) -->
         <div id="logoBadge" class="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/20 p-[1px] shadow-2xl backdrop-blur-md group-hover:scale-105 group-hover:border-white/40 transition-all duration-300 flex items-center justify-center">
@@ -341,7 +341,9 @@
           </div>
         </div>
 
-        <div>
+        <p class="text-[8px] font-bold text-slate-400 text-center leading-tight tracking-wider uppercase">Asistente<br>Clínico<br>Inteligente</p>
+
+        <div class="hidden">
           <div class="flex items-baseline gap-2">
             <span class="text-2xl font-black text-white tracking-widest">BIMO</span>
             <span class="text-[9px] bg-white/10 text-white/80 font-bold px-1.5 py-0.2 rounded border border-white/20">PRO</span>
@@ -351,98 +353,94 @@
       </div>
 
       <!-- Menú de Navegación -->
-      <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 px-2">Navegación</div>
+      <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 px-2 hidden">Navegación</div>
       <nav class="space-y-2">
         
-        <button id="nav-dictado" onclick="switchTab('dictado')" class="nav-btn nav-active group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 cursor-pointer bg-white/10 text-white border border-white/15 shadow-lg backdrop-blur-md">
-          <div class="flex items-center gap-3.5">
+        <button id="nav-dictado" onclick="switchTab('dictado')" title="Dictado Clínico" aria-label="Dictado Clínico" class="nav-btn nav-active group w-full flex items-center justify-center p-3 rounded-[1.25rem] bg-indigo-500/10 text-white transition-all duration-300 cursor-pointer">
+          <div class="flex items-center">
             <div class="nav-icon-box text-indigo-400 transition-all duration-300 group-hover:scale-110">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" /></svg>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" /></svg>
             </div>
-            <span class="nav-label tracking-wide">Dictado Clínico</span>
+            <span class="nav-label tracking-wide hidden">Dictado Clínico</span>
           </div>
-          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-100 scale-100"></div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-100 scale-100 hidden"></div>
         </button>
 
-        <button id="nav-agenda" onclick="switchTab('agenda')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
-          <div class="flex items-center gap-3.5">
+        <button id="nav-agenda" onclick="switchTab('agenda')" title="Agenda & Citas" aria-label="Agenda & Citas" class="nav-btn group w-full flex items-center justify-center p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             </div>
-            <span class="nav-label tracking-wide">Agenda & Citas</span>
+            <span class="nav-label tracking-wide hidden">Agenda & Citas</span>
           </div>
-          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50 hidden"></div>
         </button>
 
-        <button id="nav-pacientes" onclick="switchTab('pacientes')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
-          <div class="flex items-center gap-3.5">
+        <button id="nav-pacientes" onclick="switchTab('pacientes')" title="Fichas de Pacientes" aria-label="Fichas de Pacientes" class="nav-btn group w-full flex items-center justify-center p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
             </div>
-            <span class="nav-label tracking-wide">Fichas de Pacientes</span>
+            <span class="nav-label tracking-wide hidden">Fichas de Pacientes</span>
           </div>
-          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50 hidden"></div>
         </button>
 
-        <button id="nav-mobile" onclick="switchTab('mobile')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
-          <div class="flex items-center gap-3.5">
+        <button id="nav-mobile" onclick="switchTab('mobile')" title="Móvil & Código QR" aria-label="Móvil & Código QR" class="nav-btn group w-full flex items-center justify-center p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
             </div>
-            <span class="nav-label tracking-wide">Móvil & Código QR</span>
+            <span class="nav-label tracking-wide hidden">Móvil & Código QR</span>
           </div>
-          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50 hidden"></div>
         </button>
 
-        <button id="nav-pdf" onclick="switchTab('pdf')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
-          <div class="flex items-center gap-3.5">
+        <button id="nav-pdf" onclick="switchTab('pdf')" title="Visor de PDF" aria-label="Visor de PDF" class="nav-btn group w-full flex items-center justify-center p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             </div>
-            <span class="nav-label tracking-wide">Visor de PDF</span>
+            <span class="nav-label tracking-wide hidden">Visor de PDF</span>
           </div>
-          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50 hidden"></div>
         </button>
 
-        <button id="nav-widget" onclick="switchTab('widget')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
-          <div class="flex items-center gap-3.5">
+        <button id="nav-widget" onclick="switchTab('widget')" title="Widget de Escritorio" aria-label="Widget de Escritorio" class="nav-btn group w-full flex items-center justify-center p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
             </div>
-            <span class="nav-label tracking-wide">Widget de Escritorio</span>
+            <span class="nav-label tracking-wide hidden">Widget de Escritorio</span>
           </div>
-          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50"></div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50 hidden"></div>
         </button>
 
-        <button id="nav-config" onclick="switchTab('config')" class="nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
-          <div class="flex items-center gap-3 min-w-0">
+        <button id="nav-config" onclick="switchTab('config')" title="Configuración & Temas" aria-label="Configuración & Temas" class="nav-btn group w-full flex items-center justify-center p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer">
+          <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110 shrink-0">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             </div>
-            <span class="nav-label tracking-wide whitespace-nowrap">Configuración & Temas</span>
+            <span class="nav-label tracking-wide whitespace-nowrap hidden">Configuración & Temas</span>
           </div>
-          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50 shrink-0 ml-2"></div>
+          <div class="nav-dot w-1.5 h-3.5 rounded-full bg-indigo-400 shadow-[0_0_8px_currentColor] transition-all duration-300 opacity-0 scale-50 shrink-0 ml-2 hidden"></div>
         </button>
 
       </nav>
     </div>
 
     <!-- Perfil del Doctor con botón de bloqueo/logout -->
-    <div class="p-5 border-t border-slate-800/80 bg-slate-900/60 relative z-10">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('config')">
-          <div id="userAvatar" class="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center font-bold text-white text-xs shadow-inner">
-            MR
-          </div>
-          <div>
-            <p id="userDocName" class="text-xs font-bold text-white">Mateo Ramírez</p>
-            <p id="userRole" class="text-[10px] text-indigo-400 font-medium">Odontología</p>
-          </div>
-        </div>
-        <button onclick="bloquearPantalla()" title="Bloquear / Cerrar Sesión" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-        </button>
+    <div class="p-3 border-t border-slate-800/80 bg-slate-900/60 relative z-10 flex flex-col items-center gap-2">
+      <div id="userAvatar" onclick="switchTab('config')" title="Mateo Ramírez" class="w-11 h-11 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center font-bold text-white text-xs shadow-inner cursor-pointer hover:scale-105 transition-transform">
+        MR
       </div>
+      <div class="hidden">
+        <p id="userDocName" class="text-xs font-bold text-white">Mateo Ramírez</p>
+        <p id="userRole" class="text-[10px] text-indigo-400 font-medium">Odontología</p>
+      </div>
+      <button onclick="bloquearPantalla()" title="Bloquear / Cerrar Sesión" aria-label="Bloquear / Cerrar Sesión" class="w-10 h-10 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+      </button>
     </div>
   </aside>
 
@@ -810,7 +808,7 @@
               </tr>
             </thead>
             <tbody id="tablaPacientesBody" class="divide-y divide-slate-800/60">
-              <tr><td colspan="6" class="text-center py-8 text-slate-500">Cargando pacientes desde la base de datos...</td></tr>
+              <tr><td colspan="6" class="text-center py-8 text-slate-500">Cargando pacientes...</td></tr>
             </tbody>
           </table>
         </div>
@@ -2170,7 +2168,11 @@
       if (usuario && usuario.nombre) {
         document.getElementById('userDocName').innerText = usuario.nombre;
         const initials = usuario.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-        document.getElementById('userAvatar').innerText = initials || 'MR';
+        const avatar = document.getElementById('userAvatar');
+        if (avatar) {
+          avatar.innerText = initials || 'MR';
+          avatar.title = usuario.nombre;
+        }
       }
 
       mostrarToast(`Bienvenido, ${usuario.nombre || 'Mateo'}`, 'info');
@@ -2209,7 +2211,7 @@
       const t = THEMES[currentThemeKey];
 
       document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.className = 'nav-btn group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer';
+        btn.className = 'nav-btn group w-full flex items-center justify-center p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all duration-300 cursor-pointer';
         const iconBox = btn.querySelector('.nav-icon-box');
         if (iconBox) iconBox.className = 'nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110';
         const dot = btn.querySelector('.nav-dot');
@@ -2218,7 +2220,7 @@
 
       const activeBtn = document.getElementById('nav-' + tabId);
       if (activeBtn) {
-        activeBtn.className = 'nav-btn nav-active group w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-semibold transition-all duration-300 cursor-pointer bg-white/10 text-white border border-white/15 shadow-lg backdrop-blur-md';
+        activeBtn.className = `nav-btn nav-active group w-full flex items-center justify-center p-3 rounded-[1.25rem] ${t.ringBg} text-white transition-all duration-300 cursor-pointer`;
         const activeIconBox = activeBtn.querySelector('.nav-icon-box');
         if (activeIconBox) activeIconBox.className = `nav-icon-box ${t.accentColor} transition-all duration-300 scale-110`;
         const activeDot = activeBtn.querySelector('.nav-dot');
@@ -2330,6 +2332,7 @@
       // Actualizar color del indicador de navegación activa en el sidebar
       const activeBtn = document.getElementById('nav-' + currentActiveTab);
       if (activeBtn) {
+        activeBtn.className = `nav-btn nav-active group w-full flex items-center justify-center p-3 rounded-[1.25rem] ${t.ringBg} text-white transition-all duration-300 cursor-pointer`;
         const activeIconBox = activeBtn.querySelector('.nav-icon-box');
         if (activeIconBox) activeIconBox.className = `nav-icon-box ${t.accentColor} transition-all duration-300 scale-110`;
         const activeDot = activeBtn.querySelector('.nav-dot');
@@ -2518,7 +2521,7 @@
 
       if (iconContainer) iconContainer.innerHTML = ICON_STOP_SVG;
       document.getElementById('btnMainLabel').innerText = 'DETENER';
-      title.innerText = 'Escuchando dictado clínico... Habla con claridad o di "Bimo, frenar"';
+      title.innerText = 'Escuchando...';
       title.className = `text-base font-semibold ${t.accentColor} tracking-wide transition-colors duration-300`;
       badge.innerText = '● Grabando';
       badge.className = 'text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full border border-emerald-500/30 font-medium animate-pulse';
@@ -2558,7 +2561,7 @@
 
       if (iconContainer) iconContainer.innerHTML = ICON_SPINNER_HTML;
       document.getElementById('btnMainLabel').innerText = 'PROCESANDO';
-      title.innerText = 'El sistema está generando tu PDF...';
+      title.innerText = 'Procesando, un momento por favor...';
       title.className = `text-base font-semibold ${t.accentColor} tracking-wide transition-colors duration-300 animate-pulse`;
       badge.innerText = 'Procesando';
       badge.className = 'text-xs bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full border border-indigo-500/30 font-medium';
@@ -2636,7 +2639,7 @@
         title.innerText = 'En espera';
         title.className = 'text-base font-semibold text-slate-300 tracking-wide transition-colors duration-300';
         badge.innerText = 'En Reposo';
-        mostrarToast('Error al procesar dictado: ' + e, 'error');
+        mostrarToast('No se pudo completar. Intenta de nuevo.', 'error');
       } finally {
         isProcessingDictation = false;
         try {
@@ -2678,7 +2681,7 @@
     // Generar Historia Clínica Oficial en PDF (Conecta backend y frontend)
     async function generarHistoriaClinicaOficialPdf() {
       const cid = ultimoExpedienteCache ? ultimoExpedienteCache.id : null;
-      mostrarToast('Generando Historia Clínica Oficial en PDF...', 'info');
+      mostrarToast('Guardando expediente...', 'info');
       try {
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
         const fn = api && (api.generar_pdf_actual || api.generarPdfActual);
@@ -2712,7 +2715,7 @@
         }
       } catch (err) {
         console.error('Error al generar Historia Clínica Oficial PDF:', err);
-        mostrarToast('Error al generar PDF: ' + err, 'error');
+        mostrarToast('No se pudo completar. Intenta de nuevo.', 'error');
       }
     }
 
@@ -2862,7 +2865,7 @@
         if (fn) {
           const resp = await fn.call(api, payload);
           if (resp && resp.status === 'ok') {
-            mostrarToast('¡Expediente corregido y PDF regenerado con éxito!');
+            mostrarToast('Expediente actualizado');
             if (esOrto) {
               isOrtoModoActivo = true;
               const b = document.getElementById('btnToggleOrto');
@@ -2887,7 +2890,8 @@
               }
             }
           } else {
-            mostrarToast('Error al guardar corrección: ' + ((resp && resp.message) || ''), 'error');
+            console.error('Error al guardar corrección:', resp);
+            mostrarToast('No se pudo completar. Intenta de nuevo.', 'error');
           }
         } else {
           mostrarToast('Corrección guardada (Modo demostración)');
@@ -3210,7 +3214,7 @@
     }
 
     async function generarPdfDesdeHistorial(consultaId, pacienteId) {
-      mostrarToast('Generando Historia Clínica Oficial en PDF...', 'info');
+      mostrarToast('Guardando expediente...', 'info');
       try {
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
         const fn = api && (api.generar_pdf_actual || api.generarPdfActual);
@@ -3229,7 +3233,8 @@
           }
         }
       } catch (err) {
-        mostrarToast('Error al generar PDF: ' + err, 'error');
+        console.error('Error al generar PDF:', err);
+        mostrarToast('No se pudo completar. Intenta de nuevo.', 'error');
       }
     }
 
@@ -3980,7 +3985,7 @@
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
         const fn = api && (api.enviar_recordatorio_whatsapp || api.enviarRecordatorioWhatsapp);
         if (fn) {
-          mostrarToast('Procesando recordatorio de WhatsApp...');
+          mostrarToast('Enviando recordatorio...');
           const resp = await fn.call(api, citaId, forzarNavegador);
           if (resp && resp.status === 'ok') {
             mostrarToast(resp.message || 'Recordatorio de WhatsApp despachado exitosamente');
@@ -4261,7 +4266,7 @@
       const pacienteId = hPacId && hPacId.value ? parseInt(hPacId.value, 10) : null;
       const consultaId = hConsId && hConsId.value ? parseInt(hConsId.value, 10) : (ultimoExpedienteCache ? ultimoExpedienteCache.id : null);
 
-      mostrarToast('Guardando cédula y actualizando expediente...', 'info');
+      mostrarToast('Guardando...', 'info');
 
       try {
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
@@ -4529,7 +4534,7 @@
     function abrirUltimoPDF() {
       switchTab('pdf');
       cargarPdfs();
-      mostrarToast('Cargando expediente en el Visor de PDF...');
+      mostrarToast('Cargando...');
     }
 
     function abrirRutaPdf(rutaEnc) {
