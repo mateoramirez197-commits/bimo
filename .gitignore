@@ -60,3 +60,8 @@ Desktop.ini
 *.lic
 *.ics
 calendar_profile.json
+*.bak*
+_respaldos_bimo/
+scratch/
+contexto_saas_odontologia.txt
+
