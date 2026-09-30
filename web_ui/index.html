@@ -97,6 +97,9 @@
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(148, 163, 184, 0.7);
     }
+    @keyframes bimoAparece { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .cita-anim { animation: bimoAparece .22s ease-out both; }
+    @media (prefers-reduced-motion: reduce) { .cita-anim { animation: none; } }
   </style>
 </head>
 <body id="themeBody" class="bg-[#090614] text-slate-100 font-sans antialiased m-0 p-0 overflow-hidden flex flex-col h-screen select-none relative transition-colors duration-700">
@@ -112,11 +115,7 @@
           <circle cx="20" cy="20" r="1.5" fill="currentColor"/>
         </svg>
       </div>
-      <div class="flex items-baseline gap-1.5">
-        <span class="text-xs font-black tracking-widest text-white">BIMO</span>
-        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">CLINICAL</span>
-      </div>
-      <span class="text-[10px] text-slate-500 font-medium hidden sm:inline-block">| Asistente Clínico Inteligente</span>
+      <span class="text-[10px] uppercase tracking-widest text-slate-500 font-semibold drag-region">SOFTWARE ODONTOLÓGICO</span>
     </div>
 
     <!-- Centro: Título o Nombre de la Clínica -->
@@ -734,6 +733,17 @@
               </div>
             </div>
             
+            <!-- PANEL DE ENCABEZADO DE FILTRO DE CITAS POR DÍA -->
+            <div id="cabeceraFiltroCitas" class="hidden mb-3 p-3 bg-indigo-950/40 border border-indigo-500/40 rounded-2xl flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <span id="textoFiltroCitas" class="text-xs font-bold text-indigo-300"></span>
+                <button type="button" onclick="restablecerFiltroCitas()" class="text-[11px] text-slate-400 hover:text-white underline cursor-pointer">Ver todas</button>
+              </div>
+              <button type="button" id="btnAgendarDiaFiltro" onclick="agendarCitaEnDiaFiltro()" class="w-full py-1.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 rounded-xl text-[11px] font-semibold cursor-pointer transition-colors text-center">
+                + Agendar este día
+              </button>
+            </div>
+
             <!-- LISTA DINÁMICA DE CITAS DESLIZABLE -->
             <div id="listaCitasContenedor" class="flex-1 overflow-y-auto space-y-3 pr-1 scroll-smooth max-h-[500px]">
               <div class="text-xs text-slate-500 text-center py-8">Cargando citas...</div>
@@ -3466,12 +3476,52 @@
     // ==========================================
     // AGENDA Y CITAS
     // ==========================================
+    const NOMBRES_MESES = window.NOMBRES_MESES || [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    window.NOMBRES_MESES = NOMBRES_MESES;
+    const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     let filtroFechaCitas = null; // 'YYYY-MM-DD' o null
 
-    window.renderizarListaCitas = function (citas) {
+    function actualizarCabeceraFiltroCitas(totalCitas) {
+      const cabecera = $id('cabeceraFiltroCitas');
+      if (!cabecera) return;
+      if (!filtroFechaCitas) {
+        cabecera.classList.add('hidden');
+        return;
+      }
+      cabecera.classList.remove('hidden');
+      const partes = filtroFechaCitas.split('-');
+      if (partes.length === 3) {
+        const y = parseInt(partes[0], 10);
+        const m = parseInt(partes[1], 10) - 1;
+        const d = parseInt(partes[2], 10);
+        const dt = new Date(y, m, d);
+        const diaNom = DIAS_SEMANA[dt.getDay()] || '';
+        const mesNom = (NOMBRES_MESES[m] || '').toLowerCase();
+        const texto = `Citas del ${diaNom} ${d} de ${mesNom} · ${totalCitas}`;
+        setText('textoFiltroCitas', texto);
+      }
+    }
+
+    window.agendarCitaEnDiaFiltro = function () {
+      if (!filtroFechaCitas) return;
+      const partes = filtroFechaCitas.split('-');
+      if (partes.length === 3) {
+        const y = parseInt(partes[0], 10);
+        const m = parseInt(partes[1], 10) - 1;
+        const d = parseInt(partes[2], 10);
+        abrirModalNuevaCitaConFecha(y, m, d);
+      }
+    };
+
+    window.renderizarListaCitas = function (citas, opciones) {
+      const opts = opciones || {};
       const cont = $id('listaCitasContenedor');
       if (!cont) return false; // pestaña aún no montada
       const lista = Array.isArray(citas) ? citas : [];
+      actualizarCabeceraFiltroCitas(lista.length);
 
       if (lista.length === 0) {
         cont.innerHTML = '<div class="text-xs text-slate-500 text-center py-8">' +
@@ -3479,7 +3529,7 @@
         return true;
       }
 
-      const html = lista.map(c => {
+      const html = lista.map((c, i) => {
         const f = c.fecha_hora_inicio || '';
         const hora = f.includes(' ') ? f.split(' ')[1] : f;
         const fechaCorta = f.includes(' ') ? f.split(' ')[0] : '';
@@ -3487,8 +3537,10 @@
           ? `<span class="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono font-medium" title="Recordatorio enviado: ${esc(c.recordatorio_enviado_at || '')}">Enviado</span>`
           : '';
         const id = Number(c.id); // fuerza número: nada de inyección en onclick
+        const animCls = opts.animar ? ' cita-anim' : '';
+        const animSty = opts.animar ? ` style="animation-delay:${Math.min(i, 8) * 30}ms"` : '';
         return `
-          <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors flex justify-between items-center group">
+          <div class="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 hover:border-slate-700 transition-colors flex justify-between items-center group${animCls}"${animSty}>
             <div>
               <div class="flex items-center gap-2">
                 <span class="text-xs font-bold text-white">${esc(c.nombre_paciente)}</span>
@@ -3516,22 +3568,32 @@
       return true;
     };
 
-    function aplicarFiltroCitas() {
+    function aplicarFiltroCitas(opciones) {
       const base = Array.isArray(citasCache) ? citasCache : [];
       const lista = filtroFechaCitas
         ? base.filter(c => (c.fecha_hora_inicio || '').startsWith(filtroFechaCitas))
         : base;
-      window.renderizarListaCitas(lista);
+      window.renderizarListaCitas(lista, opciones);
     }
-    window.filtrarCitasPorFecha = function (yyyy_mm_dd) {
-      filtroFechaCitas = yyy_mm_dd || null;
-      aplicarFiltroCitas();
+    window.filtrarCitasPorFecha = function (yyyy_mm_dd, opciones) {
+      filtroFechaCitas = yyyy_mm_dd || null;
+      aplicarFiltroCitas(opciones !== undefined ? opciones : { animar: true });
+      if (typeof renderizarCalendarioAgenda === 'function') renderizarCalendarioAgenda();
     };
-    window.restablecerFiltroCitas = function () {
+    window.restablecerFiltroCitas = function (opciones) {
       filtroFechaCitas = null;
       const inp = $id('filtroFechaCitas');
       if (inp) inp.value = '';
-      aplicarFiltroCitas();
+      aplicarFiltroCitas(opciones !== undefined ? opciones : { animar: true });
+      if (typeof renderizarCalendarioAgenda === 'function') renderizarCalendarioAgenda();
+    };
+
+    window.seleccionarDiaAgenda = function (fecha) {
+      if (fecha === filtroFechaCitas) {
+        window.restablecerFiltroCitas({ animar: true });
+      } else {
+        window.filtrarCitasPorFecha(fecha, { animar: true });
+      }
     };
 
     async function cargarCitas() {
@@ -3971,11 +4033,6 @@
     // ==========================================
     // CALENDARIO DINÁMICO (AGENDA Y MINI-CALENDARIO)
     // ==========================================
-    const NOMBRES_MESES = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
-
     let agendaAnio = new Date().getFullYear();
     let agendaMes = new Date().getMonth(); // 0 a 11
 
@@ -4057,23 +4114,30 @@
       for (let d = 1; d <= totalDiasMes; d++) {
         const esHoy = (d === diaHoy);
         const citas = citasPorDia[d] || [];
+        const mStr = String(agendaMes + 1).padStart(2, '0');
+        const dStr = String(d).padStart(2, '0');
+        const fechaCelda = `${agendaAnio}-${mStr}-${dStr}`;
+        const esSeleccionado = (filtroFechaCitas === fechaCelda);
 
         let diaClase = 'bg-slate-950/70 border-slate-800/80 hover:border-indigo-500/50 hover:bg-slate-900/90';
-        if (esHoy) {
+        if (esSeleccionado) {
+          diaClase = 'ring-2 ring-indigo-400 bg-indigo-950/60 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.25)]';
+        } else if (esHoy) {
           diaClase = 'bg-indigo-950/40 border-indigo-500/80 shadow-[0_0_15px_rgba(99,102,241,0.15)]';
         }
 
         html += `
-          <div onclick="abrirModalNuevaCitaConFecha(${agendaAnio}, ${agendaMes}, ${d})" class="h-20 p-2 rounded-2xl border ${diaClase} flex flex-col justify-between cursor-pointer transition-all group relative overflow-hidden">
+          <div onclick="seleccionarDiaAgenda('${fechaCelda}')" class="h-20 p-2 rounded-2xl border ${diaClase} flex flex-col justify-between cursor-pointer transition-all group relative overflow-hidden">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-mono font-bold ${esHoy ? 'text-indigo-400' : 'text-slate-300 group-hover:text-white'}">${d}</span>
+              <span class="text-xs font-mono font-bold ${esSeleccionado ? 'text-indigo-300' : (esHoy ? 'text-indigo-400' : 'text-slate-300 group-hover:text-white')}">${d}</span>
               ${esHoy ? '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_6px_#818cf8]"></span>' : ''}
             </div>
+            <button type="button" onclick="event.stopPropagation(); abrirModalNuevaCitaConFecha(${agendaAnio}, ${agendaMes}, ${d})" title="Agendar cita este día" aria-label="Agendar cita este día" class="absolute top-1.5 right-1.5 w-5 h-5 rounded-lg bg-slate-800/80 text-slate-300 hover:bg-indigo-600 hover:text-white text-xs leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity cursor-pointer">+</button>
             
             <div class="space-y-1 overflow-hidden">
               ${citas.slice(0, 2).map(c => `
                 <div class="text-[10px] truncate px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">
-                  ${c.nombre_paciente || 'Cita'}
+                  ${esc(c.nombre_paciente || 'Cita')}
                 </div>
               `).join('')}
               ${citas.length > 2 ? `<div class="text-[9px] text-slate-400 font-bold pl-1">+${citas.length - 2} más</div>` : ''}
