@@ -206,6 +206,108 @@ def _normalizar_nombres_espanol(nombre: str) -> str:
         res = re.sub(pat, rep, res, flags=re.IGNORECASE)
     return res
 
+def limpiar_nombre_paciente(raw: str) -> str:
+    """
+    Limpia y normaliza el nombre de un paciente para agenda y consultas clínicas (U3):
+    - Elimina prefijos de agendamiento ('cita para', 'agendar a', etc.) y títulos ('doctor', 'sr', 'señora').
+    - Elimina motivos de consulta ('con dolor', 'por limpieza', 'para revisión').
+    - Elimina expresiones de fecha y hora ('mañana a las 10', 'el 15 de marzo', 'a las 4pm').
+    - Elimina edades ('de 25 años') y teléfonos al final.
+    - PRESERVA apellidos compuestos ('de la Cruz', 'del Valle', 'San Martín', 'Montes de Oca').
+    - Normaliza nombres andinos e hispanoamericanos ('Sisa Llumiquinga', 'Inti Guaminga', 'Sebastián', etc.).
+    """
+    if not raw or not isinstance(raw, str):
+        return ""
+
+    texto = raw.strip()
+
+    # 1. Chequeo de 'el último paciente'
+    if any(u in texto.lower() for u in (
+        "último paciente", "ultimo paciente", "la última", "la ultima",
+        "el ultimo", "el último", "al último", "al ultimo"
+    )):
+        return "el último paciente"
+
+    # 2. Eliminar prefijos de agendamiento y llamadas de cortesía iniciales con límites de palabra
+    prefijos_agendamiento = [
+        r"^(?:por\s+favor\s+)?(?:generar?|crear?|agendar?|separar?|sacar?|haz|hacer|dar|programar?|poner?|revisar?|atiende|atender)\s+(?:una\s+)?(?:nueva\s+)?(?:cita|control|sesi[oó]n|consulta)?\s+(?:para|a|al|con)\s+",
+        r"^(?:por\s+favor\s+)?(?:generar?|crear?|agendar?|separar?|sacar?|haz|hacer|dar|programar?|poner?|revisar?|atiende|atender)\s+(?:una\s+)?(?:nueva\s+)?(?:cita|control|sesi[oó]n|consulta)?\s+",
+        r"^(?:por\s+favor\s+)?(?:generar?|crear?|agendar?|separar?|sacar?|dar|programar?|revisar?)\s+(?:a|al)\s+",
+        r"^(?:una\s+)?(?:nueva\s+)?(?:cita|control|sesi[oó]n|consulta)\s+(?:para|a|al|con)\s+",
+        r"^(?:para\s+(?:el|la)\s+|para\s+|al\s+|a\s+(?:el|la)\s+|con\s+)"
+    ]
+    for p in prefijos_agendamiento:
+        texto = re.sub(p, "", texto, flags=re.IGNORECASE).strip()
+
+    # Títulos y cortesía iniciales: doctor, doctora, dr, dra, don, doña, sr, sra, señor, señora, paciente, niño, niña
+    titulos = r"^(?:el\s+|la\s+)?(?:doctora?|dr\.|dra\.|sr\.|sra\.|señora?|don|doña|paciente|niñ[oa])\s+"
+    texto = re.sub(titulos, "", texto, flags=re.IGNORECASE).strip()
+
+    # Remanentes si tras quitar títulos quedó 'a / al / para / el'
+    texto = re.sub(r"^(?:para\s+(?:el|la)\s+|para\s+|al\s+|a\s+(?:el|la)\s+|el\s+|la\s+)", "", texto, flags=re.IGNORECASE).strip()
+    texto = re.sub(titulos, "", texto, flags=re.IGNORECASE).strip()
+
+    # 3. Cortar por expresiones temporales / fechas / horas
+    patron_tiempo = (
+        r"\b(?:mañana|manana|hoy|ayer|"
+        r"el\s+(?:pr[oó]ximo\s+)?(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)|"
+        r"el\s+\d{1,2}(?:\s+de\s+[a-z]+)?|"
+        r"a\s+las?\s+\d{1,2}(?::\d{2})?(?:\s*(?:am|pm|de\s+la\s+(?:mañana|tarde|noche)))?|"
+        r"a\s+las?\s+(?:una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)|"
+        r"en\s+\d+\s+d[ií]as|dentro\s+de\s+\w+|para\s+el\s+\d{1,2})\b"
+    )
+    partes_tiempo = re.split(patron_tiempo, texto, flags=re.IGNORECASE)
+    if partes_tiempo:
+        texto = partes_tiempo[0].strip()
+
+    # 4. Cortar por motivos de consulta o síntomas clínicos comunes
+    patron_motivo = (
+        r"\b(?:con\s+dolor|por\s+dolor|con\s+molestia|por\s+molestia|"
+        r"para\s+revisi[oó]n|a\s+revisi[oó]n|por\s+revisi[oó]n|"
+        r"para\s+limpieza|por\s+limpieza|a\s+limpieza|"
+        r"para\s+calza|por\s+calza|para\s+curaci[oó]n|por\s+curaci[oó]n|"
+        r"para\s+extracci[oó]n|por\s+extracci[oó]n|para\s+sacar|"
+        r"para\s+brackets|por\s+brackets|para\s+ortodoncia|por\s+ortodoncia|"
+        r"para\s+control|a\s+control|por\s+control|"
+        r"con\s+caries|por\s+caries|con\s+fractura|por\s+fractura)\b"
+    )
+    partes_motivo = re.split(patron_motivo, texto, flags=re.IGNORECASE)
+    if partes_motivo:
+        texto = partes_motivo[0].strip()
+
+    # 5. Cortar / eliminar edades ('de 25 años', 'edad 30', etc.)
+    texto = re.sub(r"\b(?:de\s+)?\d{1,2}\s+a[ñn]os?\b", "", texto, flags=re.IGNORECASE).strip()
+    texto = re.sub(r"\bedad\s+\d{1,2}\b", "", texto, flags=re.IGNORECASE).strip()
+
+    # 6. Eliminar teléfonos dictados al final
+    texto = re.sub(r"\b(?:tel[eé]fono|celular|m[oó]vil|tlf)?\s*[+\d\-\s\.]{7,15}$", "", texto, flags=re.IGNORECASE).strip()
+
+    # 7. Limpieza de puntuación sobrante
+    texto = re.sub(r"[,\.;:\-_/]+$", "", texto).strip()
+    texto = re.sub(r"^[,\.;:\-_/]+", "", texto).strip()
+
+    if not texto:
+        return ""
+
+    # 8. Formateo y preservación de mayúsculas/minúsculas en apellidos compuestos
+    particulas = {"de", "del", "la", "las", "los", "y", "e"}
+    palabras = texto.split()
+    palabras_formateadas = []
+    for i, p in enumerate(palabras):
+        p_clean = p.strip()
+        p_lower = p_clean.lower()
+        if i > 0 and p_lower in particulas:
+            palabras_formateadas.append(p_lower)
+        else:
+            palabras_formateadas.append(p_clean.capitalize())
+
+    nombre_formateado = " ".join(palabras_formateadas)
+
+    # 9. Normalización fonética y de ortografía hispanoamericana y andina
+    nombre_final = _normalizar_nombres_espanol(nombre_formateado)
+
+    return nombre_final.strip()
+
 def sanitizar_cedula(doc: str) -> str:
     """Limpia cédula o documento extrayendo dígitos y eliminando comas, puntos o espacios del dictado."""
     if not doc or str(doc).lower() in ("no especificado", "none", ""):
@@ -1160,10 +1262,7 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
     if es_ultimo:
         nombre_paciente = "el último paciente"
     else:
-        partes_temp = re.split(r'\b(?:en\s+\d+|mañana|manana|hoy|el\s+(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|pr[oó]ximo)|a\s+las\s+\d+|para\s+el\s+\d+|dentro\s+de)\b', resto, flags=re.IGNORECASE)
-        raw_nom = partes_temp[0].strip() if partes_temp else resto
-        raw_nom = re.sub(r'[,\.]', '', raw_nom).strip()
-        nombre_paciente = _normalizar_nombres_espanol(raw_nom.title()) if raw_nom else "el último paciente"
+        nombre_paciente = limpiar_nombre_paciente(resto) or "el último paciente"
 
     # 3. Resolver fecha y hora con el algoritmo matemático determinista
     tiene_tiempo = contiene_especificacion_temporal(texto_crudo)
@@ -1350,7 +1449,10 @@ Si la transcripción contiene variaciones fonéticas o aproximaciones acústicas
 - 'inti' -> 'Inti'
 - 'tupac' -> 'Tupac'
 
-REGLA ESPECIAL PARA CITAS Y ÚLTIMO PACIENTE:
+REGLAS ESTRICTAS DE NOMBRES EN CITAS Y AGENDA:
+- En 'nombre_paciente', coloca ÚNICAMENTE el nombre y apellido(s) del paciente (ej: 'María José Pérez', 'Carlos Montes de Oca', 'Sisa Llumiquinga', 'Pedro de la Cruz').
+- NUNCA incluyas motivos ('con dolor', 'revisión', 'limpieza', 'brackets'), edades ('25 años'), fechas ('mañana', '15 de marzo'), horas ('4pm') ni palabras de agendamiento ('cita para', 'agenda a') dentro de 'nombre_paciente'.
+- Preserva SIEMPRE los apellidos compuestos (ej: 'de la Cruz', 'del Valle', 'San Martín', 'Montes de Oca') y nombres andinos (ej: 'Llumiquinga', 'Guaminga', 'Toapanta', 'Quispe').
 - Si el usuario dice 'el último paciente', 'la última paciente', 'último paciente atendido' o 'al último', pon estrictamente 'nombre_paciente': 'el último paciente'.
 - Si el usuario solicita agendar una cita pero NO especifica fecha ni hora en el audio (ej: 'genera una cita para el último paciente', 'agenda una cita para Juan'):
   pon 'fecha_hora': null y 'requiere_fecha_hora': true. NUNCA inventes una fecha u hora si no fue dictada.
@@ -1689,7 +1791,7 @@ Texto dictado:
             if any(u in raw_nom.lower() for u in ("último paciente", "ultimo paciente", "la última", "la ultima", "el ultimo", "el último", "último", "ultimo")) or any(u in texto_crudo.lower() for u in ("último paciente", "ultimo paciente", "la última", "la ultima", "el ultimo", "el último")):
                 nom = "el último paciente"
             else:
-                nom = _normalizar_nombres_espanol(raw_nom)
+                nom = limpiar_nombre_paciente(raw_nom)
             resultado["nombre_paciente"] = nom
             
             # Resolver fecha y hora con el algoritmo matemático determinista
