@@ -61,6 +61,8 @@ def es_archivo_prohibido(nombre_en_zip):
     # Verificar patrones de archivo
     for pat in PATRONES_PROHIBIDOS:
         if fnmatch.fnmatch(base, pat.lower()):
+            if base == "cacert.pem" and "certifi" in norm.lower():
+                continue
             return True, f"Coincide con patrón prohibido '{pat}'"
 
     # Verificar carpetas protegidas
@@ -73,7 +75,7 @@ def es_archivo_prohibido(nombre_en_zip):
 
 def verificar_zip_payload(zip_path):
     if not os.path.exists(zip_path):
-        return False, [f"El archivo zip no existe: {zip_path}"], {}
+        return False, [(zip_path, f"El archivo zip no existe: {zip_path}")], {}
 
     violaciones = []
     total_archivos = 0

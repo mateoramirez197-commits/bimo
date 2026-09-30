@@ -1330,6 +1330,62 @@
             </div>
           </div>
         </div>
+
+        <!-- Respaldo en Google Drive (Cifrado E2E) -->
+        <div class="col-span-1 xl:col-span-2 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                  <span>Respaldo en la Nube (Google Drive Cifrado E2E)</span>
+                  <span id="driveBackupStatusBadge" class="text-[10px] bg-slate-800 text-slate-400 px-2.5 py-0.5 rounded-full font-bold border border-slate-700">Verificando...</span>
+                </h3>
+                <p class="text-[11px] text-slate-400 mt-0.5">Respaldos automáticos en tu unidad de Google Drive. Cifrado simétrico PBKDF2 + Fernet de grado médico.</p>
+              </div>
+            </div>
+            <div class="text-right text-xs">
+              <span class="text-slate-500 text-[10px] uppercase font-bold block">Último Respaldo:</span>
+              <span id="driveUltimoRespaldo" class="font-mono text-slate-300 font-medium text-xs">--</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-xs">
+            <div class="flex flex-col justify-center">
+              <label class="flex items-center gap-2.5 cursor-pointer">
+                <input id="confDriveCifrado" type="checkbox" onchange="toggleDriveCifradoUi(this.checked)" class="w-4 h-4 rounded bg-slate-950 border-slate-800 text-sky-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
+                <span class="text-xs font-bold text-white">Cifrar respaldo antes de subir</span>
+              </label>
+              <p class="text-[10px] text-slate-500 mt-1">Recomendado para datos clínicos y cumplimiento HIPAA/normativa de salud.</p>
+            </div>
+
+            <div id="seccionDrivePassphrase" class="opacity-50 pointer-events-none transition-opacity">
+              <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Contraseña de Cifrado (Mínimo 8 caracteres)</label>
+              <div class="relative">
+                <input id="confDrivePassphrase" type="password" placeholder="Clave robusta personal" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-sky-500 pr-10" />
+                <button type="button" onclick="toggleMostrarPassDrive()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer text-xs" title="Mostrar/Ocultar contraseña">👁️</button>
+              </div>
+              <p class="text-[10px] text-amber-400/80 mt-1">⚠️ Si olvidas esta clave, los respaldos en la nube no podrán ser restaurados. Nunca se envía a Google.</p>
+            </div>
+
+            <div class="flex flex-col justify-end gap-2">
+              <button type="button" onclick="guardarConfiguracionDriveUi()" class="w-full py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-sky-600/20">
+                Guardar Configuración Respaldo
+              </button>
+              <button type="button" id="btnRespaldarDriveAhora" onclick="ejecutarRespaldoDriveManualUi()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                <span>Respaldar Ahora en Drive</span>
+              </button>
+            </div>
+          </div>
+          
+          <div id="driveBackupAvisoError" class="hidden mt-3 p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+            <svg class="w-4 h-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <span id="driveBackupErrorMsg"></span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -4869,6 +4925,7 @@
           }
 
           await cargarConfiguracionWhatsappUi();
+          await cargarConfiguracionDriveUi();
         }
       } catch (e) {
         console.warn('cargarConfiguracion:', e);
@@ -5027,6 +5084,127 @@
       }
     }
 
+    function toggleDriveCifradoUi(activo) {
+      const sec = document.getElementById('seccionDrivePassphrase');
+      if (!sec) return;
+      if (activo) {
+        sec.classList.remove('opacity-50', 'pointer-events-none');
+      } else {
+        sec.classList.add('opacity-50', 'pointer-events-none');
+      }
+    }
+
+    function toggleMostrarPassDrive() {
+      const inp = document.getElementById('confDrivePassphrase');
+      if (!inp) return;
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    }
+
+    async function cargarConfiguracionDriveUi() {
+      try {
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        const fn = api && (api.obtener_estado_respaldo_drive || api.obtenerEstadoRespaldoDrive);
+        if (fn) {
+          const resp = await fn.call(api);
+          if (resp && resp.status === 'ok') {
+            const chk = document.getElementById('confDriveCifrado');
+            if (chk) {
+              chk.checked = !!resp.cifrado_activo;
+              toggleDriveCifradoUi(chk.checked);
+            }
+            const badge = document.getElementById('driveBackupStatusBadge');
+            if (badge) {
+              if (resp.google_conectado) {
+                badge.className = 'text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full font-bold border border-emerald-500/30';
+                badge.innerText = resp.cifrado_activo ? 'CONECTADO (E2E ACTIVO)' : 'CONECTADO (ESTÁNDAR)';
+              } else {
+                badge.className = 'text-[10px] bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full font-bold border border-amber-500/30';
+                badge.innerText = 'GOOGLE NO CONECTADO';
+              }
+            }
+            const elUlt = document.getElementById('driveUltimoRespaldo');
+            if (elUlt && resp.ultimo_respaldo) {
+              elUlt.innerText = resp.ultimo_respaldo;
+            }
+            const errBox = document.getElementById('driveBackupAvisoError');
+            const errMsg = document.getElementById('driveBackupErrorMsg');
+            if (errBox && errMsg) {
+              if (resp.ultimo_error) {
+                errBox.classList.remove('hidden');
+                errMsg.innerText = resp.ultimo_error;
+              } else {
+                errBox.classList.add('hidden');
+                errMsg.innerText = '';
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('cargarConfiguracionDriveUi:', e);
+      }
+    }
+
+    async function guardarConfiguracionDriveUi() {
+      try {
+        const chk = document.getElementById('confDriveCifrado');
+        const cifrado = chk ? chk.checked : false;
+        const passInp = document.getElementById('confDrivePassphrase');
+        const pass = passInp ? passInp.value : '';
+
+        if (cifrado && (!pass || pass.length < 8)) {
+          alert('Para activar el cifrado E2E, debes ingresar una contraseña de al menos 8 caracteres.');
+          return;
+        }
+
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        const fn = api && (api.guardar_configuracion_respaldo_drive || api.guardarConfiguracionRespaldoDrive);
+        if (fn) {
+          const resp = await fn.call(api, cifrado, pass);
+          if (resp && resp.status === 'ok') {
+            mostrarToast('Configuración de respaldo Drive guardada correctamente.');
+            await cargarConfiguracionDriveUi();
+          } else {
+            alert((resp && resp.message) || 'Error al guardar configuración de respaldo');
+          }
+        }
+      } catch (e) {
+        console.error('guardarConfiguracionDriveUi:', e);
+        alert('Error: ' + e);
+      }
+    }
+
+    async function ejecutarRespaldoDriveManualUi() {
+      const btn = document.getElementById('btnRespaldarDriveAhora');
+      const textoOrig = btn ? btn.innerHTML : '';
+      try {
+        if (btn) {
+          btn.disabled = true;
+          btn.classList.add('opacity-50', 'pointer-events-none');
+          btn.innerHTML = '<span>Sincronizando con Drive...</span>';
+        }
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        const fn = api && (api.ejecutar_respaldo_drive_manual || api.ejecutarRespaldoDriveManual);
+        if (fn) {
+          const resp = await fn.call(api);
+          if (resp && resp.status === 'ok') {
+            mostrarToast('Respaldo en Google Drive completado con éxito.');
+          } else {
+            alert('Aviso de respaldo: ' + ((resp && resp.message) || 'Error desconocido'));
+          }
+          await cargarConfiguracionDriveUi();
+        }
+      } catch (e) {
+        console.error('ejecutarRespaldoDriveManualUi:', e);
+        alert('Error ejecutando respaldo: ' + e);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-50', 'pointer-events-none');
+          btn.innerHTML = textoOrig;
+        }
+      }
+    }
+
     // ==========================================
     // ENLACE UNIVERSAL Y RESOLUCIÓN DE BRIDGE
     // ==========================================
@@ -5054,6 +5232,9 @@
         ['abrirUrlMovil', 'abrir_url_movil'],
         ['obtenerInfoClinica', 'obtener_info_clinica'],
         ['guardarConfiguracion', 'guardar_configuracion'],
+        ['obtenerEstadoRespaldoDrive', 'obtener_estado_respaldo_drive'],
+        ['guardarConfiguracionRespaldoDrive', 'guardar_configuracion_respaldo_drive'],
+        ['ejecutarRespaldoDriveManual', 'ejecutar_respaldo_drive_manual'],
         ['obtenerEstadoWidget', 'obtener_estado_widget'],
         ['toggleWidgetEscritorio', 'toggle_widget_escritorio'],
         ['obtenerUltimoExpediente', 'obtener_ultimo_expediente'],

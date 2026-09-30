@@ -476,11 +476,18 @@ class BimoBridge:
         try:
             from calendar_sync import obtener_credenciales_google
             from drive_backup import respaldar_en_drive
+            from config import obtener_parametro_boveda
             creds = obtener_credenciales_google()
             if not creds:
                 return None
-            # passphrase=None => zip sin cifrar. Recomendado: leerla de la bóveda/ajustes.
-            return respaldar_en_drive(creds, daemon=not al_cerrar)
+
+            cifrado_activo = str(obtener_parametro_boveda("backup_drive_cifrado", "0")) == "1"
+            passphrase = obtener_parametro_boveda("backup_drive_passphrase", "") if cifrado_activo else None
+            if cifrado_activo and not passphrase:
+                print("[DRIVE BACKUP WARN] Cifrado activado pero sin contraseña configurada. Respaldo omitido.")
+                return None
+
+            return respaldar_en_drive(creds, daemon=not al_cerrar, passphrase=passphrase)
         except Exception as e:
             print(f"[DRIVE BACKUP WARN] {e}")
             return None
@@ -2569,6 +2576,72 @@ class BimoBridge:
             print(f"[BIMO DESKTOP ERROR] guardar_configuracion: {e}")
             return {"status": "error", "message": str(e)}
 
+    def obtener_estado_respaldo_drive(self):
+        try:
+            from config import obtener_parametro_boveda
+            from calendar_sync import obtener_credenciales_google
+            from drive_backup import _leer_estado
+            import datetime
+
+            cifrado = str(obtener_parametro_boveda("backup_drive_cifrado", "0")) == "1"
+            tiene_pass = bool(obtener_parametro_boveda("backup_drive_passphrase", ""))
+            creds = obtener_credenciales_google()
+            conectado = creds is not None and getattr(creds, "valid", False)
+
+            est = _leer_estado()
+            ultimo_ts = est.get("ultimo_ok_ts")
+            ultimo_str = datetime.datetime.fromtimestamp(ultimo_ts).strftime("%Y-%m-%d %H:%M") if ultimo_ts else "Nunca"
+            ultimo_err = est.get("ultimo_error")
+
+            return {
+                "status": "ok",
+                "cifrado_activo": cifrado,
+                "tiene_passphrase": tiene_pass,
+                "google_conectado": conectado,
+                "ultimo_respaldo": ultimo_str,
+                "ultimo_error": ultimo_err
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def guardar_configuracion_respaldo_drive(self, cifrado_activo, passphrase=None):
+        try:
+            from config import guardar_parametro_boveda
+            cifrado_str = "1" if cifrado_activo else "0"
+            guardar_parametro_boveda("backup_drive_cifrado", cifrado_str)
+            if passphrase is not None and str(passphrase).strip():
+                pwd = str(passphrase).strip()
+                if len(pwd) < 8:
+                    return {"status": "error", "message": "La contraseña de cifrado debe tener al menos 8 caracteres."}
+                guardar_parametro_boveda("backup_drive_passphrase", pwd)
+            return {"status": "ok", "message": "Configuración de respaldo en Google Drive guardada."}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def ejecutar_respaldo_drive_manual(self):
+        try:
+            from calendar_sync import obtener_credenciales_google
+            from drive_backup import _ejecutar_respaldo, _leer_estado
+            from config import obtener_parametro_boveda
+            creds = obtener_credenciales_google()
+            if not creds:
+                return {"status": "error", "message": "No hay cuenta de Google vinculada. Conecta Google Calendar primero."}
+
+            cifrado_activo = str(obtener_parametro_boveda("backup_drive_cifrado", "0")) == "1"
+            passphrase = obtener_parametro_boveda("backup_drive_passphrase", "") if cifrado_activo else None
+            if cifrado_activo and not passphrase:
+                return {"status": "error", "message": "El cifrado está activo pero falta definir una contraseña segura."}
+
+            ok = _ejecutar_respaldo(creds, forzar=True, passphrase=passphrase)
+            est = _leer_estado()
+            if ok:
+                return {"status": "ok", "message": "Respaldo completado y sincronizado con Google Drive exitosamente."}
+            else:
+                err = est.get("ultimo_error") or "No se pudo completar la sincronización con Google Drive."
+                return {"status": "error", "message": err}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     # ==========================================
     # WIDGET FLOTANTE DE ESCRITORIO
     # ==========================================
@@ -2652,8 +2725,22 @@ class BimoBridge:
             nombre_carpeta = f"{nombre_limpio}_{edad_num}_anos_ID{p['id']}"
             ruta = os.path.join(RUTA_PACIENTES, categoria, nombre_carpeta)
             os.makedirs(ruta, exist_ok=True)
-            self.abrir_pdf(ruta)
-            return {"status": "ok", "ruta": str(ruta)}
+            real_ruta = os.path.realpath(os.path.abspath(str(ruta).strip()))
+            real_pac = os.path.realpath(str(RUTA_PACIENTES))
+            dev_pac = os.path.realpath(str(Path.home() / "Desktop" / "Bimo_Project" / "Pacientes"))
+            es_permitido = False
+            for d in [real_pac, dev_pac]:
+                if os.path.exists(d):
+                    try:
+                        if os.path.commonpath([real_ruta, d]) == d:
+                            es_permitido = True
+                            break
+                    except ValueError:
+                        continue
+            if es_permitido and os.path.isdir(real_ruta):
+                os.startfile(real_ruta)
+                return {"status": "ok", "ruta": str(ruta)}
+            return {"status": "error", "message": "Ruta de carpeta no permitida"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] abrir_carpeta_paciente: {e}")
             return {"status": "error", "message": str(e)}

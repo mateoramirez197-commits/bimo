@@ -1233,8 +1233,9 @@ def cancelar_o_eliminar_cita_db(nombre_paciente=None, cita_id=None, fecha=None) 
                 citas_a_borrar = [dict(r) for r in cursor.fetchall()]
 
             if citas_a_borrar:
-                ids = [str(c['id']) for c in citas_a_borrar]
-                cursor.execute(f"DELETE FROM citas_agenda WHERE id IN ({','.join(ids)})")
+                ids = [c['id'] for c in citas_a_borrar]
+                placeholders = ','.join(['?'] * len(ids))
+                cursor.execute(f"DELETE FROM citas_agenda WHERE id IN ({placeholders})", ids)
         elif fecha:
             cursor.execute("SELECT * FROM citas_agenda WHERE fecha_hora_inicio LIKE ?", (f"%{fecha}%",))
             citas_a_borrar = [dict(r) for r in cursor.fetchall()]
