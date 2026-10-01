@@ -323,6 +323,60 @@ def purgar_datos_prueba():
 
 # --- OPERACIONES DE PACIENTES ---
 
+def buscar_paciente_por_similitud(nombre: str, umbral: float = 0.85) -> dict | None:
+    """Busca en la base de datos si existe un paciente con similitud de nombre superior al umbral (>85%).
+    Utiliza difflib.SequenceMatcher comparando texto directo y normalizado sin tildes.
+    Retorna el diccionario del paciente más similar con su ratio, o None si no supera el umbral."""
+    if not nombre or str(nombre).strip().lower() in (
+        "no especificado", "none", "", "null", "paciente", "paciente_desconocido", "paciente_consulta"
+    ):
+        return None
+
+    import difflib
+    import unicodedata
+
+    def _norm(s):
+        nfkd = unicodedata.normalize('NFKD', str(s or ''))
+        return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
+
+    nombre_clean = str(nombre).strip()
+    nombre_norm = _norm(nombre_clean)
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, nombre, documento, edad, sexo, telefono, direccion, ocupacion, medico_cabecera
+            FROM pacientes
+            WHERE nombre IS NOT NULL
+              AND nombre != ''
+              AND nombre != 'Paciente_Desconocido'
+              AND nombre != 'Paciente_Consulta'
+            ORDER BY id ASC
+        """)
+        filas = cursor.fetchall()
+
+    mejor_paciente = None
+    mejor_ratio = 0.0
+
+    for f in filas:
+        nom_db = str(f["nombre"] or "").strip()
+        if not nom_db:
+            continue
+        nom_db_norm = _norm(nom_db)
+
+        r_raw = difflib.SequenceMatcher(None, nombre_clean.lower(), nom_db.lower()).ratio()
+        r_norm = difflib.SequenceMatcher(None, nombre_norm, nom_db_norm).ratio()
+        ratio = max(r_raw, r_norm)
+
+        if ratio > mejor_ratio:
+            mejor_ratio = ratio
+            mejor_paciente = dict(f)
+
+    if mejor_paciente and mejor_ratio > umbral:
+        mejor_paciente["_similitud"] = mejor_ratio
+        return mejor_paciente
+    return None
+
 def registrar_o_actualizar_paciente(datos_filiacion=None, **kwargs) -> int:
     if datos_filiacion is None and kwargs:
         datos_filiacion = kwargs
@@ -517,6 +571,35 @@ def registrar_o_actualizar_paciente(datos_filiacion=None, **kwargs) -> int:
                     conn.commit()
                 print(f"[UNIFICACIÓN] Paciente '{nombre}' consolidado con '{nom_c}' -> ID: {paciente_id}")
                 return paciente_id
+
+        # C.1) Búsqueda por similitud difusa (>85%) mediante SequenceMatcher
+        pac_sim = buscar_paciente_por_similitud(nombre, umbral=0.85)
+        if pac_sim:
+            paciente_id = pac_sim["id"]
+            nom_c = pac_sim["nombre"]
+            edad_c = pac_sim["edad"]
+            doc_c = pac_sim["documento"]
+            nom_mas_completo = nom_c if len(nom_c.split()) >= len(nombre.split()) else nombre
+            edad_final = edad_val if edad_val else edad_c
+            doc_final = doc_limpio if doc_limpio else doc_c
+            cursor.execute("""
+                UPDATE pacientes SET
+                    nombre = ?,
+                    edad = COALESCE(?, edad),
+                    documento = COALESCE(?, documento),
+                    sexo = COALESCE(NULLIF(?, 'No especificado'), sexo),
+                    telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
+                    direccion = COALESCE(NULLIF(?, 'No especificado'), direccion),
+                    ocupacion = COALESCE(NULLIF(?, 'No especificado'), ocupacion),
+                    medico_cabecera = COALESCE(NULLIF(?, 'No especificado'), medico_cabecera)
+                WHERE id = ?
+            """, (nom_mas_completo, edad_final, doc_final, sexo, telefono, direccion, ocupacion, medico, paciente_id))
+            conn.commit()
+            if telefono and telefono.lower() not in ("no especificado", "none", ""):
+                cursor.execute("UPDATE citas_agenda SET telefono = ? WHERE paciente_id = ? AND (telefono IS NULL OR telefono = '' OR telefono = 'No especificado')", (telefono, paciente_id))
+                conn.commit()
+            print(f"[SIMILITUD DIFUSA DB] Paciente '{nombre}' consolidado con '{nom_c}' (similitud {pac_sim.get('_similitud', 0)*100:.1f}%) -> ID: {paciente_id}")
+            return paciente_id
 
         # D) Solo crear nuevo paciente si no hay absolutamente ninguna coincidencia
         if not telefono or str(telefono).strip().lower() in ("no especificado", "none", ""):
@@ -1062,7 +1145,7 @@ def listar_consultas_paciente(paciente_id):
             FROM consultas c
             LEFT JOIN usuarios u ON c.medico_id = u.id
             WHERE c.paciente_id = ?
-            ORDER BY c.fecha_hora DESC
+            ORDER BY COALESCE(datetime(c.fecha_hora), c.fecha_hora, '') DESC, c.id DESC
         """, (paciente_id,))
         return [dict(row) for row in cursor.fetchall()]
 

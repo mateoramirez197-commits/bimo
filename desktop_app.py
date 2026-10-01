@@ -36,6 +36,7 @@ from database import (
     init_db,
     purgar_datos_prueba,
     buscar_pacientes,
+    buscar_paciente_por_similitud,
     listar_consultas_paciente,
     registrar_o_actualizar_paciente,
     guardar_consulta_db,
@@ -247,11 +248,9 @@ class BimoBridge:
         print(f"[BIMO WAKE COMMAND]: {texto_comando}")
 
         if texto_comando == "__BIMO_WAKE_LISTENING__":
-            conf = cargar_datos_clinica()
-            nom_doc = conf.get("nombre_doctor", "Doctor")
             if self._window:
                 try:
-                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'Te escucho, {nom_doc}...')}, 'info');")
+                    self._window.evaluate_js("if (window.mostrarToast) window.mostrarToast('Escuchando...', 'info');")
                     self._window.evaluate_js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
                 except Exception:
                     pass
@@ -279,26 +278,26 @@ class BimoBridge:
         if self._grabando:
             return
 
-        if self._window:
-            try:
-                self._window.evaluate_js(f"if (window.onVoiceCommandDetected) window.onVoiceCommandDetected({json.dumps(texto_comando)});")
-            except Exception:
-                pass
-
         limpio = texto_comando.lower().replace("bimo", "").replace("hola", "").strip(" ,.?!")
         if not limpio or len(limpio) < 3:
-            conf = cargar_datos_clinica()
-            nom_doc = conf.get("nombre_doctor", "Doctor")
             # Activar ventana multi-turn para recibir la orden directa subsiguiente
             if self._wake_listener:
                 self._wake_listener.activar_ventana_activa(10.0)
             if self._window:
                 try:
-                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'Te escucho, {nom_doc}...')}, 'info');")
+                    self._window.evaluate_js("if (window.mostrarToast) window.mostrarToast('Escuchando...', 'info');")
                     self._window.evaluate_js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
                 except Exception:
                     pass
             return
+
+        # Notificación minimalista fija (BLOQUE 4): NUNCA enviar transcripción cruda ni subtítulos al frontend
+        if self._window:
+            try:
+                self._window.evaluate_js("if (window.mostrarToast) window.mostrarToast('Procesando dictado...', 'info');")
+                self._window.evaluate_js("if (window.onVoiceCommandDetected) window.onVoiceCommandDetected();")
+            except Exception:
+                pass
 
         threading.Thread(target=self._ejecutar_comando_detectado, args=(texto_comando,), daemon=True).start()
 
@@ -1217,6 +1216,22 @@ class BimoBridge:
             except Exception as e_vo:
                 print(f"[VOICE ALERT WARN] {e_vo}")
 
+        # --- BLOQUE 1: Prevención de Duplicados mediante Similitud Difusa (>85%) ---
+        if nombre and nombre != "Paciente_Consulta":
+            try:
+                pac_similar = buscar_paciente_por_similitud(nombre, umbral=0.85)
+                if pac_similar:
+                    print(f"[SIMILITUD DIFUSA APP] Paciente dictado '{nombre}' coincide ({pac_similar.get('_similitud', 0)*100:.1f}%) con '{pac_similar['nombre']}' (ID {pac_similar['id']}). Reutilizando.")
+                    filiacion["id"] = pac_similar["id"]
+                    filiacion["nombre"] = pac_similar["nombre"]
+                    nombre = pac_similar["nombre"]
+                    resultado_ia["nombre_paciente"] = pac_similar["nombre"]
+                    if "datos_filiacion" in resultado_ia:
+                        resultado_ia["datos_filiacion"]["nombre"] = pac_similar["nombre"]
+                        resultado_ia["datos_filiacion"]["id"] = pac_similar["id"]
+            except Exception as e_sim:
+                print(f"[WARN] Error en similitud difusa en procesar_texto_clinico: {e_sim}")
+
         pac_id = registrar_o_actualizar_paciente(filiacion)
 
         consulta_hoy = obtener_consulta_del_dia(pac_id)
@@ -1270,6 +1285,7 @@ class BimoBridge:
         ruta_pdf = None
         if generar_pdf and cid:
             try:
+                self._js("if (window.mostrarToast) window.mostrarToast('Generando historia clínica...', 'info');")
                 ruta_pdf = crear_historia_clinica(resultado_ia, paciente_id=pac_id, num_expediente=num_exp)
                 self._ultima_ruta_pdf = ruta_pdf
                 actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf)
@@ -1364,11 +1380,14 @@ class BimoBridge:
             except Exception:
                 pass
 
-        if self._window:
-            try:
+        # --- BLOQUE 2: Reactividad y Refresco Automático de la Interfaz ---
+        try:
+            self._js("if(window.cargarPacientes) window.cargarPacientes(); if(window.cargarCitas) window.cargarCitas();")
+            self._js("if(window.switchTab) window.switchTab('pdf');")
+            if self._window:
                 self._window.evaluate_js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
-            except Exception:
-                pass
+        except Exception as e_ref:
+            print(f"[UI REFRESH WARN] {e_ref}")
 
         return {
             "status": "ok",
@@ -2012,6 +2031,14 @@ class BimoBridge:
         try:
             if isinstance(datos, str):
                 datos = json.loads(datos)
+            if not datos.get("id") and datos.get("nombre"):
+                try:
+                    pac_sim = buscar_paciente_por_similitud(datos.get("nombre"), umbral=0.85)
+                    if pac_sim:
+                        datos["id"] = pac_sim["id"]
+                        datos["nombre"] = pac_sim["nombre"]
+                except Exception:
+                    pass
             pac_id = registrar_o_actualizar_paciente(datos)
             return {"status": "ok", "id": pac_id}
         except Exception as e:

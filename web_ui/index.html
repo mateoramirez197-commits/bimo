@@ -2577,11 +2577,10 @@
     };
 
     window.onVoiceCommandDetected = function(texto) {
-      console.log('[VOICE COMMAND DETECTED]:', texto);
       const lblEstado = document.getElementById('lblEstadoDictado');
       const dotEstado = document.getElementById('badgeEstadoDot');
       if (lblEstado && dotEstado) {
-        lblEstado.innerText = `● Oído: "${texto.slice(0, 26)}${texto.length > 26 ? '...' : ''}"`;
+        lblEstado.innerText = '● Procesando dictado...';
         dotEstado.className = 'w-2 h-2 rounded-full bg-cyan-400 animate-ping';
         setTimeout(() => {
           actualizarUiEscuchaActiva(escuchaActivaHabilitada);
@@ -4796,7 +4795,7 @@
     };
 
     window.onVoiceCommandDetected = function(textoComando) {
-      mostrarToast(`Comando de voz detectado: "${textoComando}"`);
+      mostrarToast('Procesando dictado...', 'info');
     };
 
     window.onCitaCreadaPorVoz = function(pac, fecha) {
