@@ -13,6 +13,7 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
+import re
 import json
 import time
 import threading
@@ -119,6 +120,8 @@ class BimoBridge:
         self._is_transitioning = False
         self._cita_pendiente = None  # Slot-filling de cita en diálogo multi-turn
         self._esperando_respuesta = False
+        self._esperando_respuesta_cedula = False
+        self._historia_pendiente = None
 
     def set_window(self, window):
         self._window = window
@@ -819,6 +822,73 @@ class BimoBridge:
     def procesar_texto_clinico(self, texto, incluir_ortodoncia=False, generar_pdf=True):
         nombre_doc = self._usuario_actual.get("nombre", "Mateo") if self._usuario_actual else "Mateo"
 
+        # -1. RESOLUCIÓN DE DESAMBIGUACIÓN POR CÉDULA (BLOQUE 3)
+        if getattr(self, "_esperando_respuesta_cedula", False) and getattr(self, "_historia_pendiente", None):
+            if (time.time() - self._historia_pendiente.get("timestamp", 0)) < 90.0:
+                from ai_engine import extraer_digitos_cedula
+                cedula_extraida = extraer_digitos_cedula(texto)
+                if cedula_extraida and len(cedula_extraida) >= 5:
+                    hist_pend = self._historia_pendiente
+                    self._esperando_respuesta_cedula = False
+                    self._historia_pendiente = None
+
+                    paciente_encontrado = None
+                    candidatos = hist_pend.get("pacientes_candidatos", [])
+                    for p_cand in candidatos:
+                        doc_c = re.sub(r'\D', '', str(p_cand.get("documento") or ""))
+                        if doc_c and (doc_c == cedula_extraida or doc_c in cedula_extraida or cedula_extraida in doc_c):
+                            paciente_encontrado = p_cand
+                            break
+
+                    if not paciente_encontrado:
+                        from database import get_connection
+                        with get_connection() as conn_ced:
+                            cur_ced = conn_ced.cursor()
+                            cur_ced.execute("SELECT * FROM pacientes WHERE REPLACE(documento, '-', '') = ? OR documento LIKE ? LIMIT 1", (cedula_extraida, f"%{cedula_extraida}%"))
+                            row_ced = cur_ced.fetchone()
+                            if row_ced:
+                                paciente_encontrado = dict(row_ced)
+
+                    if paciente_encontrado:
+                        res_ia = hist_pend["resultado_ia"]
+                        res_ia.setdefault("datos_filiacion", {})["id"] = paciente_encontrado["id"]
+                        res_ia["datos_filiacion"]["nombre"] = paciente_encontrado["nombre"]
+                        res_ia["datos_filiacion"]["documento"] = paciente_encontrado.get("documento") or cedula_extraida
+                        res_ia["nombre_paciente"] = paciente_encontrado["nombre"]
+                        if paciente_encontrado.get("telefono"):
+                            res_ia["datos_filiacion"]["telefono"] = paciente_encontrado["telefono"]
+
+                        try:
+                            sonar_confirmacion_exito()
+                            from voice_assistant import hablar_asincrono
+                            hablar_asincrono(f"Cédula verificada para {paciente_encontrado['nombre']}. Guardando historia clínica.")
+                        except Exception:
+                            pass
+
+                        return self._completar_guardado_historia_clinica(
+                            resultado_ia=res_ia,
+                            texto=hist_pend["texto"],
+                            pac_id=paciente_encontrado["id"],
+                            incluir_ortodoncia=hist_pend.get("incluir_ortodoncia", False),
+                            generar_pdf=hist_pend.get("generar_pdf", True)
+                        )
+                    else:
+                        msg_err = f"No encontré ningún paciente con la cédula {cedula_extraida}."
+                        try:
+                            sonar_error()
+                            from voice_assistant import hablar_asincrono
+                            hablar_asincrono(msg_err)
+                        except Exception:
+                            pass
+                        if self._window:
+                            self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_err)}, 'warning');")
+                        return {"status": "error", "mensaje": msg_err, "tipo": "HISTORIA_CLINICA"}
+                else:
+                    indicadores_dictado_limp = ("paciente ", "consulta por", "acude por", "diagnóstico", "pieza ", "caries")
+                    if any(ind in texto.lower() for ind in indicadores_dictado_limp):
+                        self._esperando_respuesta_cedula = False
+                        self._historia_pendiente = None
+
         # 0. RESOLUCIÓN DE SLOT-FILLING: Si hay una cita pendiente esperando fecha/hora o paciente
         # REGLA DE PROTECCIÓN: Si el texto dictado corresponde a una consulta clínica o nuevo paciente
         # (contiene filiación, consulta por, diagnóstico, piezas, etc.), descartar la cita pendiente
@@ -1319,7 +1389,9 @@ class BimoBridge:
                 "mensaje": msg_guarda
             }
 
-        filiacion = resultado_ia.get("datos_filiacion") or {}
+        filiacion = resultado_ia.get("datos_filiacion") or resultado_ia.get("paciente") or {}
+        if not resultado_ia.get("datos_filiacion"):
+            resultado_ia["datos_filiacion"] = filiacion
         nombre = filiacion.get("nombre") or resultado_ia.get("nombre_paciente") or "Paciente_Consulta"
         if str(nombre).strip().lower() in ("no especificado", "none", "", "paciente"):
             nombre = "Paciente_Consulta"
@@ -1338,9 +1410,49 @@ class BimoBridge:
                 pass
 
         # Verificación obligatoria de cédula (alerta por voz si no fue dictada)
+        # Verificación obligatoria de cédula y homónimos (BLOQUE 3)
         doc_crudo = str(filiacion.get("documento") or filiacion.get("cedula") or "").strip()
+        doc_solo_digitos = re.sub(r'\D', '', doc_crudo)
+
+        if nombre and nombre != "Paciente_Consulta":
+            from database import buscar_pacientes_por_nombre
+            coincidencias = buscar_pacientes_por_nombre(nombre)
+            # Si hay múltiples pacientes con ese nombre y NO se dictó cédula válida (>= 5 dígitos)
+            if len(coincidencias) > 1 and len(doc_solo_digitos) < 5:
+                print(f"[DESAMBIGUACION REQUERIDA] {len(coincidencias)} pacientes coinciden con '{nombre}'. Solicitando cédula por voz...")
+                msg_homonimos = "Tengo varios pacientes con ese nombre. Por favor, díctame su número de cédula."
+                self._esperando_respuesta_cedula = True
+                self._historia_pendiente = {
+                    "resultado_ia": resultado_ia,
+                    "texto": texto,
+                    "pacientes_candidatos": coincidencias,
+                    "nombre_paciente": nombre,
+                    "timestamp": time.time(),
+                    "incluir_ortodoncia": incluir_ortodoncia,
+                    "generar_pdf": generar_pdf
+                }
+                try:
+                    from voice_assistant import hablar_asincrono
+                    hablar_asincrono(msg_homonimos)
+                except Exception as e_vo:
+                    print(f"[VOICE HOMONIMOS WARN] {e_vo}")
+
+                self._activar_auto_escucha_post_habla(12.0)
+
+                if self._window:
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_homonimos)}, 'info');")
+
+                return {
+                    "status": "requiere_cedula",
+                    "requiere_seguimiento": True,
+                    "tipo": "HISTORIA_CLINICA",
+                    "mensaje": msg_homonimos,
+                    "nombre_paciente": nombre,
+                    "pacientes_coincidentes": [p.get("nombre") for p in coincidencias]
+                }
+
         alerta_cedula = False
-        if not doc_crudo or doc_crudo.lower() in ("no especificado", "none", "", "null"):
+        if len(doc_solo_digitos) < 5:
             alerta_cedula = True
             try:
                 preguntar_cedula_paciente(nombre_paciente=nombre, nombre_doctor=nombre_doc)
@@ -1364,9 +1476,37 @@ class BimoBridge:
                 print(f"[WARN] Error en similitud difusa en procesar_texto_clinico: {e_sim}")
 
         pac_id = registrar_o_actualizar_paciente(filiacion)
+        return self._completar_guardado_historia_clinica(
+            resultado_ia=resultado_ia,
+            texto=texto,
+            pac_id=pac_id,
+            incluir_ortodoncia=incluir_ortodoncia,
+            generar_pdf=generar_pdf,
+            alerta_cedula=alerta_cedula
+        )
 
-        consulta_hoy = obtener_consulta_del_dia(pac_id)
-        if consulta_hoy:
+    def _completar_guardado_historia_clinica(self, resultado_ia, texto, pac_id, incluir_ortodoncia=False, generar_pdf=True, alerta_cedula=False):
+        nombre_doc = self._usuario_actual.get("nombre", "Mateo") if self._usuario_actual else "Mateo"
+        filiacion = resultado_ia.get("datos_filiacion") or {}
+        nombre = filiacion.get("nombre") or resultado_ia.get("nombre_paciente") or "Paciente"
+        accion_expediente = resultado_ia.get("accion_expediente", "predeterminado")
+        avisos = []
+
+        # --- BLOQUE 2: Lógica de Fusión/Actualización Clínica ---
+        consulta_hoy = None
+        if pac_id:
+            consulta_hoy = obtener_consulta_del_dia(pac_id)
+
+        # Si se solicita explícitamente "nuevo" expediente, forzar nueva consulta y nuevo PDF
+        if accion_expediente == "nuevo":
+            consulta_hoy = None
+
+        cid = None
+        ruta_pdf = None
+
+        if consulta_hoy and accion_expediente in ("actualizar", "predeterminado"):
+            # FUSIÓN (MERGE): NO crear nuevo ID de consulta
+            cid = consulta_hoy["id"]
             try:
                 prev_json = json.loads(consulta_hoy.get("json_clinico", "{}"))
                 prev_fil = prev_json.get("datos_filiacion", {})
@@ -1377,52 +1517,133 @@ class BimoBridge:
                             new_fil[k] = prev_fil[k]
                             filiacion[k] = prev_fil[k]
 
-                prev_odonto = {p.get("pieza_dental"): p for p in prev_json.get("odontograma", []) if p.get("pieza_dental")}
-                for p in resultado_ia.get("odontograma", []):
-                    prev_odonto[p.get("pieza_dental")] = p
-                resultado_ia["odontograma"] = list(prev_odonto.values())
+                # Fusión de Odontograma: normalizar dict o list y fusionar piezas
+                prev_odonto_raw = prev_json.get("odontograma")
+                prev_odonto = {}
+                if isinstance(prev_odonto_raw, list):
+                    for p in prev_odonto_raw:
+                        if isinstance(p, dict) and p.get("pieza_dental"):
+                            prev_odonto[str(p.get("pieza_dental"))] = p
+                elif isinstance(prev_odonto_raw, dict):
+                    piezas_dict = prev_odonto_raw.get("piezas", prev_odonto_raw)
+                    for p_k, p_v in piezas_dict.items():
+                        if isinstance(p_v, dict):
+                            prev_odonto[str(p_k)] = {"pieza_dental": str(p_k), **p_v}
 
-                if prev_json.get("diagnostico") and prev_json["diagnostico"] != "No especificado":
-                    if not resultado_ia.get("diagnostico") or resultado_ia.get("diagnostico") == "No especificado":
-                        resultado_ia["diagnostico"] = prev_json["diagnostico"]
-                if prev_json.get("plan_tratamiento") and prev_json["plan_tratamiento"] != "No especificado":
-                    if not resultado_ia.get("plan_tratamiento") or resultado_ia.get("plan_tratamiento") == "No especificado":
-                        resultado_ia["plan_tratamiento"] = prev_json["plan_tratamiento"]
+                new_odonto_raw = resultado_ia.get("odontograma")
+                if isinstance(new_odonto_raw, list):
+                    for p in new_odonto_raw:
+                        if isinstance(p, dict) and p.get("pieza_dental"):
+                            p_num = str(p.get("pieza_dental"))
+                            if p_num in prev_odonto:
+                                prev_h = list(prev_odonto[p_num].get("procedimientos_o_hallazgos", []))
+                                for h in p.get("procedimientos_o_hallazgos", []):
+                                    if h not in prev_h:
+                                        prev_h.append(h)
+                                prev_odonto[p_num]["procedimientos_o_hallazgos"] = prev_h
+                            else:
+                                prev_odonto[p_num] = p
+                    resultado_ia["odontograma"] = list(prev_odonto.values())
+                elif isinstance(new_odonto_raw, dict):
+                    piezas_dict = new_odonto_raw.get("piezas", new_odonto_raw)
+                    for p_k, p_v in piezas_dict.items():
+                        p_num = str(p_k)
+                        if p_num in prev_odonto:
+                            prev_h = list(prev_odonto[p_num].get("procedimientos_o_hallazgos", []))
+                            if isinstance(p_v, dict):
+                                for h in p_v.get("procedimientos_o_hallazgos", []):
+                                    if h not in prev_h:
+                                        prev_h.append(h)
+                            prev_odonto[p_num]["procedimientos_o_hallazgos"] = prev_h
+                        else:
+                            prev_odonto[p_num] = {"pieza_dental": p_num, **(p_v if isinstance(p_v, dict) else {})}
+                    resultado_ia["odontograma"] = list(prev_odonto.values())
+
+                # Fusión de Diagnóstico: concatenar nuevo diagnóstico al final del diagnóstico previo
+                d_prev_raw = prev_json.get("diagnostico") or consulta_hoy.get("diagnostico")
+                prev_diag = (d_prev_raw.get("descripcion") if isinstance(d_prev_raw, dict) else str(d_prev_raw or "")).strip()
+
+                d_new_raw = resultado_ia.get("diagnostico")
+                new_diag = (d_new_raw.get("descripcion") if isinstance(d_new_raw, dict) else str(d_new_raw or "")).strip()
+
+                if prev_diag and prev_diag not in ("No especificado", "None", ""):
+                    if new_diag and new_diag not in ("No especificado", "None", ""):
+                        if new_diag.lower() not in prev_diag.lower():
+                            diag_final = f"{prev_diag}\n[Actualización]: {new_diag}"
+                        else:
+                            diag_final = prev_diag
+                    else:
+                        diag_final = prev_diag
+                else:
+                    diag_final = new_diag
+
+                if isinstance(resultado_ia.get("diagnostico"), dict):
+                    resultado_ia["diagnostico"]["descripcion"] = diag_final
+                else:
+                    resultado_ia["diagnostico"] = diag_final
+
+                # Fusión de Plan de tratamiento
+                p_prev_raw = prev_json.get("plan_tratamiento") or (prev_json.get("tratamiento", {}).get("plan") if isinstance(prev_json.get("tratamiento"), dict) else None) or consulta_hoy.get("plan_tratamiento")
+                prev_plan = (p_prev_raw.get("plan") if isinstance(p_prev_raw, dict) else str(p_prev_raw or "")).strip()
+
+                p_new_raw = resultado_ia.get("plan_tratamiento") or (resultado_ia.get("tratamiento", {}).get("plan") if isinstance(resultado_ia.get("tratamiento"), dict) else None)
+                new_plan = (p_new_raw.get("plan") if isinstance(p_new_raw, dict) else str(p_new_raw or "")).strip()
+
+                if prev_plan and prev_plan not in ("No especificado", "None", ""):
+                    if new_plan and new_plan not in ("No especificado", "None", ""):
+                        if new_plan.lower() not in prev_plan.lower():
+                            plan_final = f"{prev_plan}\n[Actualización]: {new_plan}"
+                        else:
+                            plan_final = prev_plan
+                    else:
+                        plan_final = prev_plan
+                else:
+                    plan_final = new_plan
+
+                if isinstance(resultado_ia.get("tratamiento"), dict):
+                    resultado_ia["tratamiento"]["plan"] = plan_final
+                resultado_ia["plan_tratamiento"] = plan_final
+
             except Exception as e_merge:
                 print(f"[CONSOLIDACION WARN] {e_merge}")
 
-        num_exp = None
-        if consulta_hoy:
-            num_exp = obtener_num_expediente_consulta(consulta_hoy["id"])
+            num_exp = obtener_num_expediente_consulta(cid)
+            resultado_ia["num_expediente"] = num_exp
+
+            # Sobrescritura de PDF: pasarle la misma ruta (ruta_pdf de la consulta de hoy)
+            ruta_pdf_existente = consulta_hoy.get("ruta_pdf")
+            if generar_pdf:
+                try:
+                    self._js("if (window.mostrarToast) window.mostrarToast('Actualizando historia clínica...', 'info');")
+                    ruta_pdf = crear_historia_clinica(
+                        resultado_ia,
+                        paciente_id=pac_id,
+                        num_expediente=num_exp,
+                        ruta_salida_fija=ruta_pdf_existente
+                    )
+                    self._ultima_ruta_pdf = ruta_pdf
+                except Exception as e_pdf:
+                    print(f"[HISTORIA CLINICA PDF UPDATE ERROR]: {e_pdf}")
+                    avisos.append(f"No se pudo actualizar el documento PDF: {e_pdf}")
+
+            # UPDATE en la DB
+            actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf or ruta_pdf_existente)
         else:
+            # Flujo nuevo: crea un nuevo registro y un nuevo PDF
             num_exp = obtener_siguiente_num_expediente_paciente(pac_id)
-        resultado_ia["num_expediente"] = num_exp
-        avisos = []
-
-        # 1. Guardar o actualizar consulta en base de datos
-        cid = None
-        try:
+            resultado_ia["num_expediente"] = num_exp
             medico_id = self._usuario_actual.get("id", 1) if self._usuario_actual else 1
-            if consulta_hoy:
-                cid = consulta_hoy["id"]
-                actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=None)
-            else:
-                cid = guardar_consulta_db(paciente_id=pac_id, json_clinico=resultado_ia, ruta_pdf=None, medico_id=medico_id)
-        except Exception as e_db:
-            print(f"[HISTORIA CLINICA DB ERROR]: {e_db}")
-            avisos.append(f"Error al guardar consulta en base de datos: {e_db}")
+            cid = guardar_consulta_db(paciente_id=pac_id, json_clinico=resultado_ia, ruta_pdf=None, medico_id=medico_id, forzar_nueva=True)
 
-        # 2. Generar o actualizar PDF
-        ruta_pdf = None
-        if generar_pdf and cid:
-            try:
-                self._js("if (window.mostrarToast) window.mostrarToast('Generando historia clínica...', 'info');")
-                ruta_pdf = crear_historia_clinica(resultado_ia, paciente_id=pac_id, num_expediente=num_exp)
-                self._ultima_ruta_pdf = ruta_pdf
-                actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf)
-            except Exception as e_pdf:
-                print(f"[HISTORIA CLINICA PDF ERROR]: {e_pdf}")
-                avisos.append(f"No se pudo generar el documento PDF: {e_pdf}")
+            if generar_pdf and cid:
+                try:
+                    self._js("if (window.mostrarToast) window.mostrarToast('Generando historia clínica...', 'info');")
+                    ruta_pdf = crear_historia_clinica(resultado_ia, paciente_id=pac_id, num_expediente=num_exp)
+                    self._ultima_ruta_pdf = ruta_pdf
+                    actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf)
+                except Exception as e_pdf:
+                    print(f"[HISTORIA CLINICA PDF ERROR]: {e_pdf}")
+                    avisos.append(f"No se pudo generar el documento PDF: {e_pdf}")
 
         # 3. Registrar / agendar cita si viene cita_programada (con anti-duplicado)
         cita_info = resultado_ia.get("cita_programada", {})
@@ -1435,7 +1656,6 @@ class BimoBridge:
             if f_c and str(f_c).lower() not in ("no especificado", "none", "null"):
                 cita_programada_str = f_c
                 try:
-                    # Prevención de citas duplicadas: verificar si ya existe cita para este paciente en fecha/hora cercana
                     from database import get_connection
                     cita_duplicada = False
                     with get_connection() as conn_cchk:
@@ -1522,6 +1742,7 @@ class BimoBridge:
 
         return {
             "status": "ok",
+            "accion": "actualizada" if consulta_hoy and accion_expediente in ("actualizar", "predeterminado") else "creada",
             "tipo": "HISTORIA_CLINICA",
             "texto": texto,
             "resultado": resultado_ia,
@@ -3163,7 +3384,7 @@ def iniciar_desktop():
     # Iniciar servidor móvil HTTPS y widget runner en segundo plano para arranque instantáneo
     def _iniciar_servicios_secundarios():
         try:
-            iniciar_servidor_movil(callback_audio=bridge.procesar_audio_externo)
+            iniciar_servidor_movil(callback_audio=bridge.procesar_audio_externo, callback_texto=bridge.procesar_texto_clinico)
         except Exception as e:
             print('[MOBILE SERVER WARN]', e)
         try:

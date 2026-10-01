@@ -44,6 +44,7 @@ async def verificar_autenticacion_movil(request: Request, call_next):
     return await call_next(request)
 
 _CALLBACK_AUDIO = None
+_CALLBACK_TEXTO = None
 _SERVIDOR_HILO = None
 _ULTIMO_AUDIO_RUTA = "temp_mobile_audio.wav"
 
@@ -732,21 +733,68 @@ async def serve_mobile_app(request: Request, t: str = ""):
     return HTMLResponse(content=html_custom)
 
 @app.post("/api/upload-audio")
-async def upload_audio(file: UploadFile = File(...)):
+@app.post("/api/procesar_audio")
+async def procesar_audio_o_texto(request: Request):
     temp_path = None
     try:
-        contents = await file.read()
-        if len(contents) > MAX_UPLOAD_BYTES:
-            return JSONResponse({"ok": False, "error": "El archivo de audio excede el límite permitido de 25 MB."}, status_code=400)
+        content_type = request.headers.get("content-type", "")
+        texto = None
+        uploaded_file = None
 
-        fd, temp_path = tempfile.mkstemp(prefix="bimo_mobile_", suffix=".wav")
-        with os.fdopen(fd, "wb") as f_out:
-            f_out.write(contents)
+        if "application/json" in content_type:
+            try:
+                data = await request.json()
+                if isinstance(data, dict):
+                    texto = data.get("texto") or data.get("text")
+            except Exception:
+                pass
+        elif "multipart/form-data" in content_type:
+            form = await request.form()
+            uploaded_file = form.get("file") or form.get("audio")
+            texto = form.get("texto") or form.get("text")
 
-        if _CALLBACK_AUDIO:
-            threading.Thread(target=_CALLBACK_AUDIO, args=(temp_path,), daemon=True).start()
+        if texto and str(texto).strip():
+            texto_limpio = str(texto).strip()
+            resultado = None
+            if _CALLBACK_TEXTO:
+                try:
+                    resultado = _CALLBACK_TEXTO(texto_limpio)
+                except Exception as e_cb:
+                    print(f"[MOBILE SERVER ERROR] callback_texto: {e_cb}")
+                    return JSONResponse({"ok": False, "error": str(e_cb)}, status_code=500)
+            return JSONResponse({"ok": True, "message": "Texto recibido y procesado en Bimo PC.", "resultado": resultado})
 
-        return JSONResponse({"ok": True, "message": "Audio recibido en Bimo PC."})
+        if uploaded_file and hasattr(uploaded_file, "read"):
+            contents = await uploaded_file.read()
+            if len(contents) > MAX_UPLOAD_BYTES:
+                return JSONResponse({"ok": False, "error": "El archivo de audio excede el límite permitido de 25 MB."}, status_code=400)
+
+            fd, temp_path = tempfile.mkstemp(prefix="bimo_mobile_", suffix=".wav")
+            with os.fdopen(fd, "wb") as f_out:
+                f_out.write(contents)
+
+            if _CALLBACK_AUDIO:
+                threading.Thread(target=_CALLBACK_AUDIO, args=(temp_path,), daemon=True).start()
+            elif _CALLBACK_TEXTO:
+                def _transcribir_y_procesar(path_audio):
+                    try:
+                        from ai_engine import transcribir_audio
+                        txt = transcribir_audio(path_audio)
+                        if txt and txt.strip():
+                            _CALLBACK_TEXTO(txt)
+                    except Exception as e_tx:
+                        print(f"[MOBILE SERVER ERROR] transcribir: {e_tx}")
+                    finally:
+                        if path_audio and os.path.exists(path_audio):
+                            try:
+                                os.remove(path_audio)
+                            except Exception:
+                                pass
+                threading.Thread(target=_transcribir_y_procesar, args=(temp_path,), daemon=True).start()
+
+            return JSONResponse({"ok": True, "message": "Audio recibido en Bimo PC."})
+
+        return JSONResponse({"ok": False, "error": "No se recibió archivo de audio ni texto válido."}, status_code=400)
     except Exception as e:
         if temp_path and os.path.exists(temp_path):
             try:
@@ -918,9 +966,10 @@ async def api_obtener_archivo_foto(foto_id: int):
             raise HTTPException(status_code=404, detail="Archivo fotográfico no encontrado o no accesible")
         return FileResponse(real_foto)
 
-def iniciar_servidor_movil(callback_audio=None):
-    global _CALLBACK_AUDIO, _SERVIDOR_HILO
+def iniciar_servidor_movil(callback_audio=None, callback_texto=None):
+    global _CALLBACK_AUDIO, _CALLBACK_TEXTO, _SERVIDOR_HILO
     _CALLBACK_AUDIO = callback_audio
+    _CALLBACK_TEXTO = callback_texto
 
     _asegurar_certificados_ssl()
     ip = obtener_ip_local()

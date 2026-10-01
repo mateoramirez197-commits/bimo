@@ -388,7 +388,7 @@ def registrar_o_actualizar_paciente(datos_filiacion=None, **kwargs) -> int:
     nombre = datos_filiacion.get("nombre", "").strip() or "Paciente_Desconocido"
     if nombre and nombre != "Paciente_Desconocido":
         aprender_nombres_paciente(nombre)
-    doc_crudo = str(datos_filiacion.get("documento", "")).strip()
+    doc_crudo = str(datos_filiacion.get("documento") or datos_filiacion.get("cedula") or "").strip()
     doc_limpio = doc_crudo.replace(" ", "") if doc_crudo.lower() not in ("no especificado", "none", "") else None
     
     edad_val = None
@@ -913,18 +913,7 @@ def guardar_consulta_db(paciente_id, json_clinico=None, ruta_pdf=None, medico_id
     if ruta_pdf is None and "ruta_pdf" in kwargs:
         ruta_pdf = kwargs["ruta_pdf"]
 
-    # ESCUDO ANTI-DUPLICADOS DEL MISMO DÍA A NIVEL DE BASE DE DATOS:
-    # Si ya existe una consulta registrada hoy para este paciente, actualizarla automáticamente
-    c_hoy = obtener_consulta_del_dia(paciente_id)
-    if c_hoy:
-        cid = c_hoy["id"]
-        actualizar_consulta_existente(cid, json_clinico, ruta_pdf=ruta_pdf)
-        print(f"[DB CONSOLIDACION] Consulta #{cid} de hoy para paciente {paciente_id} unificada y actualizada.")
-        return cid
-
-    import datetime
-    fecha_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+    forzar_nueva = kwargs.get("forzar_nueva", False)
     if isinstance(json_clinico, (dict, list)):
         datos = json_clinico if isinstance(json_clinico, dict) else {}
         json_str = json.dumps(json_clinico, ensure_ascii=False)
@@ -935,10 +924,47 @@ def guardar_consulta_db(paciente_id, json_clinico=None, ruta_pdf=None, medico_id
             datos = {}
         json_str = str(json_clinico) if json_clinico else "{}"
 
-    motivo = datos.get("motivo_consulta", "No especificado")
-    enfermedad = datos.get("enfermedad_actual", "No especificado")
-    diagnostico = datos.get("diagnostico", "No especificado")
-    plan = datos.get("plan_tratamiento", "No especificado")
+    if datos.get("accion_expediente") == "nuevo":
+        forzar_nueva = True
+
+    # ESCUDO ANTI-DUPLICADOS DEL MISMO DÍA A NIVEL DE BASE DE DATOS:
+    # Si ya existe una consulta registrada hoy para este paciente (y no se solicita forzar_nueva), actualizarla automáticamente
+    if not forzar_nueva:
+        c_hoy = obtener_consulta_del_dia(paciente_id)
+        if c_hoy:
+            cid = c_hoy["id"]
+            actualizar_consulta_existente(cid, json_clinico, ruta_pdf=ruta_pdf)
+            print(f"[DB CONSOLIDACION] Consulta #{cid} de hoy para paciente {paciente_id} unificada y actualizada.")
+            return cid
+
+    import datetime
+    fecha_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    motivo = datos.get("motivo_consulta")
+    if not motivo and isinstance(datos.get("anamnesis"), dict):
+        motivo = datos.get("anamnesis", {}).get("motivo_consulta")
+    if isinstance(motivo, dict):
+        motivo = motivo.get("motivo_consulta") or str(motivo)
+    motivo = str(motivo) if motivo else "No especificado"
+
+    enfermedad = datos.get("enfermedad_actual")
+    if not enfermedad and isinstance(datos.get("anamnesis"), dict):
+        enfermedad = datos.get("anamnesis", {}).get("enfermedad_actual")
+    if isinstance(enfermedad, dict):
+        enfermedad = enfermedad.get("enfermedad_actual") or str(enfermedad)
+    enfermedad = str(enfermedad) if enfermedad else "No especificado"
+
+    diagnostico = datos.get("diagnostico")
+    if isinstance(diagnostico, dict):
+        diagnostico = diagnostico.get("descripcion") or str(diagnostico)
+    diagnostico = str(diagnostico) if diagnostico else "No especificado"
+
+    plan = datos.get("plan_tratamiento")
+    if not plan and isinstance(datos.get("tratamiento"), dict):
+        plan = datos.get("tratamiento", {}).get("plan")
+    if isinstance(plan, dict):
+        plan = plan.get("plan") or str(plan)
+    plan = str(plan) if plan else "No especificado"
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -1005,10 +1031,31 @@ def actualizar_consulta_existente(consulta_id: int, json_clinico, ruta_pdf=None)
             datos = {}
         json_str = str(json_clinico) if json_clinico else "{}"
 
-    motivo = datos.get("motivo_consulta", "No especificado")
-    enfermedad = datos.get("enfermedad_actual", "No especificado")
-    diagnostico = datos.get("diagnostico", "No especificado")
-    plan = datos.get("plan_tratamiento", "No especificado")
+    motivo = datos.get("motivo_consulta")
+    if not motivo and isinstance(datos.get("anamnesis"), dict):
+        motivo = datos.get("anamnesis", {}).get("motivo_consulta")
+    if isinstance(motivo, dict):
+        motivo = motivo.get("motivo_consulta") or str(motivo)
+    motivo = str(motivo) if motivo else "No especificado"
+
+    enfermedad = datos.get("enfermedad_actual")
+    if not enfermedad and isinstance(datos.get("anamnesis"), dict):
+        enfermedad = datos.get("anamnesis", {}).get("enfermedad_actual")
+    if isinstance(enfermedad, dict):
+        enfermedad = enfermedad.get("enfermedad_actual") or str(enfermedad)
+    enfermedad = str(enfermedad) if enfermedad else "No especificado"
+
+    diagnostico = datos.get("diagnostico")
+    if isinstance(diagnostico, dict):
+        diagnostico = diagnostico.get("descripcion") or str(diagnostico)
+    diagnostico = str(diagnostico) if diagnostico else "No especificado"
+
+    plan = datos.get("plan_tratamiento")
+    if not plan and isinstance(datos.get("tratamiento"), dict):
+        plan = datos.get("tratamiento", {}).get("plan")
+    if isinstance(plan, dict):
+        plan = plan.get("plan") or str(plan)
+    plan = str(plan) if plan else "No especificado"
 
     fecha_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

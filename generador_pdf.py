@@ -614,7 +614,7 @@ def _sanitizar_estructura_clinica(obj):
         return [_sanitizar_estructura_clinica(item) for item in obj]
     return obj
 
-def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int = None):
+def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int = None, ruta_salida_fija: str = None):
     """
     Genera el expediente oficial digitalizado cumpliendo estrictamente la normativa de la
     HISTORIA CLÍNICA ODONTOLÓGICA - FORMULARIO 033 DEL MINISTERIO DE SALUD PÚBLICA DEL ECUADOR:
@@ -1785,8 +1785,16 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
         ruta_carpeta = os.path.join(str(RUTA_PACIENTES), categoria_edad, nombre_carpeta)
         os.makedirs(ruta_carpeta, exist_ok=True)
 
-        nombre_archivo = generar_nombre_archivo_corto(nombre_paciente, edad_num, fecha_obj, num_expediente=num_expediente)
-        ruta_final = os.path.join(ruta_carpeta, nombre_archivo)
+        if ruta_salida_fija:
+            ruta_final = ruta_salida_fija
+            os.makedirs(os.path.dirname(ruta_final), exist_ok=True)
+        else:
+            nombre_archivo = generar_nombre_archivo_corto(nombre_paciente, edad_num, fecha_obj, num_expediente=num_expediente)
+            ruta_final = os.path.join(ruta_carpeta, nombre_archivo)
+            if datos.get("accion_expediente") == "nuevo" and os.path.exists(ruta_final):
+                base_n, ext = os.path.splitext(nombre_archivo)
+                t_stamp = fecha_obj.strftime("%H%M%S")
+                ruta_final = os.path.join(ruta_carpeta, f"{base_n}_v2_{t_stamp}{ext}")
 
         pdf.output(ruta_final)
         print(f"[OK] Historia clínica unificada Formulario 033 MSP guardada en: {ruta_final}")

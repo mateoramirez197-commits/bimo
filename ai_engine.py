@@ -132,6 +132,60 @@ def contiene_especificacion_temporal(texto: str) -> bool:
         return True
     return False
 
+def extraer_accion_expediente(texto: str) -> str:
+    """
+    Extrae la intención de gestión del expediente clínico del paciente:
+    - 'actualizar': si el usuario dice agrega, agrégale, actualiza, me olvidé de decir, ponle también, añade, etc.
+    - 'nuevo': si dice explícitamente nuevo expediente, expediente aparte, otra consulta, nueva historia, etc.
+    - 'predeterminado': en cualquier otro caso clínico habitual.
+    """
+    if not texto or not isinstance(texto, str):
+        return "predeterminado"
+    import re
+    t = texto.lower()
+    # 1. Comprobar si explícitamente se pide un nuevo expediente / consulta aparte
+    if re.search(r'\b(?:nuevo\s+expediente|expediente\s+aparte|otra\s+consulta|nueva\s+consulta|nueva\s+historia|historia\s+aparte|consulta\s+aparte)\b', t):
+        return "nuevo"
+    # 2. Comprobar si se pide actualizar o agregar a la consulta existente
+    if re.search(r'\b(?:agr[eé]gale|agrega|a[ñn]ade|a[ñn]adir|actualiza|actualizar|modifica|modificar|me\s+olvid[eé]|ponle\s+tambi[eé]n|ponle\s+tambien|completa|completar)\b', t):
+        return "actualizar"
+    return "predeterminado"
+
+def extraer_digitos_cedula(texto: str) -> str:
+    """Extrae la secuencia de dígitos de la cédula, admitiendo números hablados o numéricos."""
+    if not texto:
+        return ""
+    import re
+    # 1. Primero intentar extraer dígitos directos
+    digitos = re.sub(r'\D', '', texto)
+    if len(digitos) >= 5:
+        return digitos
+
+    # 2. Mapeo de palabras numéricas en español
+    palabras_map = {
+        "cero": "0", "uno": "1", "una": "1", "dos": "2", "tres": "3", "cuatro": "4",
+        "cinco": "5", "seis": "6", "siete": "7", "ocho": "8", "nueve": "9",
+        "diez": "10", "once": "11", "doce": "12", "trece": "13", "catorce": "14", "quince": "15",
+        "dieciseis": "16", "dieciséis": "16", "diecisiete": "17", "dieciocho": "18", "diecinueve": "19",
+        "veinte": "20", "veintiuno": "21", "veintidos": "22", "veintitrés": "23", "veintitres": "23",
+        "veinticuatro": "24", "veinticinco": "25", "veintiseis": "26", "veintiséis": "26",
+        "veintisiete": "27", "veintiocho": "28", "veintinueve": "29", "treinta": "30",
+        "cuarenta": "40", "cincuenta": "50", "sesenta": "60", "setenta": "70", "ochenta": "80", "noventa": "90"
+    }
+    tokens = re.findall(r'[a-záéíóúñ]+|\d+', texto.lower())
+    acumulado = []
+    for tok in tokens:
+        if tok.isdigit():
+            acumulado.append(tok)
+        elif tok in palabras_map:
+            acumulado.append(palabras_map[tok])
+    res = "".join(acumulado)
+    if len(res) >= 5:
+        return res
+    if len(digitos) >= 5:
+        return digitos
+    return None
+
 def _normalizar_nombres_espanol(nombre: str) -> str:
     """Normaliza nombres hispanoamericanos y andinos, corrigiendo deformaciones acústicas (ej. 'Yumi Kinga' -> 'Llumiquinga')."""
     if not nombre or not isinstance(nombre, str):
@@ -1517,6 +1571,14 @@ REGLA OBLIGATORIA DE APROBACIÓN DE ORTODONCIA:
   1. En 'plan_tratamiento', incluye: 'Tratamiento de ortodoncia aprobado (aparatología fija / brackets)'.
   2. En 'evaluacion_ortodoncia', NUNCA pongas 'Sin aparatología'; coloca 'Brackets metálicos' o aparatología indicada, con 'clase_angle' y 'alineacion' acordes.
 
+REGLA DE ACCIÓN SOBRE EL EXPEDIENTE (accion_expediente):
+- Si el usuario dice 'agrega', 'agrégale', 'actualiza', 'me olvidé de decir', 'ponle también', 'añade al expediente':
+  pon "accion_expediente": "actualizar".
+- Si el usuario dice explícitamente 'nuevo expediente', 'expediente aparte', 'otra consulta', 'nueva historia', 'consulta aparte':
+  pon "accion_expediente": "nuevo".
+- En cualquier otro caso:
+  pon "accion_expediente": "predeterminado".
+
 Analiza la siguiente transcripción de voz y clasifícala estrictamente en una de las siguientes intenciones:
 1. COMANDO_CITA: Si el usuario solicita agendar, programar, generar, crear, separar o sacar una cita (ej: 'genera una cita para...', 'crea una cita para...', 'agenda una cita para...', 'haz una cita para...', 'cita para...'). ATENCIÓN CRÍTICA: Si el texto contiene síntomas, motivo de consulta, piezas dentales, examen, diagnóstico CIE-10 o plan de tratamiento, NUNCA debe ser COMANDO_CITA; es OBLIGATORIAMENTE HISTORIA_CLINICA.
 2. CANCELAR_CITA: Si el doctor solicita cancelar o eliminar citas.
@@ -1591,6 +1653,7 @@ Si es NAVEGACION_UI:
 Si es HISTORIA_CLINICA:
 {{
     "tipo": "HISTORIA_CLINICA",
+    "accion_expediente": "actualizar / nuevo / predeterminado",
     "datos_filiacion": {{
         "nombre": "No especificado",
         "edad": "No especificado",
@@ -1731,6 +1794,16 @@ Texto dictado:
 
         # Post-procesamiento amigable de filiación y normalización en español
         if resultado.get("tipo") == "HISTORIA_CLINICA":
+            # Extracción y validación de accion_expediente
+            det_acc = extraer_accion_expediente(texto_crudo)
+            acc_groq = str(resultado.get("accion_expediente") or "").strip().lower()
+            if det_acc != "predeterminado":
+                resultado["accion_expediente"] = det_acc
+            elif acc_groq in ("actualizar", "nuevo", "predeterminado"):
+                resultado["accion_expediente"] = acc_groq
+            else:
+                resultado["accion_expediente"] = "predeterminado"
+
             fil = resultado.get("datos_filiacion", {})
             nom = _normalizar_nombres_espanol(fil.get("nombre", ""))
             fil["nombre"] = nom
