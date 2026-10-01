@@ -118,6 +118,7 @@ class BimoBridge:
         self._normal_bounds = None
         self._is_transitioning = False
         self._cita_pendiente = None  # Slot-filling de cita en diálogo multi-turn
+        self._esperando_respuesta = False
 
     def set_window(self, window):
         self._window = window
@@ -233,6 +234,24 @@ class BimoBridge:
         except Exception as e:
             print(f"[NATIVE DRAG WARN]: {e}")
         return {"status": "error"}
+
+    def _activar_auto_escucha_post_habla(self, duracion=12.0):
+        """Espera a que el asistente termine de hablar y reabre automáticamente el micrófono para diálogo multi-turno."""
+        def _hilo():
+            from voice_assistant import bimo_esta_hablando
+            time.sleep(0.3)
+            while bimo_esta_hablando():
+                time.sleep(0.1)
+            time.sleep(0.2)
+            if self._wake_listener:
+                self._wake_listener.activar_ventana_activa(duracion)
+                print(f"[AUTO-ESCUCHA] Micrófono reabierto automáticamente por {duracion}s para recibir respuesta.")
+                try:
+                    self._js("if (window.mostrarToast) window.mostrarToast('Escuchando respuesta...', 'info');")
+                    self._js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
+                except Exception:
+                    pass
+        threading.Thread(target=_hilo, daemon=True).start()
 
     def _iniciar_wake_listener(self):
         try:
@@ -433,7 +452,7 @@ class BimoBridge:
                     frase_h = resp.get("frase") or resp.get("mensaje", "")
                     self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(frase_h)}, 'info');")
                 elif tipo in ("COMANDO_CITA", "REPROGRAMAR_CITA"):
-                    if resp.get("status") == "requiere_fecha_hora":
+                    if resp.get("status") in ("requiere_fecha_hora", "requiere_paciente") or resp.get("requiere_seguimiento"):
                         msg_p = resp.get("mensaje", "")
                         self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_p)}, 'info');")
                     else:
@@ -800,7 +819,7 @@ class BimoBridge:
     def procesar_texto_clinico(self, texto, incluir_ortodoncia=False, generar_pdf=True):
         nombre_doc = self._usuario_actual.get("nombre", "Mateo") if self._usuario_actual else "Mateo"
 
-        # 0. RESOLUCIÓN DE SLOT-FILLING: Si hay una cita pendiente esperando fecha/hora
+        # 0. RESOLUCIÓN DE SLOT-FILLING: Si hay una cita pendiente esperando fecha/hora o paciente
         # REGLA DE PROTECCIÓN: Si el texto dictado corresponde a una consulta clínica o nuevo paciente
         # (contiene filiación, consulta por, diagnóstico, piezas, etc.), descartar la cita pendiente
         # para evitar interceptar la consulta como respuesta de fecha/hora.
@@ -811,15 +830,82 @@ class BimoBridge:
         texto_low = texto.lower()
         if any(ind in texto_low for ind in indicadores_dictado):
             self._cita_pendiente = None
+            self._esperando_respuesta = False
 
-        if self._cita_pendiente and (time.time() - self._cita_pendiente.get("timestamp", 0)) < 90.0:
-            if contiene_especificacion_temporal(texto):
-                f_calc = resolver_fecha_relativa_espanol(texto)
-                if f_calc:
-                    pac_nom = self._cita_pendiente["nombre_paciente"]
+        if (getattr(self, "_esperando_respuesta", False) or self._cita_pendiente) and self._cita_pendiente and (time.time() - self._cita_pendiente.get("timestamp", 0)) < 90.0:
+            esperando_tipo = self._cita_pendiente.get("esperando", "fecha_hora")
+            if esperando_tipo == "nombre_paciente":
+                from ai_engine import limpiar_nombre_paciente
+                nom_extraido = limpiar_nombre_paciente(texto)
+                if nom_extraido and len(nom_extraido) >= 2 and nom_extraido.lower() not in ("cita", "consulta"):
+                    pac_nom = nom_extraido
+                    f_calc = self._cita_pendiente.get("fecha_hora")
                     tel = self._cita_pendiente.get("telefono", "")
                     motivo = self._cita_pendiente.get("motivo", "Consulta agendada por voz")
+                    self._cita_pendiente = None
+                    self._esperando_respuesta = False
+
+                    cita_id = None
+                    url_gcal = ""
+                    try:
+                        res_cal = agendar_cita(nombre_paciente=pac_nom, telefono=tel, fecha_hora_inicio=f_calc, descripcion=motivo, abrir_en_navegador=True)
+                        cita_id = res_cal.get("cita_id") if isinstance(res_cal, dict) else res_cal
+                        url_gcal = res_cal.get("url_gcal") if isinstance(res_cal, dict) else ""
+                    except Exception as e_cal:
+                        print(f"[AGENDAR CITA WARN] {e_cal}")
+                        try:
+                            cita_id = crear_cita_db(nombre_paciente=pac_nom, telefono=tel, fecha_hora_inicio=f_calc, descripcion=motivo)
+                        except Exception as e_db:
+                            print(f"[CREAR CITA DB ERROR] {e_db}")
+
+                    try:
+                        sonar_confirmacion_exito()
+                        decir_confirmacion_cita(nombre_doctor=nombre_doc, nombre_paciente=pac_nom)
+                    except Exception as e_snd:
+                        print(f"[SOUND/VOICE WARN] {e_snd}")
+
+                    if self._window:
+                        try:
+                            self._window.evaluate_js("if(window.cargarCitas) window.cargarCitas();")
+                            self._window.evaluate_js(f"if(window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_calc)});")
+                        except Exception:
+                            pass
+
+                    return {
+                        "status": "ok",
+                        "tipo": "COMANDO_CITA",
+                        "texto": texto,
+                        "resultado": {"tipo": "COMANDO_CITA", "nombre_paciente": pac_nom, "fecha_hora": f_calc},
+                        "mensaje": f"Cita para {pac_nom} agendada para {f_calc}",
+                        "cita_id": cita_id,
+                        "url_gcal": url_gcal,
+                        "fecha_hora": f_calc,
+                        "nombre_paciente": pac_nom,
+                        "requiere_seguimiento": False
+                    }
+            else:
+                # esperando fecha_hora
+                f_calc = None
+                if contiene_especificacion_temporal(texto):
+                    f_calc = resolver_fecha_relativa_espanol(texto)
+
+                pac_nom = self._cita_pendiente.get("nombre_paciente", "Paciente")
+                tel = self._cita_pendiente.get("telefono", "")
+                motivo = self._cita_pendiente.get("motivo", "Consulta agendada por voz")
+
+                if not f_calc:
+                    # Intento determinista combinando el paciente y la respuesta
+                    texto_combinado = f"agendar cita para {pac_nom} {texto}"
+                    try:
+                        res_comb = procesar_comando_o_dictado(texto_combinado)
+                        if res_comb.get("tipo") == "COMANDO_CITA" and res_comb.get("fecha_hora") and not res_comb.get("requiere_fecha_hora"):
+                            f_calc = res_comb.get("fecha_hora")
+                    except Exception as e_comb:
+                        print(f"[SLOT-FILLING COMBINADO WARN]: {e_comb}")
+
+                if f_calc:
                     self._cita_pendiente = None  # Resetear estado de slot-filling
+                    self._esperando_respuesta = False
                     
                     cita_id = None
                     url_gcal = ""
@@ -840,6 +926,13 @@ class BimoBridge:
                     except Exception as e_snd:
                         print(f"[SOUND/VOICE WARN] {e_snd}")
 
+                    if self._window:
+                        try:
+                            self._window.evaluate_js("if(window.cargarCitas) window.cargarCitas();")
+                            self._window.evaluate_js(f"if(window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_calc)});")
+                        except Exception:
+                            pass
+
                     return {
                         "status": "ok",
                         "tipo": "COMANDO_CITA",
@@ -849,7 +942,8 @@ class BimoBridge:
                         "cita_id": cita_id,
                         "url_gcal": url_gcal,
                         "fecha_hora": f_calc,
-                        "nombre_paciente": pac_nom
+                        "nombre_paciente": pac_nom,
+                        "requiere_seguimiento": False
                     }
 
         resultado_ia = procesar_comando_o_dictado(texto)
@@ -877,7 +971,7 @@ class BimoBridge:
                     return {"status": "error", "tipo": tipo, "mensaje": msg_sin_pac}
 
             f_hora = resultado_ia.get("fecha_hora")
-            requiere_fecha = resultado_ia.get("requiere_fecha_hora", False)
+            requiere_fecha = resultado_ia.get("requiere_fecha_hora", False) or resultado_ia.get("requiere_seguimiento", False)
             motivo = resultado_ia.get("motivo", "Consulta agendada por voz")
             if not tel or tel.lower() in ("no especificado", "none", ""):
                 try:
@@ -888,20 +982,22 @@ class BimoBridge:
 
             # B) Si no se dictó fecha u hora: NO generar cita ficticia, abrir slot-filling y preguntar por voz
             if not f_hora or requiere_fecha or f_hora in ("null", "None", "No especificado", ""):
+                self._esperando_respuesta = True
                 self._cita_pendiente = {
                     "nombre_paciente": pac_nom,
                     "telefono": tel,
                     "motivo": motivo,
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "esperando": "fecha_hora"
                 }
-                if self._wake_listener:
-                    # Abrir ventana activa por 10 segundos para recibir la fecha/hora
-                    self._wake_listener.activar_ventana_activa(10.0)
                 
                 try:
                     preguntar_fecha_hora_cita(pac_nom)
                 except Exception as e_snd:
                     print(f"[VOICE WARN] {e_snd}")
+
+                # Reabrir micrófono automáticamente tras el habla para respuesta continua
+                self._activar_auto_escucha_post_habla(12.0)
 
                 msg_preg = f"¿Para qué fecha y hora deseas agendar la cita para {pac_nom}?"
                 if self._window:
@@ -909,6 +1005,7 @@ class BimoBridge:
 
                 return {
                     "status": "requiere_fecha_hora",
+                    "requiere_seguimiento": True,
                     "tipo": tipo,
                     "texto": texto,
                     "resultado": resultado_ia,
@@ -916,8 +1013,42 @@ class BimoBridge:
                     "mensaje": msg_preg
                 }
 
-            # C) Si SÍ se especificó fecha/hora: Agendar normalmente
+            # C) Si no se dictó paciente pero sí fecha/hora: preguntar por el paciente
+            if (not pac_nom or pac_nom.lower() in ("paciente", "no especificado")) and f_hora:
+                self._esperando_respuesta = True
+                self._cita_pendiente = {
+                    "nombre_paciente": "",
+                    "fecha_hora": f_hora,
+                    "telefono": tel,
+                    "motivo": motivo,
+                    "timestamp": time.time(),
+                    "esperando": "nombre_paciente"
+                }
+                try:
+                    from voice_assistant import preguntar_paciente_cita
+                    preguntar_paciente_cita()
+                except Exception as e_snd:
+                    print(f"[VOICE WARN] {e_snd}")
+
+                self._activar_auto_escucha_post_habla(12.0)
+
+                msg_preg = "¿Para qué paciente deseas agendar la cita?"
+                if self._window:
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_preg)}, 'info');")
+
+                return {
+                    "status": "requiere_paciente",
+                    "requiere_seguimiento": True,
+                    "tipo": tipo,
+                    "texto": texto,
+                    "resultado": resultado_ia,
+                    "fecha_hora": f_hora,
+                    "mensaje": msg_preg
+                }
+
+            # D) Si SÍ se especificaron ambos: Agendar normalmente
             self._cita_pendiente = None
+            self._esperando_respuesta = False
             cita_id = None
             url_gcal = ""
             try:

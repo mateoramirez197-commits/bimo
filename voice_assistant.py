@@ -20,9 +20,46 @@ def bimo_esta_hablando() -> bool:
 import tempfile
 import uuid
 
+_VOZ_ID_ESPANOL = None
+
+def detectar_voz_espanol(engine, forzar_recacheo: bool = False) -> str | None:
+    """Busca y almacena el ID de una voz natural en español instalada en el sistema.
+    Filtra por 'spanish', 'es', 'helena', 'laura', 'sabina' y evita voces robóticas en inglés (Zira/David)."""
+    global _VOZ_ID_ESPANOL
+    if _VOZ_ID_ESPANOL and not forzar_recacheo:
+        return _VOZ_ID_ESPANOL
+    try:
+        voces = engine.getProperty("voices")
+        candidatas_es = []
+        for v in voces:
+            nom = (v.name or "").lower()
+            v_id = (v.id or "").lower()
+            # Descartar explícitamente voces estándar en inglés
+            if "david" in nom or "zira" in nom or "english" in nom or "en-us" in v_id or "en_us" in v_id or "en-gb" in v_id or "united kingdom" in nom:
+                continue
+            if any(k in nom or k in v_id for k in ("spanish", "es", "helena", "laura", "sabina", "es-es", "es-mx", "monica", "paulina")):
+                candidatas_es.append(v.id)
+        if candidatas_es:
+            _VOZ_ID_ESPANOL = candidatas_es[0]
+            return _VOZ_ID_ESPANOL
+
+        # Búsqueda secundaria por atributo de idioma si está disponible
+        for v in voces:
+            langs = getattr(v, "languages", [])
+            if langs and any("es" in str(l).lower() for l in langs):
+                _VOZ_ID_ESPANOL = v.id
+                return _VOZ_ID_ESPANOL
+
+        if forzar_recacheo:
+            _VOZ_ID_ESPANOL = None
+        return None
+    except Exception as e_voz:
+        print(f"[VOICE] Error detectando voces del sistema: {e_voz}")
+        return None
+
 async def _generar_audio_edge(texto: str, ruta_mp3: str):
     communicate = edge_tts.Communicate(texto, VOZ_FEMENINA, rate="+22%")
-    await asyncio.wait_for(communicate.save(ruta_mp3), timeout=2.2)
+    await asyncio.wait_for(communicate.save(ruta_mp3), timeout=4.5)
 
 def _reproducir_audio(texto: str):
     global _BIMO_HABLANDO
@@ -54,13 +91,11 @@ def _reproducir_audio(texto: str):
             try:
                 _BIMO_HABLANDO = True
                 engine = pyttsx3.init()
-                engine.setProperty("rate", 190)
+                engine.setProperty("rate", 185)
                 engine.setProperty("volume", 1.0)
-                voces = engine.getProperty("voices")
-                for v in voces:
-                    if any(k in v.name.lower() for k in ("zira", "sabina", "female", "helena", "monica", "laura")):
-                        engine.setProperty("voice", v.id)
-                        break
+                voz_id = detectar_voz_espanol(engine)
+                if voz_id:
+                    engine.setProperty("voice", voz_id)
                 engine.say(texto)
                 engine.runAndWait()
                 engine.stop()
@@ -69,6 +104,10 @@ def _reproducir_audio(texto: str):
             finally:
                 time.sleep(0.4)
                 _BIMO_HABLANDO = False
+
+def hablar(texto: str):
+    """Pronuncia el texto de forma síncrona en el hilo llamador."""
+    _reproducir_audio(texto)
 
 def hablar_asincrono(texto: str):
     threading.Thread(target=_reproducir_audio, args=(texto,), daemon=True).start()

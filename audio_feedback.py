@@ -124,3 +124,22 @@ def sonar_error():
 def sonar_fin_dictado():
     """Se conserva tal cual: tono suave de cierre (usa el wav original si existe)."""
     threading.Thread(target=_reproducir_wav, args=("bimo_sleep.wav",), daemon=True).start()
+
+
+def hablar(texto: str):
+    """Emite síntesis de voz natural en español."""
+    try:
+        from voice_assistant import hablar as _hablar
+        _hablar(texto)
+    except Exception as e:
+        print(f"[AUDIO FEEDBACK WARN] hablar: {e}")
+
+
+def hablar_asincrono(texto: str):
+    """Emite síntesis de voz natural en español de forma asíncrona."""
+    try:
+        from voice_assistant import hablar_asincrono as _hablar_asincrono
+        _hablar_asincrono(texto)
+    except Exception as e:
+        print(f"[AUDIO FEEDBACK WARN] hablar_asincrono: {e}")
+

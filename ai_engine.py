@@ -259,6 +259,7 @@ def limpiar_nombre_paciente(raw: str) -> str:
     partes_tiempo = re.split(patron_tiempo, texto, flags=re.IGNORECASE)
     if partes_tiempo:
         texto = partes_tiempo[0].strip()
+        texto = re.sub(r"\s+\b(?:para|el|a|al|en|con|de)\b$", "", texto, flags=re.IGNORECASE).strip()
 
     # 4. Cortar por motivos de consulta o síntomas clínicos comunes
     patron_motivo = (
@@ -274,6 +275,7 @@ def limpiar_nombre_paciente(raw: str) -> str:
     partes_motivo = re.split(patron_motivo, texto, flags=re.IGNORECASE)
     if partes_motivo:
         texto = partes_motivo[0].strip()
+        texto = re.sub(r"\s+\b(?:para|el|a|al|en|con|de)\b$", "", texto, flags=re.IGNORECASE).strip()
 
     # 5. Cortar / eliminar edades ('de 25 años', 'edad 30', etc.)
     texto = re.sub(r"\b(?:de\s+)?\d{1,2}\s+a[ñn]os?\b", "", texto, flags=re.IGNORECASE).strip()
@@ -518,6 +520,16 @@ def resolver_fecha_relativa_espanol(texto: str, base_dt: datetime.datetime = Non
         elif 'en un mes' in t or 'un mes' in t:
             fecha_res = (base_dt + datetime.timedelta(days=30)).date()
 
+    # 5. Hoy explícito
+    if not fecha_res:
+        if re.search(r'\b(?:para\s+)?hoy\b', t):
+            fecha_res = base_dt.date()
+
+    # 6. Si sólo se dictó la hora (ej: "a las 3", "a las 4 de la tarde")
+    if not fecha_res:
+        if re.search(r'\ba las?\s+\d{1,2}\b', t) or any(re.search(rf'\ba las?\s+{w_h}\b', t) for w_h in HORAS_PALABRAS_MAP):
+            fecha_res = base_dt.date()
+
     if not fecha_res:
         return None
 
@@ -542,12 +554,17 @@ def resolver_fecha_relativa_espanol(texto: str, base_dt: datetime.datetime = Non
             h_num += 12
         elif any(x in suf for x in ['am', 'mañana', 'manana']) and h_num == 12:
             h_num = 0
+        elif not suf and h_num in (1, 2, 3, 4, 5, 6, 7):
+            # Horario vespertino habitual para turnos de consulta (ej. 3 -> 15:00)
+            h_num += 12
         hora = h_num
     else:
         for w_h, val_h in HORAS_PALABRAS_MAP.items():
             if re.search(rf'a las\s+{w_h}', t):
                 hora = val_h
                 if any(x in t for x in ['tarde', 'noche', 'pm']) and hora < 12:
+                    hora += 12
+                elif hora in (1, 2, 3, 4, 5, 6, 7) and not any(x in t for x in ['am', 'mañana', 'manana']):
                     hora += 12
                 break
         if 'y media' in t:
@@ -1242,10 +1259,12 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
     t_limpio = re.sub(r'^(?:bimo|vimo|hola|oye|hey|ok|favor|por favor)\b[\s,]*', '', t).strip()
 
     # Patrón general de agendamiento
-    patron_cita = r'\b(?:genera|generar|agenda|agendar|crea|crear|programa|programar|separa|separar|haz|hacer|pon|poner)\s+(?:una\s+)?cita\s+(?:para|a|con)\s+(.+)$'
+    patron_cita = r'\b(?:genera|generar|agenda|agendar|crea|crear|programa|programar|separa|separar|haz|hacer|pon|poner)\s+(?:una\s+)?cita\s+(?:para|a|al|con)\s+(.+)$'
     m = re.search(patron_cita, t_limpio, flags=re.IGNORECASE)
     if not m:
-        m = re.search(r'^cita\s+(?:para|a|con)\s+(.+)$', t_limpio, flags=re.IGNORECASE)
+        m = re.search(r'^cita\s+(?:para|a|al|con)\s+(.+)$', t_limpio, flags=re.IGNORECASE)
+    if not m:
+        m = re.search(r'\b(?:agenda|agendar|crea|crear|programa|programar|separa|separar|pon|poner)\s+(?:a|al|con)\s+(.+)$', t_limpio, flags=re.IGNORECASE)
 
     if not m:
         return None
@@ -1258,23 +1277,25 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
         "el ultimo", "el último", "al último", "al ultimo"
     )) or any(u in t for u in ("último paciente", "ultimo paciente", "la última paciente", "el último paciente"))
 
-    # 2. Extraer nombre del paciente
+    # 2. Extraer nombre del paciente aplicando limpieza ÚNICAMENTE a la variable de nombre
     if es_ultimo:
         nombre_paciente = "el último paciente"
     else:
         nombre_paciente = limpiar_nombre_paciente(resto) or "el último paciente"
 
-    # 3. Resolver fecha y hora con el algoritmo matemático determinista
+    # 3. Resolver fecha y hora con el algoritmo matemático determinista sobre el texto original
     tiene_tiempo = contiene_especificacion_temporal(texto_crudo)
     f_calc = resolver_fecha_relativa_espanol(texto_crudo)
 
     if f_calc:
         fecha_hora = f_calc
         requiere_fecha_hora = False
+        requiere_seguimiento = False
         msg_conf = f"Cita agendada para {nombre_paciente} el {fecha_hora}"
     else:
         fecha_hora = None
         requiere_fecha_hora = True
+        requiere_seguimiento = True
         msg_conf = f"¿Para qué fecha y hora deseas la cita para {nombre_paciente}?"
 
     tel = extraer_telefono_dictado(texto_crudo) or "No especificado"
@@ -1284,6 +1305,7 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
         "nombre_paciente": nombre_paciente,
         "fecha_hora": fecha_hora,
         "requiere_fecha_hora": requiere_fecha_hora,
+        "requiere_seguimiento": requiere_seguimiento,
         "motivo": "Consulta agendada por voz",
         "telefono": tel,
         "mensaje_confirmacion": msg_conf
@@ -1456,6 +1478,7 @@ REGLAS ESTRICTAS DE NOMBRES EN CITAS Y AGENDA:
 - NUNCA incluyas motivos ('con dolor', 'revisión', 'limpieza', 'brackets'), edades ('25 años'), fechas ('mañana', '15 de marzo'), horas ('4pm') ni palabras de agendamiento ('cita para', 'agenda a') dentro de 'nombre_paciente'.
 - Preserva SIEMPRE los apellidos compuestos (ej: 'de la Cruz', 'del Valle', 'San Martín', 'Montes de Oca') y nombres andinos (ej: 'Llumiquinga', 'Guaminga', 'Toapanta', 'Quispe').
 - Si el usuario dice 'el último paciente', 'la última paciente', 'último paciente atendido' o 'al último', pon estrictamente 'nombre_paciente': 'el último paciente'.
+- Para 'fecha' y 'hora', extrae exactamente lo que el usuario pide (ej. 'mañana', 'lunes', '15:00'). Si el usuario provee estos datos, NO debes dejarlos en blanco.
 - Si el usuario solicita agendar una cita pero NO especifica fecha ni hora en el audio (ej: 'genera una cita para el último paciente', 'agenda una cita para Juan'):
   pon 'fecha_hora': null y 'requiere_fecha_hora': true. NUNCA inventes una fecha u hora si no fue dictada.
 
@@ -1509,7 +1532,9 @@ Devuelve ÚNICAMENTE un formato JSON válido según la intención:
 Si es COMANDO_CITA:
 {{
     "tipo": "COMANDO_CITA",
-    "nombre_paciente": "Nombre explícito del paciente mencionado o 'No especificado'",
+    "nombre_paciente": "Nombre explícito del paciente mencionado o 'el último paciente' o 'No especificado'",
+    "fecha": "Fecha solicitada por el usuario (ej. 'mañana', 'lunes', '2026-10-01') o 'No especificado'",
+    "hora": "Hora solicitada por el usuario (ej. '15:00', '10:00 am', 'a las 3') o 'No especificado'",
     "fecha_hora": "AAAA-MM-DD HH:MM estimada",
     "motivo": "Motivo de la cita",
     "telefono": "Teléfono o celular del paciente si fue dictado (ej. '0991234567'), o 'No especificado'",
@@ -1796,18 +1821,31 @@ Texto dictado:
                 nom = limpiar_nombre_paciente(raw_nom)
             resultado["nombre_paciente"] = nom
             
-            # Resolver fecha y hora con el algoritmo matemático determinista
+            # Resolver fecha y hora con el algoritmo matemático determinista sobre texto_crudo completo
             tiene_tiempo = contiene_especificacion_temporal(texto_crudo)
             f_calc = resolver_fecha_relativa_espanol(texto_crudo)
             if f_calc:
                 resultado["fecha_hora"] = f_calc
                 resultado["requiere_fecha_hora"] = False
-            elif tiene_tiempo and resultado.get("fecha_hora") and resultado.get("fecha_hora") not in ("No especificado", "null", "None"):
-                resultado["requiere_fecha_hora"] = False
+                resultado["requiere_seguimiento"] = False
             else:
-                resultado["fecha_hora"] = None
-                resultado["requiere_fecha_hora"] = True
-                resultado["mensaje_confirmacion"] = f"¿Para qué fecha y hora deseas la cita para {nom}?"
+                # Comprobar si Groq extrajo fecha u hora en campos específicos
+                fecha_g = str(resultado.get("fecha") or "").strip()
+                hora_g = str(resultado.get("hora") or "").strip()
+                texto_comb = f"{fecha_g} {hora_g}".strip()
+                f_comb = resolver_fecha_relativa_espanol(texto_comb) if (texto_comb and texto_comb.lower() not in ("no especificado", "none", "null")) else None
+                if f_comb:
+                    resultado["fecha_hora"] = f_comb
+                    resultado["requiere_fecha_hora"] = False
+                    resultado["requiere_seguimiento"] = False
+                elif tiene_tiempo and resultado.get("fecha_hora") and resultado.get("fecha_hora") not in ("No especificado", "null", "None"):
+                    resultado["requiere_fecha_hora"] = False
+                    resultado["requiere_seguimiento"] = False
+                else:
+                    resultado["fecha_hora"] = None
+                    resultado["requiere_fecha_hora"] = True
+                    resultado["requiere_seguimiento"] = True
+                    resultado["mensaje_confirmacion"] = f"¿Para qué fecha y hora deseas la cita para {nom}?"
 
             # Extracción determinista de teléfono para la cita
             tel_cita = str(resultado.get("telefono") or "").strip()
