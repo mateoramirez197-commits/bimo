@@ -1289,13 +1289,15 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
         "mensaje_confirmacion": msg_conf
     }
 
-_NAV_PREFIJO = r"(?:abre|abrir|muestra|muéstrame|muestrame|mostrar|ve a|ir a|llévame a|llevame a|busca|buscar|encuentra|encontrar|ver|pon|pantalla de|modo)"
+_NAV_PREFIJO = r"(?:abre|abrir|muestra|muéstrame|muestrame|mostrar|ve a|vete a|ir a|llévame a|llevame a|busca|buscar|encuentra|encontrar|ver|pon|poner|pásame a|pasame a|cambia a|cambiar a|pantalla de|modo)"
 
 def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
     if not texto_crudo:
         return None
     t = texto_crudo.lower().replace("bimo", "").strip(" ,.?!¿¡")
-    t = re.sub(r"^(hola|oye|por favor)[, ]+", "", t).strip()
+    # Limpieza determinista de muletillas y frases conversacionales previas (BLOQUE 4)
+    t = re.sub(r"^(?:hola|oye|hey|ok|por\s+favor|porfa|este|eh|em|bueno|a\s+ver|mira)[, ]+", "", t).strip()
+    t = re.sub(r"^(?:hola|oye|hey|ok|por\s+favor|porfa|este|eh|em|bueno|a\s+ver|mira)[, ]+", "", t).strip()
     if len(t.split()) > 12:                    # un dictado clínico largo NUNCA es navegación
         return None
 
@@ -1316,7 +1318,7 @@ def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
 
     # 2. Buscar paciente específico por nombre
     # 2a. Con mención explícita de paciente / expediente / ficha / historial
-    _VERBOS_EXPLORAR = r"(?:busca|buscar|encuentra|encontrar|ver|muestra|muéstrame|muestrame|mostrar|abre|abrir|consulta|consultar)"
+    _VERBOS_EXPLORAR = r"(?:busca|buscar|encuentra|encontrar|ver|muestra|muéstrame|muestrame|mostrar|abre|abrir|consulta|consultar|pon|poner)"
     m_pac = re.match(
         rf"^{_VERBOS_EXPLORAR}\s+(?:al\s+|a\s+la\s+|el\s+|la\s+)?(?:paciente|expediente|ficha(?:\s+de\s+paciente)?|historial)(?:\s+de|\s+del|\s+de\s+la)?\s+(.+)$",
         t
@@ -1333,7 +1335,7 @@ def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
         nom = re.sub(r"^(?:de|del|de la)\s+", "", nom, flags=re.IGNORECASE)
         nom = re.sub(r"^(?:paciente|sr\.|sra\.|don|doña)\s+", "", nom, flags=re.IGNORECASE)
         # Si el resultado es vacío o es una pestaña general, dejar que sigan las reglas siguientes
-        if nom and nom.lower() not in ("pacientes", "citas", "agenda", "calendario", "pdf", "pdfs", "widget", "configuracion", "configuración"):
+        if nom and nom.lower() not in ("pacientes", "citas", "agenda", "calendario", "pdf", "pdfs", "widget", "configuracion", "configuración", "historias", "historias clínicas"):
             return {"tipo": "NAVEGACION_UI", "accion": "buscar_paciente", "parametro": nom.strip().title()}
 
     # 3. Odontograma independiente
@@ -1342,33 +1344,33 @@ def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
 
     # 4. Pestaña Pacientes (general)
     if re.search(rf"\b(?:pacientes|fichas|lista\s+de\s+pacientes|directorio\s+de\s+pacientes)\b", t):
-        if any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver", "lista", "directorio"]):
+        if any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "lista", "directorio", "pon", "poner", "llévame", "llevame"]):
             return {"tipo": "NAVEGACION_UI", "accion": "abrir_pacientes", "parametro": ""}
-    if re.match(rf"^(?:pacientes|fichas de pacientes|lista de pacientes|directorio de pacientes)$", t):
+    if re.match(rf"^(?:(?:abre|abrir|pon|vete\s+a|ir\s+a|ver)\s+)?(?:pacientes|fichas de pacientes|lista de pacientes|directorio de pacientes)$", t):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_pacientes", "parametro": ""}
 
     # 5. Pestaña Agenda / Calendario / Citas
-    if re.search(rf"\b(?:agenda|citas|calendario)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver", "hoy", "mis"]):
+    if re.search(rf"\b(?:agenda|citas|calendario)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "hoy", "mis", "pon", "poner", "llévame", "llevame", "pásame", "pasame"]):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_agenda", "parametro": ""}
-    if re.match(rf"^(?:agenda|citas|calendario|ver citas)$", t):
+    if re.match(rf"^(?:(?:abre|abrir|pon|vete\s+a|ir\s+a|ver|llévame\s+a|llevame\s+a)\s+(?:la\s+)?)?(?:agenda|citas|calendario|ver citas)$", t):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_agenda", "parametro": ""}
 
     # 6. Pestaña Dictado / Inicio
-    if re.search(rf"\b(?:dictado|dictar|inicio|pantalla\s+principal)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "volver", "pantalla", "modo"]):
+    if re.search(rf"\b(?:dictado|dictar|inicio|pantalla\s+principal)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "volver", "pantalla", "modo", "pon", "poner", "llévame", "llevame"]):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_dictado", "parametro": ""}
-    if re.match(rf"^(?:dictado|inicio|modo dictado|ir a dictar|ve a dictar)$", t):
+    if re.match(rf"^(?:(?:abre|abrir|pon|vete\s+a|ir\s+a|modo)\s+)?(?:dictado|inicio|dictar)$", t):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_dictado", "parametro": ""}
 
     # 7. Pestaña Móvil / Celular / QR
-    if re.search(rf"\b(?:móvil|movil|mobile|qr|código\s+qr|codigo\s+qr|celular|teléfono|telefono)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "conectar", "cámara", "camara"]):
+    if re.search(rf"\b(?:móvil|movil|mobile|qr|código\s+qr|codigo\s+qr|celular|teléfono|telefono)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "conectar", "cámara", "camara", "pon", "poner", "llévame", "llevame"]):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_mobile", "parametro": ""}
     if re.match(rf"^(?:móvil|movil|mobile|código qr|codigo qr|conectar celular|conectar teléfono|cámara móvil|camara movil)$", t):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_mobile", "parametro": ""}
 
-    # 8. Pestaña PDF / Visor
-    if re.search(rf"\b(?:visor|visor\s+de\s+pdf|pdf|pdfs|documentos|historias\s+clínicas|historias\s+clinicas)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver"]):
+    # 8. Pestaña PDF / Visor / Historias
+    if re.search(rf"\b(?:visor|visor\s+de\s+pdf|pdf|pdfs|documentos|historias|historias\s+clínicas|historias\s+clinicas)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "pon", "poner", "llévame", "llevame"]):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf", "parametro": ""}
-    if re.match(rf"^(?:visor de pdf|ver pdf|ver pdfs|pdf|pdfs|historias clínicas|historias clinicas)$", t):
+    if re.match(rf"^(?:(?:abre|abrir|muestra|muéstrame|muestrame|ver|pon)\s+(?:las\s+)?)?(?:visor de pdf|ver pdf|ver pdfs|pdf|pdfs|historias|historias clínicas|historias clinicas)$", t):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf", "parametro": ""}
 
     # 9. Pestaña Widget / Modo flotante
@@ -1376,7 +1378,7 @@ def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_widget", "parametro": ""}
 
     # 10. Pestaña Configuración / Temas / Ajustes
-    if re.search(rf"\b(?:configuración|configuracion|ajustes|temas?|cambiar\s+temas?|opciones)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "muestra", "mostrar", "ver", "cambiar"]):
+    if re.search(rf"\b(?:configuración|configuracion|ajustes|temas?|cambiar\s+temas?|opciones)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "cambiar", "pon", "poner", "llévame", "llevame"]):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_configuracion", "parametro": ""}
     if re.match(rf"^(?:configuración|configuracion|ajustes|temas|cambiar temas?)$", t):
         return {"tipo": "NAVEGACION_UI", "accion": "abrir_configuracion", "parametro": ""}

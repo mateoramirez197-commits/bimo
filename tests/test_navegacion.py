@@ -35,6 +35,9 @@ def run_tests():
         ("ve a citas", "abrir_agenda", ""),
         ("ver calendario", "abrir_agenda", ""),
         ("Bimo por favor abre el calendario", "abrir_agenda", ""),
+        ("bimo este llévame a la agenda", "abrir_agenda", ""),
+        ("vete a la agenda", "abrir_agenda", ""),
+        ("pon la agenda", "abrir_agenda", ""),
 
         # --- 3. Pacientes (listado) ---
         ("abre pacientes", "abrir_pacientes", ""),
@@ -69,6 +72,7 @@ def run_tests():
         ("abrir pdf", "abrir_pdf", ""),
         ("historias clínicas", "abrir_pdf", ""),
         ("ver documentos", "abrir_pdf", ""),
+        ("muéstrame historias", "abrir_pdf", ""),
 
         # --- 8. Widget flotante ---
         ("abrir widget", "abrir_widget", ""),

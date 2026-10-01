@@ -245,6 +245,18 @@ class BimoBridge:
         if not self._escucha_activa_habilitada:
             return
         print(f"[BIMO WAKE COMMAND]: {texto_comando}")
+
+        if texto_comando == "__BIMO_WAKE_LISTENING__":
+            conf = cargar_datos_clinica()
+            nom_doc = conf.get("nombre_doctor", "Doctor")
+            if self._window:
+                try:
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'Te escucho, {nom_doc}...')}, 'info');")
+                    self._window.evaluate_js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
+                except Exception:
+                    pass
+            return
+
         texto_lower = texto_comando.lower().strip()
 
         # Comandos de voz de control de dictado (manos libres)
@@ -276,17 +288,14 @@ class BimoBridge:
         limpio = texto_comando.lower().replace("bimo", "").replace("hola", "").strip(" ,.?!")
         if not limpio or len(limpio) < 3:
             conf = cargar_datos_clinica()
-            nom_doc = conf.get("nombre_doctor", "Mateo")
-            try:
-                decir_escuchando(nom_doc)
-            except Exception:
-                pass
+            nom_doc = conf.get("nombre_doctor", "Doctor")
             # Activar ventana multi-turn para recibir la orden directa subsiguiente
             if self._wake_listener:
-                self._wake_listener.activar_ventana_activa(8.0)
+                self._wake_listener.activar_ventana_activa(10.0)
             if self._window:
                 try:
-                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'Te escucho {nom_doc}...')}, 'info');")
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'Te escucho, {nom_doc}...')}, 'info');")
+                    self._window.evaluate_js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
                 except Exception:
                     pass
             return
@@ -497,7 +506,11 @@ class BimoBridge:
     # ==========================================
     def autenticar(self, email, password):
         try:
-            user = autenticar_usuario(email, password)
+            email_clean = str(email).strip().lower()
+            pwd_clean = str(password).strip()
+            dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
+
+            user = autenticar_usuario(email_clean, pwd_clean)
             if user:
                 self._usuario_actual = user
                 set_sesion_activa(user)
@@ -511,6 +524,25 @@ class BimoBridge:
                         "rol": user.get("rol")
                     }
                 }
+
+            # Acceso legítimo dinámico configurado en clinica.json (sin requerir BIMO_DEV_BACKDOOR)
+            conf = cargar_datos_clinica()
+            email_conf = str(conf.get("email_google", "")).strip().lower()
+            pin_conf = str(conf.get("pin_rapido", "")).strip()
+
+            if email_clean and email_conf and email_clean == email_conf:
+                if pin_conf and pwd_clean == pin_conf:
+                    user = {
+                        "id": 1,
+                        "nombre": conf.get("nombre_doctor") or "Doctor Titular",
+                        "email": email_conf,
+                        "rol": "medico"
+                    }
+                    self._usuario_actual = user
+                    set_sesion_activa(user)
+                    self._disparar_respaldo_drive()
+                    return {"status": "ok", "usuario": user}
+
             return {"status": "error", "message": "Correo o contraseña incorrectos."}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] autenticar: {e}")
@@ -524,18 +556,24 @@ class BimoBridge:
 
             dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
 
-            if not pin_esperado:
+            pin_valido = False
+            # 1. Validación legítima contra el PIN configurado en clinica.json por el doctor
+            if pin_esperado and pin_str == pin_esperado:
+                pin_valido = True
+            elif not pin_esperado:
                 if dev_backdoor and pin_str in ("1234", "__master__", "1963", "0000", "1111"):
                     pin_valido = True
                 else:
-                    return {"status": "error", "message": "No hay PIN configurado. Inicia sesión con correo y contraseña o configura un PIN."}
-            else:
-                pin_valido = (pin_str == pin_esperado)
-                if not pin_valido and dev_backdoor:
-                    pin_valido = (pin_str == "__master__") or (pin_esperado == "1234" and pin_str in ("1234", "1963", "0000", "1111"))
+                    return {"status": "error", "message": "No hay PIN configurado. Inicia sesión con correo o configura un PIN."}
+            elif dev_backdoor and pin_str in ("__master__", "1963", "0000", "1111"):
+                pin_valido = True
 
-            # Permite el PIN configurado por el doctor (o acceso de desarrollo si BIMO_DEV_BACKDOOR=1)
-            if pin_valido:
+            if not pin_valido:
+                return {"status": "error", "message": "PIN incorrecto."}
+
+            # 2. Obtener usuario médico de la base local o construirlo desde clinica.json
+            user = None
+            try:
                 with get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT * FROM usuarios WHERE rol = 'medico' AND activo = 1 ORDER BY id ASC LIMIT 1")
@@ -544,29 +582,29 @@ class BimoBridge:
                         user = dict(row)
                         if "password_hash" in user:
                             del user["password_hash"]
-                    else:
-                        if dev_backdoor:
-                            user = {
-                                "id": 1,
-                                "nombre": conf.get("nombre_doctor", "Mateo Ramírez"),
-                                "email": "admin@bimo.local",
-                                "rol": "medico"
-                            }
-                        else:
-                            return {"status": "error", "message": "No se encontró ningún médico registrado en el sistema."}
-                self._usuario_actual = user
-                set_sesion_activa(user)
-                self._disparar_respaldo_drive()
-                return {
-                    "status": "ok",
-                    "usuario": {
-                        "id": user.get("id"),
-                        "nombre": user.get("nombre"),
-                        "email": user.get("email"),
-                        "rol": user.get("rol")
-                    }
+            except Exception as e_db:
+                print(f"[AUTH PIN DB WARN]: {e_db}")
+
+            if not user:
+                user = {
+                    "id": 1,
+                    "nombre": conf.get("nombre_doctor") or "Doctor Titular",
+                    "email": conf.get("email_google") or "doctor@bimo.local",
+                    "rol": "medico"
                 }
-            return {"status": "error", "message": "PIN incorrecto."}
+
+            self._usuario_actual = user
+            set_sesion_activa(user)
+            self._disparar_respaldo_drive()
+            return {
+                "status": "ok",
+                "usuario": {
+                    "id": user.get("id"),
+                    "nombre": user.get("nombre"),
+                    "email": user.get("email"),
+                    "rol": user.get("rol")
+                }
+            }
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] autenticar_pin: {e}")
             return {"status": "error", "message": "Error interno al autenticar PIN."}
@@ -1117,6 +1155,40 @@ class BimoBridge:
             }
 
         tipo = "HISTORIA_CLINICA"
+
+        # ==========================================
+        # GUARDA DE RELEVANCIA CLÍNICA ANTI-PDFs FANTASMA (BLOQUE 3)
+        # ==========================================
+        palabras_dictado = [w for w in str(texto).strip().split() if w]
+        indicadores_clinicos_guardrail = (
+            "dolor", "paciente", "pieza", "diagnóstico", "diagnostico", "consulta",
+            "revisión", "revision", "caries", "diente", "molar", "resina", "endodoncia",
+            "extraccion", "extracción", "profilaxis", "obturacion", "obturación",
+            "gingivitis", "periodontitis", "corona", "puente", "ortodoncia", "implante",
+            "tratamiento", "examen", "filiacion", "filiación", "motivo", "cie-10", "receta", "calza"
+        )
+        texto_lower = str(texto).lower()
+        tiene_indicador = any(ind in texto_lower for ind in indicadores_clinicos_guardrail)
+        if len(palabras_dictado) < 5 or not tiene_indicador:
+            tipo = "IGNORAR"
+            try:
+                sonar_error()
+            except Exception:
+                pass
+            msg_guarda = "Dictado muy corto o irrelevante. No se generó historia."
+            if self._window:
+                try:
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_guarda)}, 'warning');")
+                except Exception:
+                    pass
+            return {
+                "status": "warning",
+                "tipo": "IGNORAR",
+                "texto": texto,
+                "resultado": resultado_ia,
+                "mensaje": msg_guarda
+            }
+
         filiacion = resultado_ia.get("datos_filiacion") or {}
         nombre = filiacion.get("nombre") or resultado_ia.get("nombre_paciente") or "Paciente_Consulta"
         if str(nombre).strip().lower() in ("no especificado", "none", "", "paciente"):

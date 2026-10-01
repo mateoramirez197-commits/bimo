@@ -39,6 +39,11 @@ class BackgroundWakeListener:
         self._cola_audio = queue.Queue(maxsize=3)
         self._hilo_worker = None
         self._duracion_actual_analisis = 4.0
+        try:
+            from audio_feedback import _asegurar_wav
+            _asegurar_wav("bimo_ding.wav")
+        except Exception:
+            pass
 
     def activar_ventana_activa(self, segundos=7.5):
         """Abre una ventana activa de escucha para recibir órdenes directas sin exigir repetir 'Bimo'."""
@@ -185,11 +190,14 @@ class BackgroundWakeListener:
                 total_samples = sum(len(b) for b in self.acumulador_voz)
                 duracion_actual_seg = total_samples / self.samplerate
 
-                # Umbral de silencio dinámico:
-                # Si el clip es corto (< 1.2s, ej. solo 'Bimo'): 10 frames (~640ms) para respuesta ágil
-                # Si es una frase de orden/dictado (> 1.2s): 25 frames (~1.6 segundos) para permitir
-                # pausas naturales, consultar la fecha o mirar el calendario sin cortar la voz!
-                max_silencio = 10 if duracion_actual_seg < 1.2 else 25
+                # Umbral de silencio dinámico (Pausa Inteligente BLOQUE 2):
+                # - En reposo esperando la palabra de activación ("Bimo"): 9 frames (~576ms) para reacción ultra-rápida.
+                # - Post-activación o en orden/dictado (> 1.2s): Pausa inteligente de 3.5 a 4.5 segundos
+                #   (60 frames * 0.064s = 3.84s) para permitir pausas reflexivas sin cortar la voz.
+                if self.esta_en_ventana_activa() or duracion_actual_seg > 1.2:
+                    max_silencio = 60  # ~3.84s (rango 3.5 - 4.5s)
+                else:
+                    max_silencio = 9   # ~576ms para detección ágil de "Bimo"
 
                 if self.silencio_frames >= max_silencio:
                     if total_samples >= int(self.samplerate * 0.22):
@@ -341,12 +349,12 @@ class BackgroundWakeListener:
             # Verificar si estamos dentro de la ventana activa multi-turn (ej. el usuario ya dijo 'Bimo' hace unos segundos)
             if self.esta_en_ventana_activa():
                 self.tiempo_ventana_activa = 0.0
+                palabras_activas = [w for w in palabras if w not in ('eh', 'este', 'em')]
+                # Filtro de ruido en ventana activa: si no hay palabras útiles o es silencio residual
+                if duracion_seg < 1.5 and len(palabras_activas) == 0:
+                    print(f"[VOICE LISTENER] Ruido descartado en ventana activa ({duracion_seg:.2f}s).")
+                    return
                 print(f"[VOICE LISTENER] Comando recibido dentro de ventana activa: \"{texto}\"")
-                try:
-                    from audio_feedback import sonar_inicio_dictado
-                    sonar_inicio_dictado()
-                except Exception:
-                    pass
                 if self.callback_comando:
                     self.callback_comando(texto)
                 return
@@ -389,11 +397,27 @@ class BackgroundWakeListener:
                 return
 
             print(f"[VOICE LISTENER] Activación confirmada por Bimo: \"{texto}\"")
+            # 1. Feedback acústico instantáneo (0ms de latencia)
             try:
                 from audio_feedback import sonar_inicio_dictado
                 sonar_inicio_dictado()
             except Exception:
                 pass
+
+            # 2. Activar ventana activa con pausa inteligente (3.5 - 4.5s)
+            self.activar_ventana_activa(10.0)
+
+            # 3. Filtro de Ruido (BLOQUE 2):
+            # Si el clip contiene menos de 1.5 segundos de voz útil (solo escuchó "Bimo" y luego silencio total),
+            # o si no hay comando tras "Bimo", notificar a la UI para feedback visual y descartar
+            # silenciosamente el envío de comando nulo.
+            palabras_comando = [w for w in palabras if not _es_variacion_bimo(w) and w not in ('hola', 'oye', 'hey', 'ok', 'por', 'favor')]
+            if len(palabras_comando) == 0 or (duracion_seg < 1.5 and len(palabras_comando) == 0):
+                print(f"[VOICE LISTENER] Activación inicial 'Bimo' detectada. Micrófono abierto con pausa inteligente.")
+                if self.callback_comando:
+                    self.callback_comando("__BIMO_WAKE_LISTENING__")
+                return
+
             if self.callback_comando:
                 self.callback_comando(texto)
 
