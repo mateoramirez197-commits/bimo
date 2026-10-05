@@ -186,6 +186,267 @@ def extraer_digitos_cedula(texto: str) -> str:
         return digitos
     return None
 
+PATRON_HALLAZGO_DENTAL = re.compile(
+    r'\b(caries|resinas?|obturaci[oó]n(?:es)?|endodoncias?|extracci[oó]n(?:es)?|exodoncias?|coronas?|sellantes?|fracturas?|profilaxis|pr[oó]tesis|ausentes?|perdidas?|perdidos?|implantes?|pulpitis|gingivitis|periodontitis|incrustaci[oó]n(?:es)?|fl[uú]or|t[aá]rtaro)\b',
+    re.IGNORECASE
+)
+
+def extraer_piezas_mencionadas(texto: str) -> list[str]:
+    """
+    Detecta todas las piezas dentales mencionadas en el texto:
+    - Números FDI válidos (permanentes 11-48, temporales 51-85).
+    - Rangos explícitos (ej. 'del 14 al 17', 'piezas 31 a 33').
+    - Designaciones anatómicas sin número (ej. 'premolar derecho', 'premolar izquierdo').
+    - Ignora edades, cédulas, teléfonos, precios, fechas y horas.
+    """
+    if not texto or not isinstance(texto, str):
+        return []
+
+    import re
+    t = texto
+
+    # Enmascarar números que no son piezas dentales
+    # Cédulas / teléfonos (7 o más dígitos consecutivos)
+    t = re.sub(r'\b\d{7,}\b', ' ', t)
+    # Fechas
+    t = re.sub(r'\b\d{1,4}[-/]\d{1,2}[-/]\d{1,4}\b', ' ', t)
+    # Horas
+    t = re.sub(r'\b\d{1,2}:\d{2}\b', ' ', t)
+    # Edades
+    t = re.sub(r'\b\d{1,3}\s*a[ñn]os?\b', ' ', t, flags=re.IGNORECASE)
+    # Montos y precios
+    t = re.sub(r'[\$€]\s*\d+(?:\.\d+)?', ' ', t)
+    t = re.sub(r'\b\d+(?:\.\d+)?\s*(?:d[oó]lares|usd|pesos|euros)\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b(?:abono|costo|pago|saldo|total|precio)\s*(?:de\s*)?\d+(?:\.\d+)?\b', ' ', t, flags=re.IGNORECASE)
+
+    piezas_encontradas = []
+
+    # Rangos explícitos de piezas FDI
+    patron_rango = re.compile(
+        r'\b(?:del?\s+|piezas?\s+|dientes?\s+)?(?:la\s+)?(\d{2})\s*(?:al?|a\s+la)\s+(\d{2})\b',
+        re.IGNORECASE
+    )
+    for m in patron_rango.finditer(t):
+        try:
+            p_ini, p_fin = int(m.group(1)), int(m.group(2))
+            cuad_ini, cuad_fin = p_ini // 10, p_fin // 10
+            if cuad_ini == cuad_fin and cuad_ini in (1, 2, 3, 4, 5, 6, 7, 8):
+                d_ini, d_fin = p_ini % 10, p_fin % 10
+                max_d = 8 if cuad_ini <= 4 else 5
+                if 1 <= d_ini <= d_fin <= max_d:
+                    for p_num in range(p_ini, p_fin + 1):
+                        piezas_encontradas.append(str(p_num))
+        except Exception:
+            pass
+    t_sin_rangos = patron_rango.sub(' ', t)
+
+    # Designaciones anatómicas duales sin número (ej: 'premolar derecho, izquierdo')
+    patron_anat_dual = re.compile(
+        r'\b(premolar|molar|incisivo|canino)\s+(derecho|izquierdo|superior|inferior)(?:[,\s]+(?:e\s+|y\s+)?(derecho|izquierdo|superior|inferior))\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_dual.finditer(t_sin_rangos):
+        tipo = m.group(1).capitalize()
+        pos1 = m.group(2).lower()
+        pos2 = m.group(3).lower()
+        piezas_encontradas.append(f"{tipo} {pos1}")
+        piezas_encontradas.append(f"{tipo} {pos2}")
+    t_sin_anat = patron_anat_dual.sub(' ', t_sin_rangos)
+
+    # Designaciones anatómicas individuales simples
+    patron_anat_simple = re.compile(
+        r'\b(premolar|molar|incisivo|canino)\s+(superior|inferior)?\s*(derecho|izquierdo)\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_simple.finditer(t_sin_anat):
+        full = " ".join(m.group(0).strip().split()).capitalize()
+        piezas_encontradas.append(full)
+    t_sin_anat = patron_anat_simple.sub(' ', t_sin_anat)
+
+    # Piezas FDI individuales válidas
+    fdi_validos = set()
+    for c in (1, 2, 3, 4):
+        for d in range(1, 9):
+            fdi_validos.add(f"{c}{d}")
+    for c in (5, 6, 7, 8):
+        for d in range(1, 6):
+            fdi_validos.add(f"{c}{d}")
+
+    for m in re.finditer(r'\b(\d{2})\b', t_sin_anat):
+        val = m.group(1)
+        if val in fdi_validos:
+            piezas_encontradas.append(val)
+
+    # Deduplicar preservando orden
+    resultado = []
+    vistos = set()
+    for p in piezas_encontradas:
+        p_norm = p.strip()
+        if p_norm.lower() not in vistos:
+            vistos.add(p_norm.lower())
+            resultado.append(p_norm)
+
+    return resultado
+
+
+def inferir_hallazgo_pieza(pieza: str, texto: str) -> str:
+    """Infiere el hallazgo patológico o procedimiento para una pieza a partir del fragmento textual que la rodea."""
+    if not texto or not pieza:
+        return "Mencionada en el dictado: revisar hallazgo"
+    import re
+    fragmentos = re.split(r'[,;.\n]|\by\b|\be\b', texto)
+    p_lower = pieza.lower()
+
+    # 1. Si es dígito FDI, revisar si pertenece a un rango en algún fragmento
+    if pieza.isdigit():
+        try:
+            p_val = int(pieza)
+            for f in fragmentos:
+                for m_r in re.finditer(r'\b(?:del?\s+|piezas?\s+|dientes?\s+)?(?:la\s+)?(\d{2})\s*(?:al?|a\s+la)\s+(\d{2})\b', f, re.IGNORECASE):
+                    r_ini, r_fin = int(m_r.group(1)), int(m_r.group(2))
+                    if r_ini <= p_val <= r_fin:
+                        m = PATRON_HALLAZGO_DENTAL.search(f)
+                        if m:
+                            return m.group(1).capitalize()
+        except Exception:
+            pass
+
+    # 2. Buscar fragmento que contiene directamente la pieza
+    for i, f in enumerate(fragmentos):
+        contiene = False
+        if p_lower in f.lower():
+            contiene = True
+        elif pieza.isdigit() and re.search(rf'\b{pieza}\b', f):
+            contiene = True
+        elif len(p_lower.split()) > 1 and any(p_part in f.lower() for p_part in p_lower.split()):
+            contiene = True
+
+        if contiene:
+            m = PATRON_HALLAZGO_DENTAL.search(f)
+            if m:
+                return m.group(1).capitalize()
+            # Buscar en fragmentos anteriores si es una enumeración (ej: 'caries en 16, 17 y 18')
+            for prev_idx in range(i - 1, max(-1, i - 4), -1):
+                m_prev = PATRON_HALLAZGO_DENTAL.search(fragmentos[prev_idx])
+                if m_prev:
+                    return m_prev.group(1).capitalize()
+            break
+
+    # 3. Buscar globalmente el hallazgo dental más cercano en el texto
+    m_global = PATRON_HALLAZGO_DENTAL.search(texto)
+    if m_global:
+        return m_global.group(1).capitalize()
+
+    return "Mencionada en el dictado: revisar hallazgo"
+
+
+def _obtener_identidad_pieza(p_raw: str):
+    """
+    Determina la clave de deduplicación y el nombre canónico para una pieza dental.
+    Si la pieza contiene o es un número FDI válido (ej: '31', 'diente 14', 'pieza 21'),
+    se usa el número FDI como clave y valor.
+    Si es una descripción anatómica textual sin cuadrante completo (ej: 'premolar derecho',
+    'premolar izquierdo'), preserva la descripción textual para evitar colapsar
+    piezas de cuadrantes distintos en el mismo FDI por defecto.
+    """
+    import re
+    from generador_pdf import extraer_fdi
+    p_str = str(p_raw).strip()
+    if not p_str:
+        return "", ""
+
+    # 1. Si es solo dígitos
+    if p_str.isdigit():
+        return p_str, p_str
+
+    # 2. Si contiene 2 dígitos explícitos de FDI válido
+    m_dig = re.search(r'\b([1-4][1-8]|[5-8][1-5])\b', p_str)
+    if m_dig:
+        fdi = m_dig.group(1)
+        return fdi, fdi
+
+    # 3. Si es descripción textual anatómica
+    s_low = p_str.lower()
+    tiene_plano_v = any(k in s_low for k in ['superior', 'arriba', 'maxilar', 'sup.', 'inferior', 'abajo', 'mandibular', 'inf.'])
+    tiene_plano_h = any(k in s_low for k in ['derech', 'der.', 'izquierd', 'izq.'])
+
+    # Si tiene especificación de ambos planos (ej: "molar superior derecho"), extraer_fdi es unívoco
+    if tiene_plano_v and tiene_plano_h:
+        fdi = extraer_fdi(p_str)
+        if fdi:
+            return fdi, fdi
+
+    # De lo contrario (ej: "premolar derecho", "molar izquierdo"), mantener textual
+    return s_low, p_str
+
+
+def parchear_odontograma_exhaustivo(odonto_lista: list, texto_crudo: str) -> list:
+    """
+    Parche determinista de seguridad:
+    - Normaliza las claves pieza/diente a pieza_dental y hallazgo/procedimiento a procedimientos_o_hallazgos.
+    - Asegura que todas las piezas mencionadas en el dictado estén presentes en el array.
+    - Elimina duplicados exactos (misma pieza FDI) fusionando sus hallazgos.
+    - Registra en log únicamente contadores sin información confidencial.
+    """
+    if not isinstance(odonto_lista, list):
+        odonto_lista = []
+
+    mencionadas = extraer_piezas_mencionadas(texto_crudo)
+
+    # 1. Normalizar y fusionar elementos recibidos
+    mapa_fusion = {}
+
+    for item in odonto_lista:
+        if not isinstance(item, dict):
+            continue
+        p_raw = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
+        key, display_pieza = _obtener_identidad_pieza(p_raw)
+        if not key:
+            continue
+
+        h_raw = (
+            item.get("procedimientos_o_hallazgos") or
+            item.get("hallazgos") or
+            item.get("hallazgo") or
+            item.get("procedimiento") or
+            []
+        )
+        if isinstance(h_raw, str):
+            hallazgos = [h_raw.strip()] if h_raw.strip() else []
+        elif isinstance(h_raw, list):
+            hallazgos = [str(x).strip() for x in h_raw if str(x).strip()]
+        else:
+            hallazgos = [str(h_raw).strip()] if str(h_raw).strip() else []
+
+        if key in mapa_fusion:
+            for h in hallazgos:
+                if h and h not in mapa_fusion[key]["procedimientos_o_hallazgos"]:
+                    mapa_fusion[key]["procedimientos_o_hallazgos"].append(h)
+        else:
+            mapa_fusion[key] = {
+                "pieza_dental": display_pieza,
+                "procedimientos_o_hallazgos": hallazgos if hallazgos else ["Evaluada"]
+            }
+
+    # 2. Agregar piezas mencionadas faltantes
+    anadidas = 0
+    for p_menc in mencionadas:
+        key_menc, display_menc = _obtener_identidad_pieza(p_menc)
+        if not key_menc:
+            continue
+        if key_menc not in mapa_fusion:
+            hallazgo_inf = inferir_hallazgo_pieza(p_menc, texto_crudo)
+            mapa_fusion[key_menc] = {
+                "pieza_dental": display_menc,
+                "procedimientos_o_hallazgos": [hallazgo_inf]
+            }
+            anadidas += 1
+
+    resultado = list(mapa_fusion.values())
+    print(f"[ODONTOGRAMA EXHAUSTIVO] piezas mencionadas: {len(mencionadas)}, en array: {len(resultado)}, añadidas: {anadidas}")
+    return resultado
+
+
 def _normalizar_nombres_espanol(nombre: str) -> str:
     """Normaliza nombres hispanoamericanos y andinos, corrigiendo deformaciones acústicas (ej. 'Yumi Kinga' -> 'Llumiquinga')."""
     if not nombre or not isinstance(nombre, str):
@@ -1542,9 +1803,9 @@ REGLAS ESTRICTAS DE FILIACIÓN CLÍNICA:
 - Si el doctor no dicta cédula, pon 'No especificado'.
 - Si se dictan extracciones realizadas, dientes sacados o perdidos, regístralos en 'odontograma' con el hallazgo 'Extracción previa / Ausente' para pintarse en gris.
 
-REGLAS OBLIGATORIAS DE EXTRACCIÓN CLÍNICA:
-- 'edad': Extrae la edad en años enteros (ej. '16 años', '25 años'). Si el usuario dice '16 años', 'dieciséis años' o 'diez y seis años', escribe estrictamente '16 años'. NUNCA pongas '10 años y 6 meses' a menos que sea explícitamente un lactante menor a 2 años.
 - 'odontograma': Para CADA pieza dental mencionada, en 'pieza_dental' debes colocar SIEMPRE su NÚMERO FDI (ej: '14', '16', '21', '24', '36', '46'). Si el doctor dice 'premolar superior derecho' conviértelo a '14'; si dice 'premolar superior izquierdo' a '24'; si dice 'premolar inferior izquierdo' a '34'; si dice 'molar superior derecho' o 'muela superior derecha' a '16'; si dice 'molar inferior izquierdo' o 'muela inferior izquierda' a '36'.
+REGLA DE EXHAUSTIVIDAD DEL ODONTOGRAMA (OBLIGATORIA): EL ARRAY 'odontograma' DEBE CONTENER UN OBJETO POR CADA PIEZA DENTAL MENCIONADA EN EL DICTADO. ESTÁ PROHIBIDO RESUMIR, AGRUPAR, OMITIR O DEJAR PIEZAS IMPLÍCITAS. SI EL DOCTOR NOMBRA N PIEZAS (O UN GRUPO DE PIEZAS), EL ARRAY DEBE TENER AL MENOS N OBJETOS. SI UN MISMO HALLAZGO APLICA A VARIAS PIEZAS, REPÍTELO EN CADA UNA. SI UNA PIEZA TIENE VARIOS HALLAZGOS, AGRÚPALOS EN SU LISTA 'procedimientos_o_hallazgos'. NO INVENTES PIEZAS NI HALLAZGOS QUE NO SE DICTARON. ANTES DE RESPONDER, CUENTA LAS PIEZAS DEL DICTADO Y VERIFICA QUE EL ARRAY TENGA ESA CANTIDAD.
+Si el doctor dice 'premolar derecho' sin cuadrante ni número no debe inventarse; si el doctor dice 'premolar derecho, izquierdo' sin más precisión, crea un objeto por cada mención con la designación textual tal como se dictó ('Premolar derecho', 'Premolar izquierdo') y no fabriques un número FDI que no se dijo. Si dice '31 y 32', crea dos objetos (31, 32). Si dice 'del 11 al 13' o 'incisivos superiores derechos', expande solo rangos numéricos explícitos.
 - 'pagos': Si el doctor menciona costo del tratamiento, abono o saldo (ej: 'el tratamiento cuesta 150 dólares, se agrega un abono de 50 y queda 100 restante', 'costo 200, abono 50', 'costo 80 cancelado'):
   "pagos": {{
       "costo_total": 150.0,
@@ -1826,16 +2087,36 @@ Texto dictado:
                 if len(digits_f) in (7, 8, 9, 10, 11, 12):
                     fil["telefono"] = digits_f
 
-            # Normalizar piezas en odontograma al estándar FDI
-            from generador_pdf import extraer_fdi
-            odonto = resultado.get("odontograma", [])
-            if isinstance(odonto, list):
-                for item in odonto:
-                    if isinstance(item, dict):
-                        p_raw = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
-                        fdi_calc = extraer_fdi(p_raw)
-                        if fdi_calc:
-                            item["pieza_dental"] = fdi_calc
+            # Parche determinista exhaustivo de odontograma y normalización al estándar FDI
+            odonto_raw = resultado.get("odontograma", [])
+            odonto_parcheado = parchear_odontograma_exhaustivo(odonto_raw, texto_crudo)
+
+            # Reintento acotado: si tras el parche el array sigue con menos objetos que piezas mencionadas
+            piezas_menc = extraer_piezas_mencionadas(texto_crudo)
+            if len(odonto_parcheado) < len(piezas_menc):
+                fdi_en_array = set()
+                for o_item in odonto_parcheado:
+                    k_item, _ = _obtener_identidad_pieza(o_item.get("pieza_dental", ""))
+                    if k_item:
+                        fdi_en_array.add(k_item)
+                faltantes = [p for p in piezas_menc if _obtener_identidad_pieza(p)[0] not in fdi_en_array]
+                if faltantes and cliente:
+                    try:
+                        prompt_retry = f"{prompt}\n\nTU RESPUESTA ANTERIOR OMITIÓ PIEZAS: {faltantes}. DEVUELVE EL JSON COMPLETO INCLUYENDO TODAS."
+                        resp_retry = cliente.chat.completions.create(
+                            model=modelo_activo,
+                            messages=[{"role": "user", "content": prompt_retry}],
+                            temperature=0.0,
+                            response_format={"type": "json_object"},
+                            timeout=25.0
+                        )
+                        res_retry = json.loads(resp_retry.choices[0].message.content)
+                        if isinstance(res_retry.get("odontograma"), list) and len(res_retry.get("odontograma")) > len(odonto_parcheado):
+                            odonto_parcheado = parchear_odontograma_exhaustivo(res_retry.get("odontograma"), texto_crudo)
+                    except Exception as e_ret:
+                        print(f"[ODONTOGRAMA RETRY WARN]: {e_ret}")
+
+            resultado["odontograma"] = odonto_parcheado
 
             # CÁLCULO MATEMÁTICO EXACTO DE CITAS A FUTURO EN PYTHON (Evita alucinaciones del LLM)
             f_calc = resolver_fecha_relativa_espanol(texto_crudo)
