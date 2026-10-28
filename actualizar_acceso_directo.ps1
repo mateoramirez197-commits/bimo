@@ -1,6 +1,6 @@
 # PowerShell script para actualizar o verificar el acceso directo de BIMO Pro en el Escritorio
 param (
-    [ValidateSet("dev", "prod", "bat")]
+    [ValidateSet("dev", "prod", "bat", "pyw")]
     [string]$Modo = "dev"
 )
 
@@ -20,6 +20,11 @@ if ($Modo -eq "dev") {
 } elseif ($Modo -eq "prod") {
     $target = Join-Path $baseDir "dist\BIMO_Pro\BIMO_Pro.exe"
     $desc = "BIMO Pro - Version Compilada Ejecutable"
+} elseif ($Modo -eq "pyw") {
+    # Lanza main.py con pythonw directamente: sin ventana CMD intermedia
+    $target = (Get-Command pythonw -ErrorAction Stop).Source
+    $argumentos = "`"$(Join-Path $baseDir "main.py")`""
+    $desc = "BIMO Pro - Copiloto Odontologico Inteligente"
 } else {
     $target = Join-Path $baseDir "ejecutar_bimo.bat"
     $desc = "BIMO Pro - Copiloto Odontologico Inteligente"
@@ -34,6 +39,7 @@ Write-Host "Directorio:     $baseDir"
 
 $sc = $wsh.CreateShortcut($desktop)
 $sc.TargetPath = $target
+$sc.Arguments = if ($argumentos) { $argumentos } else { "" }
 $sc.WorkingDirectory = $baseDir
 $sc.Description = $desc
 if (Test-Path $icoPath) {

@@ -63,19 +63,32 @@ def asegurar_volumen_microfono_windows():
                 ]
 
             comtypes.CoInitialize()
-            clsid_enum = GUID('{BCDE0395-E52F-467C-8E3D-C4579291692E}')
-            enumerator = comtypes.CoCreateInstance(clsid_enum, interface=IMMDeviceEnumerator, clsctx=CLSCTX_ALL)
-            for role in (0, 1, 2):
-                try:
-                    dev = enumerator.GetDefaultAudioEndpoint(1, role)
-                    unk = dev.Activate(byref(IAudioEndpointVolume._iid_), CLSCTX_ALL, None)
-                    ep = ctypes.cast(unk, POINTER(IAudioEndpointVolume))
-                    if ep.GetMute():
-                        ep.SetMute(0, None)
-                    if ep.GetMasterVolumeLevelScalar() < 0.90:
-                        ep.SetMasterVolumeLevelScalar(0.95, None)
-                except Exception:
-                    pass
+            try:
+                clsid_enum = GUID('{BCDE0395-E52F-467C-8E3D-C4579291692E}')
+                enumerator = comtypes.CoCreateInstance(clsid_enum, interface=IMMDeviceEnumerator, clsctx=CLSCTX_ALL)
+                for role in (0, 1, 2):
+                    dev = unk = ep = None
+                    try:
+                        dev = enumerator.GetDefaultAudioEndpoint(1, role)
+                        unk = dev.Activate(byref(IAudioEndpointVolume._iid_), CLSCTX_ALL, None)
+                        # QueryInterface hace AddRef; ctypes.cast no, y provocaba doble Release (crash)
+                        ep = unk.QueryInterface(IAudioEndpointVolume)
+                        if ep.GetMute():
+                            ep.SetMute(0, None)
+                        if ep.GetMasterVolumeLevelScalar() < 0.90:
+                            ep.SetMasterVolumeLevelScalar(0.95, None)
+                    except Exception:
+                        pass
+                    finally:
+                        del dev, unk, ep
+                del enumerator
+            finally:
+                # Los objetos COM deben liberarse en ESTE hilo antes de cerrar su apartamento:
+                # si el recolector los libera después desde otro hilo (p. ej. el servidor móvil)
+                # Windows lanza un access violation y BIMO se cierra sin aviso.
+                import gc
+                gc.collect()
+                comtypes.CoUninitialize()
         except Exception:
             pass
 

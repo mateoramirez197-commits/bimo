@@ -93,6 +93,7 @@ def _reproducir_audio(texto: str):
                     pass
 
         if not exito:
+            engine = None
             try:
                 _BIMO_HABLANDO = True
                 engine = pyttsx3.init()
@@ -107,6 +108,10 @@ def _reproducir_audio(texto: str):
             except Exception as err:
                 print(f"[VOICE] Error en fallback TTS: {err}")
             finally:
+                # SAPI (COM) debe liberarse en este mismo hilo para evitar access violation
+                del engine
+                import gc
+                gc.collect()
                 time.sleep(0.4)
                 _BIMO_HABLANDO = False
 

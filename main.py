@@ -2,6 +2,23 @@ import os
 import sys
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
+
+# Con pythonw (acceso directo sin consola) no hay stdout/stderr: guardar la salida en
+# bimo_inicio.log para diagnosticar arranques fallidos (se conserva el anterior en .1).
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _base_log = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+        _ruta_log = os.path.join(_base_log, "bimo_inicio.log")
+        if os.path.exists(_ruta_log):
+            os.replace(_ruta_log, _ruta_log + ".1")
+        _archivo_log = open(_ruta_log, "w", encoding="utf-8", errors="replace", buffering=1)
+        sys.stdout = sys.stdout or _archivo_log
+        sys.stderr = sys.stderr or _archivo_log
+        import faulthandler
+        faulthandler.enable(_archivo_log)
+    except Exception:
+        pass
+
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -188,6 +205,8 @@ def resetear_acceso_local_gui(non_interactive_pwd=None, non_interactive_pin=None
 def main():
     print("=" * 60)
     print("[BIMO] Asistente Clinico Inteligente (SaaS Odontologico)")
+    import datetime as _dt
+    print(f"[BIMO] Inicio: {_dt.datetime.now().isoformat(timespec='seconds')} | PID {os.getpid()} | {sys.executable}")
     print("=" * 60)
 
     # Soporte para ejecución del widget flotante anclado (--widget)
