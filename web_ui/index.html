@@ -272,6 +272,9 @@
           <p class="text-slate-400">
             <strong class="text-slate-200">Soberanía de Datos:</strong> Todas las historias clínicas, odontogramas, radiografías y pagos se almacenan exclusivamente en la base de datos relacional SQLite local de este equipo (modo WAL). Ningún expediente de paciente es vendido, compartido ni utilizado para el reentrenamiento de modelos públicos.
           </p>
+          <p class="text-slate-400">
+            <strong class="text-slate-200">Procesamiento externo:</strong> Cuando hay conexión a internet, el audio y el texto del dictado se envían a los servidores de Groq para su transcripción y estructuración; BIMO no guarda copias de los expedientes fuera de este equipo. El profesional debe informar de ello al paciente y obtener su consentimiento (incluido en la sección 13 de la historia clínica en PDF).
+          </p>
         </div>
 
         <!-- 2. RIESGOS Y RESPONSABILIDAD MÉDICA -->
@@ -1851,10 +1854,10 @@
       </div>
 
       <div class="flex gap-3">
-        <button type="button" onclick="cerrarModalCedulaObligatoria()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer">
+        <button id="btnOmitirCedulaModal" type="button" onclick="cerrarModalCedulaObligatoria()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer">
           Omitir por ahora
         </button>
-        <button type="button" onclick="guardarCedulaObligatoria()" class="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-indigo-600/30">
+        <button id="btnGuardarCedulaModal" type="button" onclick="guardarCedulaObligatoria()" class="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-indigo-600/30">
           Guardar y Actualizar PDF
         </button>
       </div>
@@ -2708,10 +2711,19 @@
 
             if (resp.tipo === 'COMANDO_CITA' || resp.tipo === 'REPROGRAMAR_CITA') {
               mostrarToast(resp.mensaje || 'Cita clínica agendada con éxito');
-              cargarCitas();
+              if (typeof filtroFechaCitas !== 'undefined') filtroFechaCitas = null;
+              const btnLimp = document.getElementById('btnLimpiarFiltroFecha');
+              if (btnLimp) btnLimp.classList.add('hidden');
+              if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
+              else cargarCitas();
             } else if (resp.tipo === 'CANCELAR_CITA') {
               mostrarToast(resp.mensaje || 'Cita cancelada con éxito');
-              cargarCitas();
+              if (typeof filtroFechaCitas !== 'undefined') filtroFechaCitas = null;
+              if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
+              else cargarCitas();
+            } else if (resp.tipo === 'ACTUALIZAR_DATOS_PACIENTE' || resp.tipo === 'ACTUALIZAR_CONTACTO_PACIENTE') {
+              mostrarToast(resp.mensaje || 'Datos de paciente actualizados con éxito');
+              if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
             } else {
               if (resp.alerta_cedula_requerida) {
                 abrirModalCedulaObligatoria(resp.paciente, resp.paciente_id, resp.consulta_id);
@@ -2719,14 +2731,18 @@
                 mostrarToast('Historia clínica procesada y PDF generado con éxito');
               }
               if (resp.cita_programada) {
+                if (typeof filtroFechaCitas !== 'undefined') filtroFechaCitas = null;
                 setTimeout(() => {
                   mostrarToast(`Cita agendada: ${resp.cita_programada}`, 'info');
                 }, 1200);
               }
-              cargarUltimoExpediente();
-              cargarPacientes();
-              cargarCitas();
-              cargarPdfs();
+              if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
+              else {
+                cargarUltimoExpediente();
+                cargarPacientes();
+                cargarCitas();
+                cargarPdfs();
+              }
               if (resp.ruta_pdf) {
                 setTimeout(() => {
                   if (typeof seleccionarPdfItem === 'function') {
@@ -4342,8 +4358,202 @@
     }
 
     // ==========================================
-    // MODAL DE CÉDULA OBLIGATORIA (POST-DICTADO)
+    // MODAL DE CÉDULA OBLIGATORIA (POST-DICTADO Y POR VOZ)
     // ==========================================
+    window.cedulaGuardandoPorVoz = false;
+    window._timerAutoGuardarCedula = null;
+    window._inyectandoPorVoz = false;
+
+    window.cedulaModalAbierto = function() {
+      const modal = document.getElementById('modalCedulaObligatoria');
+      return !!(modal && !modal.classList.contains('hidden') && modal.style.display !== 'none');
+    };
+
+    function validarCedulaEcuatoriana(cedula) {
+      if (!cedula || typeof cedula !== 'string') return false;
+      const s = cedula.trim();
+      if (!/^\d{10}$/.test(s)) return false;
+      const prov = parseInt(s.substring(0, 2), 10);
+      if (!((prov >= 1 && prov <= 24) || prov === 30)) return false;
+      const tercerDigito = parseInt(s[2], 10);
+      if (tercerDigito >= 6) return false;
+      const coefs = [2, 1, 2, 1, 2, 1, 2, 1, 2];
+      let suma = 0;
+      for (let i = 0; i < 9; i++) {
+        let p = parseInt(s[i], 10) * coefs[i];
+        if (p >= 10) p -= 9;
+        suma += p;
+      }
+      const digitoVerificador = (10 - (suma % 10)) % 10;
+      return digitoVerificador === parseInt(s[9], 10);
+    }
+    window.validarCedulaEcuatoriana = validarCedulaEcuatoriana;
+
+    function normalizarTextoNumeros(texto) {
+      if (!texto) return '';
+      let t = texto.toLowerCase();
+      t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const decenasY = {
+        'treinta': 30, 'cuarenta': 40, 'cincuenta': 50,
+        'sesenta': 60, 'setenta': 70, 'ochenta': 80, 'noventa': 90
+      };
+      const unidadesY = {
+        'un': 1, 'uno': 1, 'una': 1, 'dos': 2, 'tres': 3, 'cuatro': 4,
+        'cinco': 5, 'seis': 6, 'siete': 7, 'ocho': 8, 'nueve': 9
+      };
+      for (const [decWord, decVal] of Object.entries(decenasY)) {
+        for (const [uWord, uVal] of Object.entries(unidadesY)) {
+          const reComp = new RegExp('\\b' + decWord + '\\s+y\\s+' + uWord + '\\b', 'g');
+          t = t.replace(reComp, String(decVal + uVal));
+        }
+      }
+      const palabrasNumeros = [
+        ['veintiuno', '21'], ['veintiun', '21'], ['veintiuna', '21'],
+        ['veintidos', '22'], ['veintitres', '23'], ['veinticuatro', '24'],
+        ['veinticinco', '25'], ['veintiseis', '26'], ['veintisiete', '27'],
+        ['veintiocho', '28'], ['veintinueve', '29'],
+        ['dieciseis', '16'], ['diecisiete', '17'], ['dieciocho', '18'], ['diecinueve', '19'],
+        ['veinte', '20'], ['treinta', '30'], ['cuarenta', '40'], ['cincuenta', '50'],
+        ['sesenta', '60'], ['setenta', '70'], ['ochenta', '80'], ['noventa', '90'],
+        ['diez', '10'], ['once', '11'], ['doce', '12'], ['trece', '13'], ['catorce', '14'], ['quince', '15'],
+        ['cero', '0'], ['uno', '1'], ['una', '1'], ['un', '1'], ['dos', '2'], ['tres', '3'],
+        ['cuatro', '4'], ['cinco', '5'], ['seis', '6'], ['siete', '7'], ['ocho', '8'], ['nueve', '9']
+      ];
+      for (const [word, digit] of palabrasNumeros) {
+        const reW = new RegExp('\\b' + word + '\\b', 'g');
+        t = t.replace(reW, digit);
+      }
+      return t;
+    }
+    window.normalizarTextoNumeros = normalizarTextoNumeros;
+
+    function cedulaDesdeTexto(texto) {
+      if (!texto) return '';
+      // 1. Si contiene números de 10 dígitos, buscar si alguno es válido por módulo 10
+      const matches10 = texto.match(/\b\d{10}\b/g);
+      if (matches10) {
+        for (const m of matches10) {
+          if (validarCedulaEcuatoriana(m)) return m;
+        }
+        const mCed = texto.match(/(?:c[eé]dula|documento)[^\d]*(\d{10})/i);
+        if (mCed) return mCed[1];
+        return matches10[0];
+      }
+
+      const norm = normalizarTextoNumeros(texto);
+      const mNormAll = norm.match(/\b\d{10}\b/g);
+      if (mNormAll) {
+        for (const m of mNormAll) {
+          if (validarCedulaEcuatoriana(m)) return m;
+        }
+        return mNormAll[0];
+      }
+
+      const digitosTodos = norm.replace(/\D/g, '');
+      if (digitosTodos.length === 10) {
+        return digitosTodos;
+      }
+      if (digitosTodos.length > 10) {
+        for (let i = 0; i <= digitosTodos.length - 10; i++) {
+          const sub = digitosTodos.substring(i, i + 10);
+          if (validarCedulaEcuatoriana(sub)) return sub;
+        }
+        return digitosTodos.substring(0, 10);
+      }
+      return digitosTodos;
+    }
+    window.cedulaDesdeTexto = cedulaDesdeTexto;
+
+    window.inyectarCedulaPorVoz = function(texto) {
+      if (!window.cedulaModalAbierto()) {
+        return { status: 'ignorado', motivo: 'modal_cerrado' };
+      }
+      if (!texto || typeof texto !== 'string') return;
+
+      const tLower = texto.toLowerCase().trim();
+
+      // 1. Cancelación o cierre por voz
+      const frasesCierre = ['omitir', 'cancelar', 'cerrar', 'cerrar modal', 'despues', 'después', 'sin cedula', 'sin cédula'];
+      if (frasesCierre.some(f => tLower.includes(f))) {
+        cerrarModalCedulaObligatoria();
+        mostrarToast('Operación omitida por voz', 'info');
+        try {
+          const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+          if (api && api.reproducir_sonido) api.reproducir_sonido('exito');
+        } catch(e) {}
+        return { status: 'ok', accion: 'cerrar' };
+      }
+
+      // 2. Extraer dígitos mediante el parser
+      const cedula = cedulaDesdeTexto(texto);
+      const inp = document.getElementById('cedulaModalInput');
+      const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+
+      if (cedula && cedula.length === 10) {
+        const esValida = validarCedulaEcuatoriana(cedula);
+        if (inp) {
+          window._inyectandoPorVoz = true;
+          try {
+            inp.value = cedula;
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+          } finally {
+            window._inyectandoPorVoz = false;
+          }
+        }
+
+        if (esValida) {
+          if (inp) {
+            inp.classList.remove('border-slate-700', 'border-amber-500', 'border-red-500');
+            inp.classList.add('border-emerald-500', 'ring-2', 'ring-emerald-500/30');
+          }
+          mostrarToast('Cédula ' + cedula.substring(0, 4) + '... reconocida por voz', 'success');
+          try {
+            if (api && api.reproducir_sonido) api.reproducir_sonido('exito');
+          } catch(e) {}
+
+          // Temporizador de 1.5s antes de auto-guardar
+          if (window._timerAutoGuardarCedula) clearTimeout(window._timerAutoGuardarCedula);
+          window._timerAutoGuardarCedula = setTimeout(() => {
+            window._timerAutoGuardarCedula = null;
+            const btn = document.getElementById('btnGuardarCedulaModal');
+            if (btn && !window.cedulaGuardandoPorVoz) {
+              btn.click();
+            }
+          }, 1500);
+
+          return { status: 'ok', cedula: cedula, valida: true };
+        } else {
+          // 10 dígitos pero inválida por módulo 10
+          if (inp) {
+            inp.classList.remove('border-slate-700', 'border-emerald-500', 'border-red-500');
+            inp.classList.add('border-amber-500', 'ring-2', 'ring-amber-500/30');
+          }
+          mostrarToast('Cédula no válida según algoritmo nacional. Revisa los dígitos o presiona Guardar si es pasaporte/extranjera.', 'warning');
+          try {
+            if (api && api.reproducir_sonido) api.reproducir_sonido('error');
+          } catch(e) {}
+
+          if (window._timerAutoGuardarCedula) {
+            clearTimeout(window._timerAutoGuardarCedula);
+            window._timerAutoGuardarCedula = null;
+          }
+          return { status: 'warning', cedula: cedula, valida: false };
+        }
+      } else {
+        // Menos o más de 10 dígitos
+        mostrarToast('No entendí los 10 dígitos de la cédula, por favor repite.', 'warning');
+        try {
+          if (api && api.reproducir_sonido) api.reproducir_sonido('error');
+        } catch(e) {}
+        if (window._timerAutoGuardarCedula) {
+          clearTimeout(window._timerAutoGuardarCedula);
+          window._timerAutoGuardarCedula = null;
+        }
+        return { status: 'error', motivo: 'digitos_insuficientes' };
+      }
+    };
+
     function abrirModalCedulaObligatoria(nombre, pacienteId, consultaId) {
       const modal = document.getElementById('modalCedulaObligatoria');
       const lbl = document.getElementById('cedulaModalNombrePac');
@@ -4356,25 +4566,72 @@
       if (hConsId) hConsId.value = consultaId || (ultimoExpedienteCache ? ultimoExpedienteCache.id : '');
       if (inp) {
         inp.value = '';
+        inp.classList.remove('border-emerald-500', 'border-amber-500', 'border-red-500', 'ring-2', 'ring-emerald-500/30', 'ring-amber-500/30');
+        inp.classList.add('border-slate-700');
+        if (!inp._voiceListenerBound) {
+          const cancelAutoSave = () => {
+            if (window._inyectandoPorVoz) return;
+            if (window._timerAutoGuardarCedula) {
+              clearTimeout(window._timerAutoGuardarCedula);
+              window._timerAutoGuardarCedula = null;
+            }
+          };
+          inp.addEventListener('input', cancelAutoSave);
+          inp.addEventListener('keydown', cancelAutoSave);
+          inp._voiceListenerBound = true;
+        }
         setTimeout(() => inp.focus(), 150);
       }
       if (modal) modal.classList.remove('hidden');
+
+      // Notificar al backend para extender ventana de escucha activa a 30s
+      try {
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        const fnEstado = api && (api.modal_cedula_estado || api.modalCedulaEstado);
+        if (fnEstado) fnEstado.call(api, true);
+      } catch (e) {
+        console.warn('[MODAL CEDULA] Error al notificar apertura al backend:', e);
+      }
     }
 
     function cerrarModalCedulaObligatoria() {
       const modal = document.getElementById('modalCedulaObligatoria');
       if (modal) modal.classList.add('hidden');
+      if (window._timerAutoGuardarCedula) {
+        clearTimeout(window._timerAutoGuardarCedula);
+        window._timerAutoGuardarCedula = null;
+      }
+      window.cedulaGuardandoPorVoz = false;
+
+      // Notificar al backend que el modal se cerró
+      try {
+        const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
+        const fnEstado = api && (api.modal_cedula_estado || api.modalCedulaEstado);
+        if (fnEstado) fnEstado.call(api, false);
+      } catch (e) {
+        console.warn('[MODAL CEDULA] Error al notificar cierre al backend:', e);
+      }
     }
 
     async function guardarCedulaObligatoria() {
+      if (window.cedulaGuardandoPorVoz) {
+        return;
+      }
       const inp = document.getElementById('cedulaModalInput');
       const hPacId = document.getElementById('cedulaModalPacienteId');
       const hConsId = document.getElementById('cedulaModalConsultaId');
+      const btnGuardar = document.getElementById('btnGuardarCedulaModal');
       const cedula = inp ? inp.value.trim() : '';
 
       if (!cedula) {
         mostrarToast('Por favor ingrese el número de cédula o documento', 'warning');
         return;
+      }
+
+      window.cedulaGuardandoPorVoz = true;
+      if (btnGuardar) {
+        btnGuardar.disabled = true;
+        btnGuardar.classList.add('opacity-50', 'cursor-not-allowed');
       }
 
       const pacienteId = hPacId && hPacId.value ? parseInt(hPacId.value, 10) : null;
@@ -4410,6 +4667,12 @@
       } catch (e) {
         console.error('Error al guardar cédula obligatoria:', e);
         mostrarToast('Error al guardar cédula: ' + e, 'error');
+      } finally {
+        window.cedulaGuardandoPorVoz = false;
+        if (btnGuardar) {
+          btnGuardar.disabled = false;
+          btnGuardar.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
       }
     }
 
@@ -4800,6 +5063,9 @@
 
     window.onCitaCreadaPorVoz = function(pac, fecha) {
       mostrarToast(`Cita agendada por voz: ${pac} (${fecha})`);
+      if (typeof filtroFechaCitas !== 'undefined') filtroFechaCitas = null;
+      const btnLimp = document.getElementById('btnLimpiarFiltroFecha');
+      if (btnLimp) btnLimp.classList.add('hidden');
       if (fecha) {
         try {
           const d = new Date(fecha.replace(' ', 'T'));
@@ -4809,7 +5075,8 @@
           }
         } catch(e) {}
       }
-      cargarCitas();
+      if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
+      else cargarCitas();
     };
 
     window.onWhatsAppReminderSent = function(resp) {
@@ -4836,6 +5103,9 @@
       if (!resp) return;
       const fStr = resp.fecha_hora || (resp.resultado && resp.resultado.fecha_hora) || resp.cita_programada;
       if (fStr) {
+        if (typeof filtroFechaCitas !== 'undefined') filtroFechaCitas = null;
+        const btnLimp = document.getElementById('btnLimpiarFiltroFecha');
+        if (btnLimp) btnLimp.classList.add('hidden');
         try {
           const d = new Date(fStr.replace(' ', 'T'));
           if (!isNaN(d.getTime())) {
@@ -4846,10 +5116,15 @@
       }
       if (resp.tipo === 'COMANDO_CITA' || resp.tipo === 'REPROGRAMAR_CITA') {
         mostrarToast(resp.mensaje || 'Cita clínica agendada con éxito');
-        cargarCitas();
+        if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
+        else cargarCitas();
       } else if (resp.tipo === 'CANCELAR_CITA') {
         mostrarToast(resp.mensaje || 'Cita cancelada con éxito');
-        cargarCitas();
+        if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
+        else cargarCitas();
+      } else if (resp.tipo === 'ACTUALIZAR_DATOS_PACIENTE' || resp.tipo === 'ACTUALIZAR_CONTACTO_PACIENTE') {
+        mostrarToast(resp.mensaje || 'Datos de paciente actualizados con éxito');
+        if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
       } else {
         if (resp.alerta_cedula_requerida) {
           abrirModalCedulaObligatoria(resp.paciente, resp.paciente_id, resp.consulta_id);
@@ -4861,10 +5136,13 @@
             mostrarToast(`Cita agendada: ${resp.cita_programada}`, 'info');
           }, 1200);
         }
-        cargarUltimoExpediente();
-        cargarPacientes();
-        cargarCitas();
-        cargarPdfs();
+        if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();
+        else {
+          cargarUltimoExpediente();
+          cargarPacientes();
+          cargarCitas();
+          cargarPdfs();
+        }
       }
     };
 

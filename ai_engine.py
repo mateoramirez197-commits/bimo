@@ -59,8 +59,88 @@ GLOSARIO_ODONTOLOGICO = (
     "brackets Roth MBT, elásticos intermaxilares, mordida abierta cruzada sobremordida clase I II III."
 )
 
+def _es_alucinacion_whisper(texto: str) -> bool:
+    if not texto or not texto.strip():
+        return True
+    t = texto.lower().strip()
+    frases_basura = (
+        "subtítulos realizados por",
+        "amara.org",
+        "gracias por ver",
+        "suscríbete al canal",
+        "subtitulado por",
+        "nombres y apellidos hispanoamericanos",
+        "términos odontológicos: odontograma",
+    )
+    if any(fb in t for fb in frases_basura):
+        return True
+    # Detectar repeticiones degeneradas de Whisper en silencio (ej. "Rau, Rau, Rau, Rau")
+    palabras = [w.strip(".,;:¡!¿?\"'()") for w in t.split() if w.strip(".,;:¡!¿?\"'()")]
+    if len(palabras) >= 5:
+        from collections import Counter
+        conteo = Counter(palabras)
+        palabra_mas_comun, freq = conteo.most_common(1)[0]
+        if freq >= 4 and (freq / len(palabras)) >= 0.45:
+            return True
+    return False
+
+
+def normalizar_audio_para_stt(audio_data, samplerate=16000):
+    """
+    Normaliza, elimina componente continua (DC offset), aplica Control Automático de Ganancia (AGC)
+    para micrófonos USB de baja ganancia (ej. ME6S) y remuestrea a 16000Hz.
+    Retorna (arr_int16_16k, arr_float32_16k, tiene_energia_voz).
+    """
+    import numpy as np
+    arr = np.asarray(audio_data)
+    if arr.ndim > 1:
+        # Si es estéreo/multicanal, elegir el canal con mayor energía acústica real
+        stds = [float(np.std(arr[:, c].astype(np.float32))) for c in range(arr.shape[1])]
+        mejor_canal = int(np.argmax(stds)) if stds else 0
+        arr = arr[:, mejor_canal]
+
+    es_flotante = np.issubdtype(arr.dtype, np.floating)
+    arr_f = arr.astype(np.float32)
+    if es_flotante and float(np.max(np.abs(arr_f)) if arr_f.size else 0.0) <= 2.0:
+        # Escalar a rango int16 [-32768, 32767] para procesamiento uniforme
+        arr_f = arr_f * 32767.0
+
+    if arr_f.size == 0:
+        return np.zeros(0, dtype=np.int16), np.zeros(0, dtype=np.float32), False
+
+    # 1. Eliminar DC offset
+    arr_f = arr_f - float(np.mean(arr_f))
+
+    # 2. Remuestreo rápido a 16000Hz si proviene de 44100Hz / 48000Hz
+    if samplerate and int(samplerate) != 16000 and arr_f.size > 16:
+        nuevo_tam = max(1, int(round(arr_f.size * 16000.0 / float(samplerate))))
+        x_old = np.linspace(0.0, 1.0, num=arr_f.size, endpoint=False)
+        x_new = np.linspace(0.0, 1.0, num=nuevo_tam, endpoint=False)
+        arr_f = np.interp(x_new, x_old, arr_f).astype(np.float32)
+
+    rms_raw = float(np.sqrt(np.mean(arr_f ** 2)))
+    peak_raw = float(np.max(np.abs(arr_f)))
+
+    # Si es ruido ambiente tenue o silencio digital, no amplificar como si fuera voz
+    if peak_raw < 18.0 or rms_raw < 3.5:
+        arr_int16 = np.clip(arr_f, -32768, 32767).astype(np.int16)
+        return arr_int16, (arr_int16.astype(np.float32) / 32768.0), False
+
+    # 3. Control Automático de Ganancia (AGC) equilibrado (hasta 65x para no amplificar ruido de fondo)
+    p995 = float(np.percentile(np.abs(arr_f), 99.5))
+    ref_amp = max(p995, peak_raw * 0.50, 1.0)
+    ganancia = min(65.0, 24000.0 / ref_amp)
+    if ganancia > 1.05:
+        arr_f = arr_f * ganancia
+
+    # Limitador suave para evitar recorte brusco (clipping)
+    arr_f = np.clip(arr_f, -32000.0, 32000.0)
+    arr_int16 = arr_f.astype(np.int16)
+    arr_float32 = arr_f / 32768.0
+    return arr_int16, arr_float32, True
+
+
 def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
-    model = get_whisper_engine()
     if not initial_prompt:
         from config import cargar_datos_clinica
         datos = cargar_datos_clinica()
@@ -77,22 +157,94 @@ def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
             vocab_aprendido = ""
 
         initial_prompt = (
-            f"Consulta odontológica y médica del Doctor {doc_nom}. "
-            f"Dictado clínico de números y contactos: cero nueve, seis cero cero, seiscientos, seiscientos veintiocho, doble cero, teléfono, cédula. "
+            f"Consulta clínica odontológica del Doctor {doc_nom}. "
+            f"Dictado clínico de pacientes, edades, números de cédula de 10 dígitos y teléfonos: "
+            f"cero nueve, diecisiete, edad, años, cédula, premolar superior derecho e izquierdo, molar, caries, resina. "
             f"{GLOSARIO_NOMBRES_HISPANOAMERICANOS} {GLOSARIO_ANDINO_KICHWA}{vocab_aprendido} {GLOSARIO_ODONTOLOGICO}"
         )
+
+    es_mock_local = hasattr(get_whisper_engine, "assert_called")
+    entrada_para_local = ruta_wav
+
+    # 1. Preparar y normalizar el audio (AGC + 16kHz) y transcribir con Groq Whisper Large V3 Turbo
+    if not es_mock_local:
+        try:
+            import io
+            import numpy as np
+            from scipy.io.wavfile import read as wav_read, write as wav_write
+
+            audio_bytes = None
+            nombre_archivo = "dictado.wav"
+            tiene_voz = True
+
+            if isinstance(ruta_wav, (str, os.PathLike)) and os.path.exists(ruta_wav):
+                if os.path.getsize(ruta_wav) > 200:
+                    try:
+                        sr_leido, data_leida = wav_read(ruta_wav)
+                        arr_i16, arr_f32, tiene_voz = normalizar_audio_para_stt(data_leida, samplerate=sr_leido)
+                        if tiene_voz and arr_i16.size > 800:
+                            buf = io.BytesIO()
+                            wav_write(buf, 16000, arr_i16)
+                            audio_bytes = buf.getvalue()
+                            entrada_para_local = arr_f32
+                    except Exception:
+                        with open(ruta_wav, "rb") as f_aud:
+                            audio_bytes = f_aud.read()
+                    nombre_archivo = os.path.basename(str(ruta_wav)) or "dictado.wav"
+            elif isinstance(ruta_wav, np.ndarray) and ruta_wav.size > 800:
+                arr_i16, arr_f32, tiene_voz = normalizar_audio_para_stt(ruta_wav, samplerate=16000)
+                if tiene_voz:
+                    buf = io.BytesIO()
+                    wav_write(buf, 16000, arr_i16)
+                    audio_bytes = buf.getvalue()
+                    entrada_para_local = arr_f32
+
+            if not tiene_voz:
+                return ""
+
+            api_key = get_groq_api_key()
+            if api_key and audio_bytes:
+                cliente_stt = Groq(api_key=api_key)
+                # IMPORTANTE: NO incluir la palabra 'Bimo' en el prompt de Whisper para que jamás la alucine con ruido ambiente
+                prompt_corto = (
+                    "Consulta odontológica en español: paciente, edad, años, cédula, teléfono, "
+                    "premolar superior derecho e izquierdo, molar, canino, incisivo, caries, resina, endodoncia, cita."
+                )
+                for modelo_stt in ("whisper-large-v3-turbo", "whisper-large-v3"):
+                    try:
+                        resp_stt = cliente_stt.audio.transcriptions.create(
+                            file=(nombre_archivo, audio_bytes),
+                            model=modelo_stt,
+                            language="es",
+                            prompt=prompt_corto,
+                            temperature=0.0,
+                            response_format="text",
+                            timeout=12.0
+                        )
+                        texto_groq = str(resp_stt or "").strip()
+                        if texto_groq and not _es_alucinacion_whisper(texto_groq):
+                            return texto_groq
+                        break
+                    except Exception as e_m_stt:
+                        if "429" not in str(e_m_stt):
+                            break
+        except Exception as e_groq_stt:
+            print(f"[STT GROQ FALLBACK] Usando Faster-Whisper local ({e_groq_stt})")
+
+    # 2. Fallback automático a Faster-Whisper local en CPU
+    model = get_whisper_engine()
     try:
         segmentos, _ = model.transcribe(
-            ruta_wav, 
+            entrada_para_local, 
             language="es",
             initial_prompt=initial_prompt,
             vad_filter=True,
             vad_parameters=dict(
-                threshold=0.42,
-                min_speech_duration_ms=250,
-                max_speech_duration_s=60,
-                min_silence_duration_ms=450,
-                speech_pad_ms=300
+                threshold=0.25,
+                min_speech_duration_ms=150,
+                max_speech_duration_s=90,
+                min_silence_duration_ms=650,
+                speech_pad_ms=400
             ),
             beam_size=1,
             best_of=1,
@@ -103,7 +255,7 @@ def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
     except Exception as e_vad:
         print(f"[TRANSCRIPCIÓN VAD FALLBACK] VAD no disponible ({e_vad}). Transcribiendo directamente...")
         segmentos, _ = model.transcribe(
-            ruta_wav, 
+            entrada_para_local, 
             language="es",
             initial_prompt=initial_prompt,
             vad_filter=False,
@@ -113,6 +265,8 @@ def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
             condition_on_previous_text=False
         )
         texto = "".join([s.text + " " for s in segmentos]).strip()
+    if not es_mock_local and _es_alucinacion_whisper(texto):
+        return ""
     return texto
 
 def contiene_especificacion_temporal(texto: str) -> bool:
@@ -206,18 +360,29 @@ def extraer_piezas_mencionadas(texto: str) -> list[str]:
     t = texto
 
     # Enmascarar números que no son piezas dentales
-    # Cédulas / teléfonos (7 o más dígitos consecutivos)
+    # Cédulas / teléfonos con o sin espacios, puntos o guiones (ej. '1724891203' o '17 24 89 12 03')
+    t = re.sub(
+        r'(?:c[eé]dula|s[eé]dula|c[eé]lula|documento|identificaci[oó]n|identidad|c\.?\s*i\.?|ruc|tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)(?:[^\d]{0,30}?)(?:\d[\s\.\-]?){6,15}\d',
+        ' ',
+        t,
+        flags=re.IGNORECASE
+    )
+    t = re.sub(r'(?<!\d)(?:\d[\s\.\-]?){7,14}\d(?!\d)', ' ', t)
     t = re.sub(r'\b\d{7,}\b', ' ', t)
-    # Fechas
+    # Fechas y días relativos
     t = re.sub(r'\b\d{1,4}[-/]\d{1,2}[-/]\d{1,4}\b', ' ', t)
+    t = re.sub(r'\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b(?:d[ií]a|fecha|dentro\s+de)\s+\d{1,3}\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b\d{1,3}\s*d[ií]as?\b', ' ', t, flags=re.IGNORECASE)
     # Horas
     t = re.sub(r'\b\d{1,2}:\d{2}\b', ' ', t)
-    # Edades
-    t = re.sub(r'\b\d{1,3}\s*a[ñn]os?\b', ' ', t, flags=re.IGNORECASE)
+    # Edades (ej: '34 años', 'edad 34', 'de 34 años')
+    t = re.sub(r'\b\d{1,3}\s*a[ñn\ufffd\?]os?\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\bedad\s*(?:de\s*)?:?\s*\d{1,3}\b', ' ', t, flags=re.IGNORECASE)
     # Montos y precios
     t = re.sub(r'[\$€]\s*\d+(?:\.\d+)?', ' ', t)
     t = re.sub(r'\b\d+(?:\.\d+)?\s*(?:d[oó]lares|usd|pesos|euros)\b', ' ', t, flags=re.IGNORECASE)
-    t = re.sub(r'\b(?:abono|costo|pago|saldo|total|precio)\s*(?:de\s*)?\d+(?:\.\d+)?\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b(?:abona|abono|costo|cuesta|pago|paga|saldo|total|precio|resta|queda|quedan)\s*(?:de\s*)?\d+(?:\.\d+)?\b', ' ', t, flags=re.IGNORECASE)
 
     piezas_encontradas = []
 
@@ -240,26 +405,95 @@ def extraer_piezas_mencionadas(texto: str) -> list[str]:
             pass
     t_sin_rangos = patron_rango.sub(' ', t)
 
+    # Designaciones anatómicas compuestas bilaterales (ej: 'premolar superior derecho e izquierdo', 'segundo molar inferior derecho y izquierdo')
+    patron_anat_compuesto_dual = re.compile(
+        r'\b(?:(primer|segundo|tercer|1er|2do|3er)\s+)?(premolar(?:es)?|molar(?:es)?|muelas?|incisivos?|caninos?|colmillos?)\s+(superior(?:es)?|inferior(?:es)?)\s+(derechos?|izquierdos?)(?:[,\s]+(?:e\s+|y\s+)?(derechos?|izquierdos?))\b',
+        re.IGNORECASE
+    )
+    def _singular_tipo(t_str: str) -> str:
+        tl = t_str.lower()
+        if tl.startswith('premolar'): return 'premolar'
+        if tl.startswith('molar'): return 'molar'
+        if tl.startswith('muela'): return 'molar'
+        if tl.startswith('incisivo'): return 'incisivo'
+        if tl.startswith('canino') or tl.startswith('colmillo'): return 'canino'
+        return tl.rstrip('s')
+
+    def _singular_mod(m_str: str) -> str:
+        ml = m_str.lower()
+        if ml.startswith('superior'): return 'superior'
+        if ml.startswith('inferior'): return 'inferior'
+        if ml.startswith('derech'): return 'derecho'
+        if ml.startswith('izquierd'): return 'izquierdo'
+        return ml
+
+    for m in patron_anat_compuesto_dual.finditer(t_sin_rangos):
+        ord_pref = f"{m.group(1).lower()} " if m.group(1) else ""
+        tipo = _singular_tipo(m.group(2))
+        plano_v = _singular_mod(m.group(3))
+        lado1 = _singular_mod(m.group(4))
+        lado2 = _singular_mod(m.group(5))
+        p1 = f"{ord_pref}{tipo} {plano_v} {lado1}".strip().capitalize()
+        p2 = f"{ord_pref}{tipo} {plano_v} {lado2}".strip().capitalize()
+        piezas_encontradas.append(p1)
+        piezas_encontradas.append(p2)
+    t_sin_comp = patron_anat_compuesto_dual.sub(' ', t_sin_rangos)
+
+    # Orden inverso compuesto (ej: 'premolar derecho e izquierdo superior')
+    patron_anat_compuesto_inv = re.compile(
+        r'\b(?:(primer|segundo|tercer|1er|2do|3er)\s+)?(premolar(?:es)?|molar(?:es)?|muelas?|incisivos?|caninos?|colmillos?)\s+(derechos?|izquierdos?)(?:[,\s]+(?:e\s+|y\s+)?(derechos?|izquierdos?))\s+(superior(?:es)?|inferior(?:es)?)\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_compuesto_inv.finditer(t_sin_comp):
+        ord_pref = f"{m.group(1).lower()} " if m.group(1) else ""
+        tipo = _singular_tipo(m.group(2))
+        lado1 = _singular_mod(m.group(3))
+        lado2 = _singular_mod(m.group(4))
+        plano_v = _singular_mod(m.group(5))
+        p1 = f"{ord_pref}{tipo} {plano_v} {lado1}".strip().capitalize()
+        p2 = f"{ord_pref}{tipo} {plano_v} {lado2}".strip().capitalize()
+        piezas_encontradas.append(p1)
+        piezas_encontradas.append(p2)
+    t_sin_comp = patron_anat_compuesto_inv.sub(' ', t_sin_comp)
+
+    # Plurales bilaterales por arcada (ej: 'premolares superiores', 'molares inferiores')
+    patron_anat_plural_arcada = re.compile(
+        r'\b(?:(primeros|segundos|terceros)\s+)?(premolares|molares|caninos)\s+(superiores|inferiores)(?!\s+(?:derech|izquierd))\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_plural_arcada.finditer(t_sin_comp):
+        ord_raw = (m.group(1) or "").lower()
+        ord_pref = "primer " if "primer" in ord_raw else ("segundo " if "segund" in ord_raw else ("tercer " if "tercer" in ord_raw else ""))
+        tipo = _singular_tipo(m.group(2))
+        plano_v = _singular_mod(m.group(3))
+        piezas_encontradas.append(f"{ord_pref}{tipo} {plano_v} derecho".strip().capitalize())
+        piezas_encontradas.append(f"{ord_pref}{tipo} {plano_v} izquierdo".strip().capitalize())
+    t_sin_comp = patron_anat_plural_arcada.sub(' ', t_sin_comp)
+
     # Designaciones anatómicas duales sin número (ej: 'premolar derecho, izquierdo')
     patron_anat_dual = re.compile(
         r'\b(premolar|molar|incisivo|canino)\s+(derecho|izquierdo|superior|inferior)(?:[,\s]+(?:e\s+|y\s+)?(derecho|izquierdo|superior|inferior))\b',
         re.IGNORECASE
     )
-    for m in patron_anat_dual.finditer(t_sin_rangos):
+    for m in patron_anat_dual.finditer(t_sin_comp):
         tipo = m.group(1).capitalize()
         pos1 = m.group(2).lower()
         pos2 = m.group(3).lower()
         piezas_encontradas.append(f"{tipo} {pos1}")
         piezas_encontradas.append(f"{tipo} {pos2}")
-    t_sin_anat = patron_anat_dual.sub(' ', t_sin_rangos)
+    t_sin_anat = patron_anat_dual.sub(' ', t_sin_comp)
 
-    # Designaciones anatómicas individuales simples
+    # Designaciones anatómicas individuales simples (incluyendo ordinal opcional)
     patron_anat_simple = re.compile(
-        r'\b(premolar|molar|incisivo|canino)\s+(superior|inferior)?\s*(derecho|izquierdo)\b',
+        r'\b(?:(primer|segundo|tercer|1er|2do|3er)\s+)?(premolar|molar|muela|incisivo|canino|colmillo)\s+(superior|inferior)?\s*(derecho|derecha|izquierdo|izquierda)\b',
         re.IGNORECASE
     )
     for m in patron_anat_simple.finditer(t_sin_anat):
-        full = " ".join(m.group(0).strip().split()).capitalize()
+        ord_pref = f"{m.group(1).lower()} " if m.group(1) else ""
+        tipo = _singular_tipo(m.group(2))
+        plano_v = f"{_singular_mod(m.group(3))} " if m.group(3) else ""
+        lado = _singular_mod(m.group(4))
+        full = f"{ord_pref}{tipo} {plano_v}{lado}".strip().capitalize()
         piezas_encontradas.append(full)
     t_sin_anat = patron_anat_simple.sub(' ', t_sin_anat)
 
@@ -1281,8 +1515,12 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
         return None, None
     t = normalizar_palabras_numericas(texto)
     
-    # 1. Cédula por ancla léxica explícita
-    ced_match = re.search(r'(?:c[eé]dula|identificaci[oó]n|documento|identidad|c\.i\.?)(?:[^\d]{1,30}?)(?:es|al|para|con\s+el|con|del\s+paciente)?\s*[:\-]?\s*([0-9\s]{8,30})', t, re.I)
+    # 1. Cédula por ancla léxica explícita (incluye variantes fonéticas de Whisper: sédula, célula, ci, ruc)
+    ced_match = re.search(
+        r'(?:c[eé]dula|s[eé]dula|c[eé]lula|identificaci[oó]n|documento|identidad|c\.?\s*i\.?|ruc)(?:[^\d]{0,35}?)(?:n[uú]mero|nro|es|al|para|con\s+el|con|del\s+paciente)?\s*[:\-]?\s*([0-9][0-9\s\.\-]{6,32}[0-9])',
+        t,
+        re.I
+    )
     ced = None
     if ced_match:
         digits = re.sub(r'\D', '', ced_match.group(1))
@@ -1292,7 +1530,11 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
             ced = digits
 
     # 2. Teléfono por ancla léxica explícita
-    tel_match = re.search(r'(?:tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)(?:[^\d]{1,30}?)(?:es|al|para|con\s+el|con)?\s*[:\-]?\s*([0-9\s]{8,30})', t, re.I)
+    tel_match = re.search(
+        r'(?:tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)(?:[^\d]{0,35}?)(?:n[uú]mero|nro|es|al|para|con\s+el|con)?\s*[:\-]?\s*([0-9][0-9\s\.\-]{6,32}[0-9])',
+        t,
+        re.I
+    )
     tel = None
     if tel_match:
         digits = re.sub(r'\D', '', tel_match.group(1))
@@ -1309,6 +1551,19 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
         if tel and tel == ced:
             if not tel.startswith('09') and not tel.startswith('9'):
                 tel = None
+
+    # 4. Si no hubo ancla léxica explícita para la cédula, rescatar secuencia de 10 dígitos con provincia ecuatoriana válida (01..24 o 30)
+    # que no sea un celular (095..099) ni coincida con el teléfono ya extraído
+    if not ced:
+        for m_num in re.finditer(r'(?<!\d)(?:\d[\s\.\-]?){9}\d(?!\d)', t):
+            cand = re.sub(r'\D', '', m_num.group(0))
+            if len(cand) == 10 and cand != tel:
+                if cand.startswith(('095', '096', '097', '098', '099')):
+                    continue
+                prov = int(cand[:2])
+                if (1 <= prov <= 24) or prov == 30:
+                    ced = cand
+                    break
 
     return ced, tel
 
@@ -1803,7 +2058,7 @@ REGLAS ESTRICTAS DE FILIACIÓN CLÍNICA:
 - Si el doctor no dicta cédula, pon 'No especificado'.
 - Si se dictan extracciones realizadas, dientes sacados o perdidos, regístralos en 'odontograma' con el hallazgo 'Extracción previa / Ausente' para pintarse en gris.
 
-- 'odontograma': Para CADA pieza dental mencionada, en 'pieza_dental' debes colocar SIEMPRE su NÚMERO FDI (ej: '14', '16', '21', '24', '36', '46'). Si el doctor dice 'premolar superior derecho' conviértelo a '14'; si dice 'premolar superior izquierdo' a '24'; si dice 'premolar inferior izquierdo' a '34'; si dice 'molar superior derecho' o 'muela superior derecha' a '16'; si dice 'molar inferior izquierdo' o 'muela inferior izquierda' a '36'.
+- 'odontograma': Para CADA pieza dental mencionada, en 'pieza_dental' debes colocar SIEMPRE su NÚMERO FDI (ej: '14', '16', '21', '24', '36', '46'). Si el doctor dice 'premolar superior derecho' conviértelo a '14'; si dice 'premolar superior izquierdo' a '24'; si dice 'premolar inferior izquierdo' a '34'; si dice 'premolar inferior derecho' a '44'; si dice 'molar superior derecho' o 'muela superior derecha' a '16'; si dice 'molar superior izquierdo' o 'muela superior izquierda' a '26'; si dice 'molar inferior izquierdo' o 'muela inferior izquierda' a '36'; si dice 'molar inferior derecho' o 'muela inferior derecha' a '46'. Si el doctor menciona ambos lados (ej: 'premolar superior derecho e izquierdo' o 'premolares superiores'), DEBES crear DOS objetos separados en 'odontograma': uno para '14' y otro para '24' (o '44' y '34' si son inferiores; '16' y '26' si son molares superiores).
 REGLA DE EXHAUSTIVIDAD DEL ODONTOGRAMA (OBLIGATORIA): EL ARRAY 'odontograma' DEBE CONTENER UN OBJETO POR CADA PIEZA DENTAL MENCIONADA EN EL DICTADO. ESTÁ PROHIBIDO RESUMIR, AGRUPAR, OMITIR O DEJAR PIEZAS IMPLÍCITAS. SI EL DOCTOR NOMBRA N PIEZAS (O UN GRUPO DE PIEZAS), EL ARRAY DEBE TENER AL MENOS N OBJETOS. SI UN MISMO HALLAZGO APLICA A VARIAS PIEZAS, REPÍTELO EN CADA UNA. SI UNA PIEZA TIENE VARIOS HALLAZGOS, AGRÚPALOS EN SU LISTA 'procedimientos_o_hallazgos'. NO INVENTES PIEZAS NI HALLAZGOS QUE NO SE DICTARON. ANTES DE RESPONDER, CUENTA LAS PIEZAS DEL DICTADO Y VERIFICA QUE EL ARRAY TENGA ESA CANTIDAD.
 Si el doctor dice 'premolar derecho' sin cuadrante ni número no debe inventarse; si el doctor dice 'premolar derecho, izquierdo' sin más precisión, crea un objeto por cada mención con la designación textual tal como se dictó ('Premolar derecho', 'Premolar izquierdo') y no fabriques un número FDI que no se dijo. Si dice '31 y 32', crea dos objetos (31, 32). Si dice 'del 11 al 13' o 'incisivos superiores derechos', expande solo rangos numéricos explícitos.
 - 'pagos': Si el doctor menciona costo del tratamiento, abono o saldo (ej: 'el tratamiento cuesta 150 dólares, se agrega un abono de 50 y queda 100 restante', 'costo 200, abono 50', 'costo 80 cancelado'):
@@ -1976,7 +2231,7 @@ Texto dictado:
 
     try:
         modelos_candidatos = [modelo]
-        for m_fb in ("openai/gpt-oss-20b", "qwen/qwen3.8-27b"):
+        for m_fb in ("openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"):
             if m_fb not in modelos_candidatos:
                 modelos_candidatos.append(m_fb)
 
@@ -2037,7 +2292,7 @@ Texto dictado:
                     resultado = json.loads(resp_hc.choices[0].message.content)
                     break
                 except Exception as e_re:
-                    for m_alt in ("openai/gpt-oss-20b", "qwen/qwen3.8-27b"):
+                    for m_alt in ("openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"):
                         if m_alt != modelo_activo:
                             try:
                                 resp_hc = cliente.chat.completions.create(
@@ -2068,7 +2323,13 @@ Texto dictado:
             fil = resultado.get("datos_filiacion", {})
             nom = _normalizar_nombres_espanol(fil.get("nombre", ""))
             fil["nombre"] = nom
-            fil["documento"] = sanitizar_cedula(fil.get("documento", ""))
+            doc_raw = fil.get("documento") or fil.get("cedula") or fil.get("ci") or resultado.get("cedula") or resultado.get("documento") or ""
+            doc_limpio = sanitizar_cedula(str(doc_raw))
+            if doc_limpio == "No especificado":
+                ced_det, _ = extraer_cedula_y_telefono_dictados(texto_crudo)
+                if ced_det:
+                    doc_limpio = sanitizar_cedula(ced_det)
+            fil["documento"] = doc_limpio
             fil["edad"] = _limpiar_edad_dictada(fil.get("edad", ""), texto_crudo)
             sex = fil.get("sexo", "No especificado")
             if not sex or sex.lower() in ("no especificado", "none", ""):

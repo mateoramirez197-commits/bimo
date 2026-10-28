@@ -9,7 +9,8 @@ import edge_tts
 import time
 
 # Voz Femenina Neural de Alta Definición (Cálida, Natural, Rápida y Amigable)
-VOZ_FEMENINA = "es-CO-SalomeNeural" # Alternativa: "es-MX-DaliaNeural"
+VOZ_FEMENINA = "es-CO-SalomeNeural"
+VOZ_FEMENINA_RESPALDO = "es-MX-DaliaNeural"
 _tts_lock = threading.Lock()
 _BIMO_HABLANDO = False
 
@@ -58,8 +59,12 @@ def detectar_voz_espanol(engine, forzar_recacheo: bool = False) -> str | None:
         return None
 
 async def _generar_audio_edge(texto: str, ruta_mp3: str):
-    communicate = edge_tts.Communicate(texto, VOZ_FEMENINA, rate="+22%")
-    await asyncio.wait_for(communicate.save(ruta_mp3), timeout=4.5)
+    try:
+        communicate = edge_tts.Communicate(texto, VOZ_FEMENINA, rate="+6%")
+        await asyncio.wait_for(communicate.save(ruta_mp3), timeout=5.5)
+    except Exception:
+        communicate = edge_tts.Communicate(texto, VOZ_FEMENINA_RESPALDO, rate="+5%")
+        await asyncio.wait_for(communicate.save(ruta_mp3), timeout=5.5)
 
 def _reproducir_audio(texto: str):
     global _BIMO_HABLANDO

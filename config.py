@@ -663,7 +663,7 @@ def set_onboarding_completado(completado: bool = True):
 
 def obtener_pin_doctor() -> str:
     d = cargar_datos_clinica()
-    return str(d.get("pin_rapido", "1234")).strip()
+    return str(d.get("pin_rapido", "")).strip()
 
 def guardar_pin_doctor(pin: str):
     d = cargar_datos_clinica()

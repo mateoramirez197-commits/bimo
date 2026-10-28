@@ -3,48 +3,35 @@ setlocal enabledelayedexpansion
 title BIMO Pro
 cd /d "%~dp0"
 
-:: 1. Si existe la distribución binaria compilada BIMO_Pro.exe, advertir y lanzarla
-if exist "dist\BIMO_Pro\BIMO_Pro.exe" (
-    echo [AVISO] Ejecutando binario compilado dist\BIMO_Pro\BIMO_Pro.exe.
-    echo Si modifico codigo fuente recientemente, ejecute 'ejecutar_bimo_dev.bat' para probar los cambios.
-    start "" "dist\BIMO_Pro\BIMO_Pro.exe"
-    exit /b 0
+:: 1. Si existe main.py (código fuente actualizado), ejecutar directamente con Python
+if exist "main.py" (
+    if exist ".venv\Scripts\pythonw.exe" (
+        start "" ".venv\Scripts\pythonw.exe" main.py
+        exit /b 0
+    )
+    if exist "venv\Scripts\pythonw.exe" (
+        start "" "venv\Scripts\pythonw.exe" main.py
+        exit /b 0
+    )
+    where pythonw >nul 2>&1
+    if %ERRORLEVEL% equ 0 (
+        start "" pythonw main.py
+        exit /b 0
+    )
+    where python >nul 2>&1
+    if %ERRORLEVEL% equ 0 (
+        start "" python main.py
+        exit /b 0
+    )
 )
+
+:: 2. Respaldo: distribución binaria compilada BIMO_Pro.exe
 if exist "BIMO_Pro.exe" (
     start "" "BIMO_Pro.exe"
     exit /b 0
 )
-
-:: 2. Priorizar pythonw.exe (ejecución 100% gráfica sin ventana de consola CMD)
-if exist ".venv\Scripts\pythonw.exe" (
-    start "" ".venv\Scripts\pythonw.exe" main.py
-    exit /b 0
-)
-if exist "venv\Scripts\pythonw.exe" (
-    start "" "venv\Scripts\pythonw.exe" main.py
-    exit /b 0
-)
-
-where pythonw >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    start "" pythonw main.py
-    exit /b 0
-)
-
-:: 3. Fallback con entorno virtual local
-if exist ".venv\Scripts\python.exe" (
-    start "" ".venv\Scripts\python.exe" main.py
-    exit /b 0
-)
-if exist "venv\Scripts\python.exe" (
-    start "" "venv\Scripts\python.exe" main.py
-    exit /b 0
-)
-
-:: 4. Fallback con Python general
-where python >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    start "" python main.py
+if exist "dist\BIMO_Pro\BIMO_Pro.exe" (
+    start "" "dist\BIMO_Pro\BIMO_Pro.exe"
     exit /b 0
 )
 

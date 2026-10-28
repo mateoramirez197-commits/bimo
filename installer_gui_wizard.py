@@ -148,12 +148,29 @@ class BimoSetupWizard(tk.Tk):
         self._mostrar_paso(1)
 
     def _localizar_payload(self):
-        # 1. En _MEIPASS (PyInstaller)
+        # 1. En _MEIPASS (PyInstaller temporal)
         p1 = os.path.join(self.base_dir, "bimo_payload.zip")
         if os.path.exists(p1):
             return p1
-        # 2. En carpeta dist (desarrollo)
-        p2 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist", "bimo_payload.zip")
+        # 2. Junto al ejecutable (USB, carpeta de instalador portable)
+        try:
+            exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+            p_exe = os.path.join(exe_dir, "bimo_payload.zip")
+            if os.path.exists(p_exe):
+                return p_exe
+        except Exception:
+            pass
+        # 3. En el directorio de trabajo actual
+        p_cwd = os.path.join(os.getcwd(), "bimo_payload.zip")
+        if os.path.exists(p_cwd):
+            return p_cwd
+        # 4. Junto al script Python
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        p_script = os.path.join(script_dir, "bimo_payload.zip")
+        if os.path.exists(p_script):
+            return p_script
+        # 5. En carpeta dist (desarrollo)
+        p2 = os.path.join(script_dir, "dist", "bimo_payload.zip")
         if os.path.exists(p2):
             return p2
         return ""
@@ -674,6 +691,8 @@ class BimoSetupWizard(tk.Tk):
             os.makedirs(destino, exist_ok=True)
 
             # 1. Extraer payload zip
+            if not self.payload_zip or not os.path.exists(self.payload_zip):
+                self.payload_zip = self._localizar_payload()
             if not self.payload_zip or not os.path.exists(self.payload_zip):
                 raise FileNotFoundError("No se encontró el archivo de paquete bimo_payload.zip.")
 

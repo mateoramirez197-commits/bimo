@@ -56,6 +56,10 @@ class TestMegaPromptV3(unittest.TestCase):
         res_master = bridge.autenticar_pin("__master__")
         self.assertEqual(res_master.get("status"), "error")
 
+        # 4. PIN '1234' ya no es universal: si la clínica configuró otro PIN, debe ser rechazado
+        res_1234 = bridge.autenticar_pin("1234")
+        self.assertEqual(res_1234.get("status"), "error")
+
     @patch.dict(os.environ, {"BIMO_DEV_BACKDOOR": "1"}, clear=False)
     @patch("desktop_app.cargar_datos_clinica")
     @patch("desktop_app.get_connection")

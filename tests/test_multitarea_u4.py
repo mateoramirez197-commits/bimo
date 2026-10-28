@@ -148,7 +148,7 @@ def run_tests():
                                             mock_conn.return_value.__enter__.return_value = mock_conn.return_value
 
                                             with patch("desktop_app.agendar_cita", mock_cita_db):
-                                                resp1 = bridge.procesar_texto_clinico("dictado clinico simulado", generar_pdf=True)
+                                                resp1 = bridge.procesar_texto_clinico("paciente acude a consulta por dolor y caries en pieza molar", generar_pdf=True)
 
     if resp1.get("status") == "ok" and mock_pago_db.called and mock_cita_db.called:
         print("[OK] Multitarea en HISTORIA_CLINICA: Consulta guardada, PDF generado, pago y cita agendados en una sola pasada")
@@ -178,7 +178,7 @@ def run_tests():
                                         mock_conn.return_value.__enter__.return_value = mock_conn.return_value
 
                                         with patch("desktop_app.agendar_cita") as mock_ag_segunda:
-                                            resp2 = bridge.procesar_texto_clinico("dictado clinico repetido", generar_pdf=True)
+                                            resp2 = bridge.procesar_texto_clinico("paciente acude a consulta por dolor y caries en pieza molar segunda pasada", generar_pdf=True)
 
     cita_no_duplicada = not mock_ag_segunda.called
     pago_actualizado = mock_pago_update.called

@@ -247,16 +247,20 @@ def agendar_cita(nombre_paciente="", telefono="", fecha_hora_inicio="", fecha_ho
         except Exception:
             dt_fin = dt_inicio + datetime.timedelta(minutes=duracion_minutos or 30)
 
-    # 1. Guardar en SQLite
-    cita_id = crear_cita_db(
-        nombre_paciente=nombre_paciente,
-        telefono=telefono,
-        fecha_hora_inicio=fecha_hora_inicio,
-        fecha_hora_fin=fecha_hora_fin,
-        descripcion=descripcion,
-        paciente_id=paciente_id,
-        google_event_id=None
-    )
+    # 1. Guardar en SQLite (o reutilizar cita_id si ya fue actualizada)
+    cita_id_existente = kwargs.get("cita_id_existente")
+    if cita_id_existente:
+        cita_id = cita_id_existente
+    else:
+        cita_id = crear_cita_db(
+            nombre_paciente=nombre_paciente,
+            telefono=telefono,
+            fecha_hora_inicio=fecha_hora_inicio,
+            fecha_hora_fin=fecha_hora_fin,
+            descripcion=descripcion,
+            paciente_id=paciente_id,
+            google_event_id=None
+        )
 
     # Si telefono vino vacio, recuperar el telefono heredado por la base de datos
     if not telefono and cita_id:
@@ -304,6 +308,17 @@ def agendar_cita(nombre_paciente="", telefono="", fecha_hora_inicio="", fecha_ho
             }
             evento_creado = _CALENDAR_SERVICE.events().insert(calendarId='primary', body=evento).execute()
             google_event_id = evento_creado.get('id')
+            if google_event_id and cita_id:
+                try:
+                    from database import get_connection
+                    with get_connection() as conn:
+                        conn.cursor().execute(
+                            "UPDATE citas_agenda SET google_event_id = ? WHERE id = ?",
+                            (google_event_id, cita_id)
+                        )
+                        conn.commit()
+                except Exception:
+                    pass
             print(f"[CALENDAR] Cita sincronizada silenciosamente vía API en Google Calendar: {google_event_id}")
         except Exception as e:
             print(f"[CALENDAR] Error sincronizando con Google Calendar API: {e}")
@@ -381,27 +396,35 @@ def reprogramar_cita(nombre_paciente, nueva_fecha_hora_inicio, nueva_fecha_hora_
 def obtener_citas(limite=50):
     return listar_citas_db(limite=limite)
 
-def forzar_sincronizacion_calendar():
-    """Limpia tokens locales corruptos y reinicia el flujo de autenticación OAuth2."""
-    global _CALENDAR_SERVICE
-    for f in ['token.json', 'token.pickle']:
+def _limpiar_archivos_token():
+    rutas = [
+        os.path.join(str(DATA_DIR), 'token.json'),
+        os.path.join(str(DATA_DIR), 'token.pickle'),
+        os.path.join(str(BASE_DIR), 'token.json'),
+        os.path.join(str(BASE_DIR), 'token.pickle'),
+        'token.json',
+        'token.pickle',
+    ]
+    for f in rutas:
         if os.path.exists(f):
             try:
                 os.remove(f)
             except Exception:
                 pass
+
+def forzar_sincronizacion_calendar():
+    """Limpia tokens locales corruptos y reinicia el flujo de autenticación OAuth2."""
+    global _CALENDAR_SERVICE, _GOOGLE_CREDS
+    _limpiar_archivos_token()
     _CALENDAR_SERVICE = None
+    _GOOGLE_CREDS = None
     return init_google_calendar()
 
 def desvincular_calendar():
     """Elimina tokens de Google Calendar para operar exclusivamente en agenda local."""
-    global _CALENDAR_SERVICE
-    for f in ['token.json', 'token.pickle']:
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except Exception:
-                pass
+    global _CALENDAR_SERVICE, _GOOGLE_CREDS
+    _limpiar_archivos_token()
     _CALENDAR_SERVICE = None
+    _GOOGLE_CREDS = None
     print("[CALENDAR] Google Calendar desvinculado con éxito. Operando en agenda local.")
     return True

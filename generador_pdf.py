@@ -161,9 +161,11 @@ def extraer_fdi(pieza_val) -> str:
         if es_sup and es_izq: return "25" if es_2do else "24"
         if es_inf and es_izq: return "35" if es_2do else "34"
         if es_inf and es_der: return "45" if es_2do else "44"
-        if es_sup: return "14"
-        if es_inf: return "34"
-        return "14"
+        if es_izq: return "25" if es_2do else "24"
+        if es_der: return "15" if es_2do else "14"
+        if es_sup: return "15" if es_2do else "14"
+        if es_inf: return "35" if es_2do else "34"
+        return "15" if es_2do else "14"
 
     if any(k in s for k in ['molar', 'muela']):
         es_3er = any(k in s for k in ['tercer', 'tercero', 'juicio', 'cordal', '3er', '3°'])
@@ -172,15 +174,20 @@ def extraer_fdi(pieza_val) -> str:
         if es_sup and es_izq: return "28" if es_3er else ("27" if es_2do else "26")
         if es_inf and es_izq: return "38" if es_3er else ("37" if es_2do else "36")
         if es_inf and es_der: return "48" if es_3er else ("47" if es_2do else "46")
-        if es_sup: return "16"
-        if es_inf: return "36"
-        return "16"
+        if es_izq: return "28" if es_3er else ("27" if es_2do else "26")
+        if es_der: return "18" if es_3er else ("17" if es_2do else "16")
+        if es_sup: return "18" if es_3er else ("17" if es_2do else "16")
+        if es_inf: return "38" if es_3er else ("37" if es_2do else "36")
+        return "18" if es_3er else ("17" if es_2do else "16")
 
     if any(k in s for k in ['canin', 'colmill']):
         if es_sup and es_der: return "13"
         if es_sup and es_izq: return "23"
         if es_inf and es_izq: return "33"
         if es_inf and es_der: return "43"
+        if es_izq: return "23"
+        if es_der: return "13"
+        if es_inf: return "33"
         return "13"
 
     if any(k in s for k in ['incisiv', 'paleta', 'frontal']):
@@ -189,7 +196,10 @@ def extraer_fdi(pieza_val) -> str:
         if es_sup and es_izq: return "22" if es_lat else "21"
         if es_inf and es_izq: return "32" if es_lat else "31"
         if es_inf and es_der: return "42" if es_lat else "41"
-        return "11"
+        if es_izq: return "22" if es_lat else "21"
+        if es_der: return "12" if es_lat else "11"
+        if es_inf: return "32" if es_lat else "31"
+        return "12" if es_lat else "11"
 
     return ""
 
@@ -769,6 +779,7 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
             rep_texto = "Mayor de edad (Atención autónoma con capacidad jurídica plena)"
 
         # Sub-barra institucional
+        hc_codigo = f"{int(paciente_id or 1):03d}-{int(num_expediente or 1):02d}"
         pdf.set_xy(15, 15.0)
         pdf.set_fill_color(240, 244, 249)
         pdf.set_draw_color(195, 208, 225)
@@ -776,9 +787,9 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
         pdf.set_xy(16.5, 15.5)
         pdf.set_font("helvetica", "B", 7.0)
         pdf.set_text_color(27, 54, 93)
-        pdf.cell(75, 4.0, "ESTABLECIMIENTO: BIMO Especialidades Odontológicas", border=0)
-        pdf.set_xy(92, 15.5)
-        pdf.cell(101, 4.0, f"UNICÓDIGO: 1792834001   |   H.C./C.I.: {doc_limpio}   |   EXP. #{num_expediente}", align="R", border=0)
+        pdf.cell(68, 4.0, "ESTABLECIMIENTO: BIMO Especialidades Odontológicas", border=0)
+        pdf.set_xy(85, 15.5)
+        pdf.cell(108, 4.0, f"UNICÓDIGO: 1792834001 | H.C. N° {hc_codigo} | C.I.: {doc_limpio} | EXP. #{num_expediente}", align="R", border=0)
 
         # 1. REGISTRO DE ADMISIÓN Y FILIACIÓN
         y_b1 = 21.2
@@ -1437,7 +1448,9 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
             "clínico, plan de tratamiento propuesto, alternativas viables, riesgos inherentes y cuidados post-operatorios "
             "indispensables. Manifiesta su conformidad voluntaria y autoriza la ejecución de los procedimientos odontológicos "
             "planificados, comprometiéndose a seguir las indicaciones terapéuticas, mantener óptima higiene oral y acudir "
-            "puntualmente a las citas periódicas de control para garantizar la salud y durabilidad de los tratamientos."
+            "puntualmente a las citas periódicas de control para garantizar la salud y durabilidad de los tratamientos. "
+            "Asimismo, autoriza que el dictado clínico de su consulta sea procesado por un servicio externo de inteligencia "
+            "artificial (Groq) únicamente para transcribir y estructurar esta historia clínica, que se almacena localmente en la clínica."
         )
 
         pdf.set_xy(17.5, y_cons + 5.5)

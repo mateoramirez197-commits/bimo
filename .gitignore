@@ -65,3 +65,8 @@ _respaldos_bimo/
 scratch/
 contexto_saas_odontologia.txt
 
+
+# 8. Configuracion por clinica (PIN, datos del doctor) y paquetes del instalador
+clinica.json
+bimo_payload.zip
+temp_*

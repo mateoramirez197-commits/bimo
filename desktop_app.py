@@ -14,6 +14,7 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
         pass
 
 import re
+import time   # Necesario para timestamps en procesar_texto_clinico
 import json
 import time
 import threading
@@ -122,6 +123,8 @@ class BimoBridge:
         self._esperando_respuesta = False
         self._esperando_respuesta_cedula = False
         self._historia_pendiente = None
+        self._modal_cedula_abierto = False
+        self._modal_cedula_hasta = 0.0
 
     def set_window(self, window):
         self._window = window
@@ -279,6 +282,20 @@ class BimoBridge:
             return
 
         texto_lower = texto_comando.lower().strip()
+
+        # Intercepción prioritaria si el modal de cédula obligatoria está abierto en la UI
+        if getattr(self, "_modal_cedula_abierto", False):
+
+            if time.time() > getattr(self, "_modal_cedula_hasta", 0.0):
+                self._modal_cedula_abierto = False
+                print("[MODAL CEDULA] Timeout de seguridad de 120s alcanzado. Modal cerrado internamente.")
+            else:
+                # Comandos de frenado/detención siempre se respetan
+                if not any(w in texto_lower for w in ["frenar dictado", "frenar", "detener dictado", "detener grabación", "parar dictado", "finalizar dictado"]):
+                    # Privacidad: loguear conteo/longitud únicamente, nunca dígitos reales
+                    print(f"[MODAL CEDULA VOZ] Inyectando texto por voz a modal (longitud: {len(texto_comando)} caracteres)")
+                    self._js(f"if (window.inyectarCedulaPorVoz) window.inyectarCedulaPorVoz({json.dumps(texto_comando)});")
+                    return
 
         # Comandos de voz de control de dictado (manos libres)
         if any(w in texto_lower for w in ["inicia dictado", "iniciar dictado", "empezar dictado", "empieza dictado", "grabar dictado"]):
@@ -583,10 +600,8 @@ class BimoBridge:
             dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
 
             pin_valido = False
-            # OVERRIDE AUTORIZADO POR EL TITULAR: PIN 1234 siempre da acceso (PC local).
-            if pin_str == "1234":
-                pin_valido = True
-            elif pin_esperado and pin_str == pin_esperado:
+            # Solo el PIN configurado por la clínica da acceso (sin PIN maestro universal).
+            if pin_esperado and pin_str == pin_esperado:
                 pin_valido = True
             elif not pin_esperado:
                 if dev_backdoor and pin_str in ("__master__", "1963", "0000", "1111"):
@@ -655,30 +670,46 @@ class BimoBridge:
     # ==========================================
     def iniciar_grabacion(self):
         try:
-            # Exclusión mutua estricta de hardware: pausar el listener de voz
-            if self._wake_listener:
-                try:
-                    self._wake_listener.pausar()
-                    self._wake_listener.detener()
-                except Exception:
-                    pass
-                time.sleep(0.15)
             try:
                 sonar_inicio_dictado()
             except Exception:
                 pass
 
-            # Detectar tasa de muestreo nativa del micrófono para evitar PaErrorCode
-            try:
-                disp_info = sd.query_devices(kind='input')
-                self._frecuencia = int(disp_info.get('default_samplerate', 44100))
-            except Exception:
-                self._frecuencia = 44100
-
             self._grabando = True
             self._datos_audio = []
+            self._usando_tap_wake = False
+
+            # 1. Intentar captura directa sin colisión sobre el stream ya abierto del micrófono predeterminado
+            if self._wake_listener and hasattr(self._wake_listener, "iniciar_tap_manual"):
+                try:
+                    def _recibir_frame_tap(chunk):
+                        if self._grabando:
+                            self._datos_audio.append(chunk)
+
+                    tap_ok, sr_tap = self._wake_listener.iniciar_tap_manual(_recibir_frame_tap)
+                    if tap_ok:
+                        self._frecuencia = int(sr_tap or 16000)
+                        self._usando_tap_wake = True
+                        print(f"[BIMO DESKTOP] Grabación instantánea activa sobre micrófono predeterminado ({self._frecuencia}Hz)...")
+                except Exception as e_tap:
+                    print(f"[BIMO DESKTOP TAP WARN]: {e_tap}")
+                    self._usando_tap_wake = False
+
+            if not self._usando_tap_wake:
+                # Si no había listener activo, detectar micrófono predeterminado y abrir stream dedicado
+                if self._wake_listener:
+                    try:
+                        self._wake_listener.pausar()
+                        self._wake_listener.detener()
+                    except Exception:
+                        pass
+                try:
+                    disp_info = sd.query_devices(kind='input')
+                    self._frecuencia = int(disp_info.get('default_samplerate', 44100))
+                except Exception:
+                    self._frecuencia = 44100
+
             threading.Thread(target=self._grabar_audio_loop, daemon=True).start()
-            print(f"[BIMO DESKTOP] Grabación de audio iniciada a {self._frecuencia}Hz...")
             return {"status": "ok", "message": "Grabando..."}
         except Exception as e:
             try:
@@ -688,6 +719,7 @@ class BimoBridge:
             print(f"[BIMO DESKTOP ERROR] Error al iniciar grabación: {e}")
             if self._wake_listener and self._escucha_activa_habilitada:
                 try:
+                    self._wake_listener.detener_tap_manual()
                     self._wake_listener.reanudar()
                     self._wake_listener.iniciar()
                 except Exception:
@@ -695,37 +727,74 @@ class BimoBridge:
             return {"status": "error", "message": str(e)}
 
     def _grabar_audio_loop(self):
+        # Si estamos usando el tap directo del micrófono predeterminado, verificar que fluyan datos
+        if getattr(self, "_usando_tap_wake", False):
+            t_wait = 0.0
+            while self._grabando and t_wait < 0.85:
+                if len(self._datos_audio) > 0:
+                    return  # El tap está entregando audio perfectamente; no abrir otro stream
+                time.sleep(0.04)
+                t_wait += 0.04
+            if not self._grabando:
+                return
+            # Si tras 850ms no llegaron frames por el tap, desconectar tap y abrir stream con auto-detección
+            print("[BIMO DESKTOP WARN] Tap sin frames tras 850ms; reabriendo micrófono predeterminado...")
+            if self._wake_listener:
+                try:
+                    self._wake_listener.detener_tap_manual()
+                    self._wake_listener.detener()
+                except Exception:
+                    pass
+            self._usando_tap_wake = False
+
         def callback(indata, frames, time_info, status):
             if self._grabando:
                 self._datos_audio.append(indata.copy())
-        
-        # Probar la frecuencia nativa y respaldos si el driver de Windows lo requiere
-        frecuencias_a_probar = [self._frecuencia, 44100, 48000, 16000]
+
+        from wake_word_listener import obtener_candidatos_microfono_predeterminado
         stream_iniciado = False
-        for freq in frecuencias_a_probar:
-            try:
-                with sd.InputStream(samplerate=freq, channels=1, dtype='int16', callback=callback):
-                    self._frecuencia = freq
-                    stream_iniciado = True
-                    while self._grabando:
-                        sd.sleep(40)
+        for refrescar in (False, True):
+            candidatos = obtener_candidatos_microfono_predeterminado(
+                samplerate_preferido=self._frecuencia,
+                refrescar=refrescar
+            )
+            for dev_id, freq, nom_dev in candidatos:
+                if not self._grabando:
+                    return
+                try:
+                    kwargs_in = dict(samplerate=freq, channels=1, dtype='int16', callback=callback)
+                    if dev_id is not None:
+                        kwargs_in["device"] = dev_id
+                    with sd.InputStream(**kwargs_in):
+                        self._frecuencia = freq
+                        stream_iniciado = True
+                        print(f"[BIMO DESKTOP] Grabando desde micrófono predeterminado '{nom_dev}' (device={dev_id}, {freq}Hz).")
+                        while self._grabando:
+                            sd.sleep(40)
+                    break
+                except Exception as e_freq:
+                    print(f"[BIMO DESKTOP WARN] Micrófono '{nom_dev}' (dev={dev_id}) no abrió a {freq}Hz: {e_freq}")
+                    time.sleep(0.04)
+            if stream_iniciado:
                 break
-            except Exception as e_freq:
-                print(f"[BIMO DESKTOP WARN] Micrófono no abrió a {freq}Hz: {e_freq}")
-                time.sleep(0.08)
 
         if not stream_iniciado:
             try:
                 sonar_error()
             except Exception:
                 pass
-            print("[BIMO DESKTOP ERROR] Error crítico: No se pudo abrir el stream de audio en ninguna frecuencia.")
+            print("[BIMO DESKTOP ERROR] Error crítico: No se pudo abrir el micrófono predeterminado en ninguna frecuencia.")
 
     def detener_y_procesar(self, incluir_ortodoncia=False, *args, **kwargs):
         ruta_wav = None
         try:
             self._grabando = False
-            time.sleep(0.15)  # Buffer flush para capturar últimos frames del audio
+            time.sleep(0.12)  # Buffer flush para capturar últimos frames del audio
+            if self._wake_listener and hasattr(self._wake_listener, "detener_tap_manual"):
+                try:
+                    self._wake_listener.detener_tap_manual()
+                except Exception:
+                    pass
             try:
                 sonar_fin_dictado()
             except Exception:
@@ -737,10 +806,10 @@ class BimoBridge:
                     sonar_error()
                 except Exception:
                     pass
-                return {"status": "error", "message": "No se detectó audio del micrófono. Verifica los permisos del micrófono en Windows."}
+                return {"status": "error", "message": "No se detectó audio del micrófono. Verifica que tu micrófono esté conectado."}
 
             audio_np = np.concatenate(self._datos_audio, axis=0)
-            if len(audio_np) < int(self._frecuencia * 0.3):
+            if len(audio_np) < int(self._frecuencia * 0.25):
                 try:
                     sonar_error()
                 except Exception:
@@ -748,8 +817,16 @@ class BimoBridge:
                 return {"status": "error", "message": "Dictado muy corto. Habla y luego pulsa detener."}
 
             import tempfile
+            from ai_engine import normalizar_audio_para_stt
             ruta_wav = os.path.join(tempfile.gettempdir(), f"bimo_dictado_{int(time.time() * 1000)}.wav")
-            wav_write(ruta_wav, self._frecuencia, audio_np)
+            try:
+                arr_norm_i16, _, _ = normalizar_audio_para_stt(audio_np, samplerate=self._frecuencia)
+                if arr_norm_i16.size > 0:
+                    wav_write(ruta_wav, 16000, arr_norm_i16)
+                else:
+                    wav_write(ruta_wav, self._frecuencia, audio_np)
+            except Exception:
+                wav_write(ruta_wav, self._frecuencia, audio_np)
 
             texto = transcribir_audio(ruta_wav)
             if not texto or not texto.strip():
@@ -770,6 +847,7 @@ class BimoBridge:
             return {"status": "error", "message": str(e)}
         finally:
             self._datos_audio = []
+            self._usando_tap_wake = False
             if ruta_wav and os.path.exists(ruta_wav):
                 try:
                     os.remove(ruta_wav)
@@ -777,7 +855,7 @@ class BimoBridge:
                     pass
             if self._wake_listener and self._escucha_activa_habilitada:
                 def _reactivar():
-                    time.sleep(0.5)
+                    time.sleep(0.25)
                     try:
                         self._wake_listener.reanudar()
                         self._wake_listener.iniciar()
@@ -828,6 +906,15 @@ class BimoBridge:
 
     def procesar_texto_clinico(self, texto, incluir_ortodoncia=False, generar_pdf=True):
         nombre_doc = self._usuario_actual.get("nombre", "Mateo") if self._usuario_actual else "Mateo"
+
+        # -2. INTERCEPTOR MODAL CÉDULA OBLIGATORIA (BLOQUE 3)
+        if getattr(self, "_modal_cedula_abierto", False):
+            if time.time() <= getattr(self, "_modal_cedula_hasta", 0.0):
+                print(f"[MODAL CEDULA MANUAL] Dictado interceptado para inyección de cédula (longitud: {len(texto)} chars)")
+                self._js(f"if (window.inyectarCedulaPorVoz) window.inyectarCedulaPorVoz({json.dumps(texto)});")
+                return {"status": "ok", "tipo": "CEDULA_VOZ", "mensaje": "Dictado enviado a modal de cédula"}
+            else:
+                self._modal_cedula_abierto = False
 
         # -1. RESOLUCIÓN DE DESAMBIGUACIÓN POR CÉDULA (BLOQUE 3)
         if getattr(self, "_esperando_respuesta_cedula", False) and getattr(self, "_historia_pendiente", None):
@@ -1145,6 +1232,12 @@ class BimoBridge:
             except Exception as e_snd:
                 print(f"[SOUND/VOICE WARN] {e_snd}")
 
+            try:
+                self._js(f"if (window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_hora)});")
+                self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+            except Exception:
+                pass
+
             return {
                 "status": "ok",
                 "tipo": tipo,
@@ -1185,6 +1278,12 @@ class BimoBridge:
             except Exception as e_snd:
                 print(f"[SOUND/VOICE WARN] {e_snd}")
 
+            try:
+                self._js(f"if (window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_hora)});")
+                self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+            except Exception:
+                pass
+
             return {
                 "status": "ok",
                 "tipo": tipo,
@@ -1214,6 +1313,11 @@ class BimoBridge:
                 decir_cancelacion_cita(nombre_doctor=nombre_doc, nombre_paciente=pac_nom)
             except Exception as e_snd:
                 print(f"[SOUND/VOICE WARN] {e_snd}")
+
+            try:
+                self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+            except Exception:
+                pass
 
             return {
                 "status": "ok",
@@ -1307,6 +1411,11 @@ class BimoBridge:
                         hablar_texto(frase_voz)
                 except Exception as e_snd:
                     print(f"[SOUND/VOICE WARN] {e_snd}")
+
+                try:
+                    self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+                except Exception:
+                    pass
 
                 return {
                     "status": res_act.get("status", "ok"),
@@ -1404,7 +1513,7 @@ class BimoBridge:
             nombre = "Paciente_Consulta"
         filiacion["nombre"] = nombre
 
-        # Asegurar detección de teléfono en filiación
+        # Asegurar detección de teléfono y cédula dictados en filiación
         tel_fil = str(filiacion.get("telefono") or "").strip()
         if not tel_fil or tel_fil.lower() in ("no especificado", "none", ""):
             try:
@@ -1416,10 +1525,24 @@ class BimoBridge:
             except Exception:
                 pass
 
-        # Verificación obligatoria de cédula (alerta por voz si no fue dictada)
         # Verificación obligatoria de cédula y homónimos (BLOQUE 3)
-        doc_crudo = str(filiacion.get("documento") or filiacion.get("cedula") or "").strip()
+        doc_crudo = str(filiacion.get("documento") or filiacion.get("cedula") or resultado_ia.get("cedula") or resultado_ia.get("documento") or "").strip()
         doc_solo_digitos = re.sub(r'\D', '', doc_crudo)
+        if len(doc_solo_digitos) < 5:
+            try:
+                from ai_engine import extraer_cedula_y_telefono_dictados
+                ced_rescate, _ = extraer_cedula_y_telefono_dictados(texto)
+                if ced_rescate:
+                    cand_dig = re.sub(r'\D', '', str(ced_rescate))
+                    if len(cand_dig) >= 5:
+                        doc_solo_digitos = cand_dig
+                        filiacion["documento"] = doc_solo_digitos
+                        resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_solo_digitos
+            except Exception:
+                pass
+        elif filiacion.get("documento") in (None, "", "No especificado"):
+            filiacion["documento"] = doc_solo_digitos
+            resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_solo_digitos
 
         if nombre and nombre != "Paciente_Consulta":
             from database import buscar_pacientes_por_nombre
@@ -1458,14 +1581,6 @@ class BimoBridge:
                     "pacientes_coincidentes": [p.get("nombre") for p in coincidencias]
                 }
 
-        alerta_cedula = False
-        if len(doc_solo_digitos) < 5:
-            alerta_cedula = True
-            try:
-                preguntar_cedula_paciente(nombre_paciente=nombre, nombre_doctor=nombre_doc)
-            except Exception as e_vo:
-                print(f"[VOICE ALERT WARN] {e_vo}")
-
         # --- BLOQUE 1: Prevención de Duplicados mediante Similitud Difusa (>85%) ---
         if nombre and nombre != "Paciente_Consulta":
             try:
@@ -1479,10 +1594,44 @@ class BimoBridge:
                     if "datos_filiacion" in resultado_ia:
                         resultado_ia["datos_filiacion"]["nombre"] = pac_similar["nombre"]
                         resultado_ia["datos_filiacion"]["id"] = pac_similar["id"]
+                    if len(doc_solo_digitos) < 5 and pac_similar.get("documento"):
+                        doc_sim_dig = re.sub(r'\D', '', str(pac_similar.get("documento")))
+                        if len(doc_sim_dig) >= 5:
+                            doc_solo_digitos = doc_sim_dig
+                            filiacion["documento"] = doc_sim_dig
+                            resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_sim_dig
             except Exception as e_sim:
                 print(f"[WARN] Error en similitud difusa en procesar_texto_clinico: {e_sim}")
 
         pac_id = registrar_o_actualizar_paciente(filiacion)
+
+        # Verificar si el paciente registrado en BD ya posee cédula/edad/teléfono para completar filiación y evitar alerta redundante
+        if pac_id:
+            try:
+                pac_db = obtener_paciente_por_id(pac_id)
+                if isinstance(pac_db, dict):
+                    if len(doc_solo_digitos) < 5 and pac_db.get("documento"):
+                        doc_db_dig = re.sub(r'\D', '', str(pac_db.get("documento")))
+                        if len(doc_db_dig) >= 5:
+                            doc_solo_digitos = doc_db_dig
+                            filiacion["documento"] = doc_db_dig
+                            resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_db_dig
+                    for campo_f in ("edad", "telefono", "sexo", "direccion"):
+                        val_act = filiacion.get(campo_f)
+                        if (val_act is None or str(val_act).strip().lower() in ("", "no especificado", "none", "null")) and pac_db.get(campo_f):
+                            filiacion[campo_f] = pac_db[campo_f]
+                            resultado_ia.setdefault("datos_filiacion", {})[campo_f] = pac_db[campo_f]
+            except Exception:
+                pass
+
+        alerta_cedula = False
+        if len(doc_solo_digitos) < 5:
+            alerta_cedula = True
+            try:
+                preguntar_cedula_paciente(nombre_paciente=nombre, nombre_doctor=nombre_doc)
+            except Exception as e_vo:
+                print(f"[VOICE ALERT WARN] {e_vo}")
+
         return self._completar_guardado_historia_clinica(
             resultado_ia=resultado_ia,
             texto=texto,
@@ -2048,6 +2197,26 @@ class BimoBridge:
             print(f"[BIMO DESKTOP ERROR] guardar_consulta_corregida: {e}")
             return {"status": "error", "message": str(e)}
 
+    def modal_cedula_estado(self, abierto: bool):
+        """Notifica al backend si el modal de cédula obligatoria está abierto o cerrado en la UI."""
+        try:
+            self._modal_cedula_abierto = bool(abierto)
+            if self._modal_cedula_abierto:
+                import time
+                self._modal_cedula_hasta = time.time() + 120.0  # Timeout de seguridad de 120s
+                if hasattr(self, '_wake_listener') and self._wake_listener and hasattr(self._wake_listener, 'activar_ventana_activa'):
+                    self._wake_listener.activar_ventana_activa(30.0)
+                print("[MODAL CEDULA] Estado abierto registrado en backend. Ventana de escucha activa 30s.")
+            else:
+                self._modal_cedula_hasta = 0.0
+                print("[MODAL CEDULA] Estado cerrado registrado en backend.")
+            return {"status": "ok", "abierto": self._modal_cedula_abierto}
+        except Exception as e:
+            print(f"[MODAL CEDULA ERROR] modal_cedula_estado: {e}")
+            return {"status": "error", "error": str(e)}
+
+    modalCedulaEstado = modal_cedula_estado
+
     def actualizar_cedula_paciente(self, paciente_id=None, nueva_cedula="", consulta_id=None):
         """
         Actualiza la cédula del paciente y regenera el PDF oficial de su consulta actual.
@@ -2406,10 +2575,8 @@ class BimoBridge:
 
     def eliminar_paciente(self, paciente_id):
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM pacientes WHERE id = ?", (paciente_id,))
-                conn.commit()
+            from database import eliminar_paciente_db
+            eliminar_paciente_db(int(paciente_id))
             return {"status": "ok"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] eliminar_paciente: {e}")
@@ -2494,9 +2661,9 @@ class BimoBridge:
     def cancelar_cita(self, cita_id=None, nombre_paciente=None, fecha=None):
         try:
             if cita_id:
-                cancelar_o_eliminar_cita_db(cita_id=cita_id)
+                eliminar_cita(cita_id=cita_id)
             elif nombre_paciente:
-                cancelar_o_eliminar_cita_db(nombre_paciente=nombre_paciente, fecha=fecha)
+                eliminar_cita(nombre_paciente=nombre_paciente, fecha=fecha)
             return {"status": "ok"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] cancelar_cita: {e}")
@@ -2584,7 +2751,7 @@ class BimoBridge:
                         """, (nuevo_tel, nom_paciente))
                 conn_up.commit()
 
-            # 4. Generar enlace oficial de Google Calendar y abrir navegador
+            # 4. Generar enlace oficial de Google Calendar y abrir navegador (sin duplicar fila en SQLite)
             res_cal = agendar_cita(
                 paciente_id=pid,
                 nombre_paciente=nom_paciente,
@@ -2592,7 +2759,8 @@ class BimoBridge:
                 fecha_hora_inicio=nueva_fecha_inicio,
                 fecha_hora_fin=nueva_f_fin,
                 descripcion=desc_final,
-                abrir_en_navegador=True
+                abrir_en_navegador=True,
+                cita_id_existente=cita_id
             )
             url_gcal = res_cal.get("url_gcal") if isinstance(res_cal, dict) else ""
 
@@ -2774,14 +2942,14 @@ class BimoBridge:
             if not target or not os.path.exists(target):
                 return {"status": "error", "message": "No se encontró ningún PDF generado aún."}
 
-            doc = fitz.open(target)
             paginas = []
-            for i in range(len(doc)):
-                page = doc[i]
-                pix = page.get_pixmap(dpi=110)
-                img_bytes = pix.tobytes("jpeg", jpg_quality=85)
-                b64 = "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode("utf-8")
-                paginas.append(b64)
+            with fitz.open(target) as doc:
+                for i in range(len(doc)):
+                    page = doc[i]
+                    pix = page.get_pixmap(dpi=110)
+                    img_bytes = pix.tobytes("jpeg", jpg_quality=85)
+                    b64 = "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode("utf-8")
+                    paginas.append(b64)
 
             kb = round(os.path.getsize(target) / 1024, 1)
             self._ultima_ruta_pdf = target
@@ -2847,9 +3015,23 @@ class BimoBridge:
                                 diag_c = jc.get("diagnostico") or ""
                                 plan_c = jc.get("plan_tratamiento") or jc.get("plan") or ""
                                 receta_c = jc.get("receta") or ""
-                                costo_c = float(jc.get("costo_total") or 0.0)
-                                abono_c = float(jc.get("abono") or 0.0)
+                                pagos_jc = jc.get("pagos") if isinstance(jc.get("pagos"), dict) else {}
+                                costo_c = float(jc.get("costo_total") or pagos_jc.get("costo_total") or 0.0)
+                                abono_c = float(jc.get("abono") or pagos_jc.get("abono_realizado") or pagos_jc.get("abono") or 0.0)
                                 es_orto_c = bool(jc.get("incluir_ortodoncia") or jc.get("hoja_ortodoncia") or jc.get("es_ortodoncia"))
+                            except Exception:
+                                pass
+
+                        if (costo_c == 0.0 and abono_c == 0.0) and consulta_id:
+                            try:
+                                cursor.execute(
+                                    "SELECT costo_total, abono_realizado FROM pagos WHERE consulta_id = ? ORDER BY id DESC LIMIT 1",
+                                    (consulta_id,)
+                                )
+                                r_pago = cursor.fetchone()
+                                if r_pago:
+                                    costo_c = float(r_pago["costo_total"] or 0.0)
+                                    abono_c = float(r_pago["abono_realizado"] or 0.0)
                             except Exception:
                                 pass
             except Exception as e_meta:
@@ -3109,12 +3291,21 @@ class BimoBridge:
         if self._widget_process and self._widget_process.poll() is None:
             activo = True
             pid = self._widget_process.pid
+        conf = {}
+        try:
+            conf = cargar_datos_clinica() or {}
+        except Exception:
+            pass
+        try:
+            opacidad_val = int(conf.get("opacidad_widget", 90) or 90)
+        except Exception:
+            opacidad_val = 90
         return {
             "status": "ok",
             "activo": activo,
             "pid": pid,
-            "posicion": "Superior Derecha",
-            "opacidad": 90,
+            "posicion": conf.get("posicion_widget", "Superior Derecha"),
+            "opacidad": opacidad_val,
             "anclado": True
         }
 
@@ -3242,6 +3433,8 @@ class BimoBridge:
                 sonar_inicio_dictado()
             elif tipo == "fin":
                 sonar_fin_dictado()
+            elif tipo == "error":
+                sonar_error()
             else:
                 sonar_confirmacion_exito()
             return {"status": "ok"}

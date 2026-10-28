@@ -413,8 +413,14 @@ def registrar_o_actualizar_paciente(datos_filiacion=None, **kwargs) -> int:
         if p_id_explicit:
             cursor.execute("""
                 UPDATE pacientes SET
-                    nombre = ?, documento = ?, edad = COALESCE(?, edad), sexo = ?, telefono = ?,
-                    direccion = ?, ocupacion = ?, medico_cabecera = ?
+                    nombre = COALESCE(NULLIF(?, ''), nombre),
+                    documento = COALESCE(?, documento),
+                    edad = COALESCE(?, edad),
+                    sexo = COALESCE(NULLIF(?, 'No especificado'), sexo),
+                    telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
+                    direccion = COALESCE(NULLIF(?, 'No especificado'), direccion),
+                    ocupacion = COALESCE(NULLIF(?, 'No especificado'), ocupacion),
+                    medico_cabecera = COALESCE(NULLIF(?, 'No especificado'), medico_cabecera)
                 WHERE id = ?
             """, (nombre, doc_limpio, edad_val, sexo, telefono, direccion, ocupacion, medico, p_id_explicit))
             conn.commit()
@@ -429,9 +435,13 @@ def registrar_o_actualizar_paciente(datos_filiacion=None, **kwargs) -> int:
                 paciente_id = row["id"]
                 cursor.execute("""
                     UPDATE pacientes SET
-                        nombre = ?, edad = COALESCE(?, edad), sexo = ?,
+                        nombre = COALESCE(NULLIF(?, ''), nombre),
+                        edad = COALESCE(?, edad),
+                        sexo = COALESCE(NULLIF(?, 'No especificado'), sexo),
                         telefono = COALESCE(NULLIF(NULLIF(?, ''), 'No especificado'), telefono),
-                        direccion = ?, ocupacion = ?, medico_cabecera = ?
+                        direccion = COALESCE(NULLIF(?, 'No especificado'), direccion),
+                        ocupacion = COALESCE(NULLIF(?, 'No especificado'), ocupacion),
+                        medico_cabecera = COALESCE(NULLIF(?, 'No especificado'), medico_cabecera)
                     WHERE id = ?
                 """, (nombre, edad_val, sexo, telefono, direccion, ocupacion, medico, paciente_id))
                 conn.commit()
@@ -789,8 +799,11 @@ def eliminar_paciente_db(paciente_id: int) -> bool:
                 except Exception:
                     pass
 
-            cursor.execute("DELETE FROM citas_agenda WHERE LOWER(nombre_paciente) = ?", (nom.lower(),))
+            cursor.execute("DELETE FROM citas_agenda WHERE paciente_id = ? OR LOWER(nombre_paciente) = ?", (paciente_id, nom.lower()))
+        else:
+            cursor.execute("DELETE FROM citas_agenda WHERE paciente_id = ?", (paciente_id,))
 
+        cursor.execute("DELETE FROM pagos WHERE paciente_id = ?", (paciente_id,))
         cursor.execute("DELETE FROM consultas WHERE paciente_id = ?", (paciente_id,))
         cursor.execute("DELETE FROM pacientes WHERE id = ?", (paciente_id,))
         conn.commit()
@@ -1357,8 +1370,12 @@ def cancelar_o_eliminar_cita_db(nombre_paciente=None, cita_id=None, fecha=None) 
                 cursor.execute("SELECT * FROM citas_agenda WHERE LOWER(nombre_paciente) LIKE ?", (f"%{primer_nom.lower()}%",))
                 citas_a_borrar = [dict(r) for r in cursor.fetchall()]
 
-            # Si aún no hay citas y no se indicó fecha, vincular a la última cita activa creada hoy
-            if not citas_a_borrar and not fecha:
+            # Si se pidió cancelar de forma genérica ("la cita", "Paciente") sin fecha, tomar la última cita activa
+            es_generico = nombre_paciente.strip().lower() in (
+                "", "paciente", "no especificado", "la cita", "ultima cita",
+                "última cita", "ultimo paciente", "último paciente"
+            )
+            if not citas_a_borrar and not fecha and es_generico:
                 cursor.execute("SELECT * FROM citas_agenda ORDER BY id DESC LIMIT 1")
                 citas_a_borrar = [dict(r) for r in cursor.fetchall()]
 
@@ -1626,7 +1643,8 @@ def actualizar_datos_paciente_y_expediente(
 
             if regenerar_pdf:
                 from generador_pdf import crear_historia_clinica
-                nueva_ruta_pdf = crear_historia_clinica(json_c, paciente_id=pid)
+                num_exp = obtener_num_expediente_consulta(cid)
+                nueva_ruta_pdf = crear_historia_clinica(json_c, paciente_id=pid, num_expediente=num_exp)
                 cursor.execute("UPDATE consultas SET json_clinico = ?, ruta_pdf = ? WHERE id = ?",
                                (json.dumps(json_c, ensure_ascii=False), nueva_ruta_pdf, cid))
                 conn.commit()
