@@ -390,6 +390,10 @@ def registrar_o_actualizar_paciente(datos_filiacion=None, **kwargs) -> int:
         aprender_nombres_paciente(nombre)
     doc_crudo = str(datos_filiacion.get("documento") or datos_filiacion.get("cedula") or "").strip()
     doc_limpio = doc_crudo.replace(" ", "") if doc_crudo.lower() not in ("no especificado", "none", "") else None
+    # FIX: una cédula numérica con guiones/puntos/comas ('100-123-4567') se guarda solo con dígitos
+    # para que siempre coincida con el mismo paciente y su historial de consultas.
+    if doc_limpio and re.fullmatch(r'[\d\.\-,]+', doc_limpio) and len(re.sub(r'\D', '', doc_limpio)) >= 5:
+        doc_limpio = re.sub(r'\D', '', doc_limpio)
     
     edad_val = None
     try:
@@ -686,6 +690,8 @@ def buscar_paciente_por_cedula(cedula: str) -> dict | None:
     if not cedula or str(cedula).strip().lower() in ("no especificado", "none", ""):
         return None
     doc_limpio = str(cedula).strip().replace(" ", "")
+    if re.fullmatch(r'[\d\.\-,]+', doc_limpio) and len(re.sub(r'\D', '', doc_limpio)) >= 5:
+        doc_limpio = re.sub(r'\D', '', doc_limpio)
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM pacientes WHERE documento = ? LIMIT 1", (doc_limpio,))

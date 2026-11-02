@@ -86,8 +86,9 @@ def _reproducir_ruta(ruta):
             import soundfile as sf
             import sounddevice as sd
             data, fs = sf.read(ruta, dtype="float32")
-            sd.play(data, fs)
-            sd.wait()
+            channels = data.shape[1] if (hasattr(data, "ndim") and data.ndim > 1) else 1
+            with sd.OutputStream(samplerate=fs, channels=channels, dtype="float32") as stream:
+                stream.write(data)
     except Exception:
         pass
 

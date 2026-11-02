@@ -248,19 +248,58 @@ def colorear_odontograma(odontograma_datos, ruta_base=RUTA_BASE_ODONTOGRAMA, rut
         'restaurad', 'restauraci', 'curaci', 'calzad'
     )
 
+    # Restauraciones que fallan: siguen siendo patología activa aunque mencionen un tratamiento
+    patologia_sobre_tratamiento_kw = (
+        'recidiv', 'filtraci', 'desadapt', 'defectuos', 'desajust', 'fracturad', 'caries secundaria'
+    )
+    # Tratamiento solo planificado (aún no realizado en la sesión)
+    pendiente_kw = (
+        'pendiente', 'requiere', 'necesita', 'indicad', 'indicar', 'por realizar', 'a realizar',
+        'se debe', 'debe ', 'programad', 'proxima', 'próxima', 'planificad', 'planead',
+        'se recomienda', 'recomend', 'presupuest', 'cotiz', 'sugerid', 'a futuro', 'por hacer'
+    )
+
+    def _clasificar_tratamiento(hallazgos_lista):
+        """Retorna (hay_tratamiento_realizado, hay_tratamiento_pendiente) evaluando cada hallazgo por separado."""
+        realizado = pendiente = False
+        for h in hallazgos_lista:
+            h_l = str(h).lower()
+            if any(kw in h_l for kw in tratamientos_kw):
+                if any(kw in h_l for kw in pendiente_kw):
+                    pendiente = True
+                else:
+                    realizado = True
+        return realizado, pendiente
+
     resumen_estados = {"rojo": 0, "azul": 0, "gris": 0, "total_evaluadas": 0}
 
-    for item in odontograma_datos:
+    # Las piezas con número FDI explícito ('14', 'pieza 24') se pintan primero; las descripciones
+    # anatómicas sueltas ('premolar derecho') solo pintan piezas que no hayan sido ya registradas,
+    # para que no sobrescriban de rojo una pieza ya tratada.
+    def _es_fdi_explicito(it):
+        p_r = str(it.get("pieza_dental") or it.get("pieza") or it.get("diente") or "")
+        return bool(re.search(r'\b([1-4][1-8]|[5-8][1-5])\b', p_r))
+
+    items_validos = [it for it in (odontograma_datos or []) if isinstance(it, dict)]
+    items_ordenados = [it for it in items_validos if _es_fdi_explicito(it)] + [it for it in items_validos if not _es_fdi_explicito(it)]
+    fdi_pintados = set()
+
+    for item in items_ordenados:
         pieza_raw = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
         fdi = extraer_fdi(pieza_raw)
         if not fdi:
+            continue
+        if fdi in fdi_pintados and not _es_fdi_explicito(item):
             continue
 
         hallazgos = item.get("procedimientos_o_hallazgos", [])
         if isinstance(hallazgos, list):
             texto_h = " ".join([str(x) for x in hallazgos]).lower()
+            hallazgos_lista = [str(x) for x in hallazgos]
         else:
             texto_h = str(hallazgos).lower()
+            hallazgos_lista = [str(hallazgos)]
+        trat_realizado, _trat_pendiente = _clasificar_tratamiento(hallazgos_lista)
 
         color = None
         estado_nombre = ""
@@ -273,14 +312,23 @@ def colorear_odontograma(odontograma_datos, ruta_base=RUTA_BASE_ODONTOGRAMA, rut
             color = COLOR_GRIS_RGBA
             estado_nombre = "gris"
             es_ausente = True
+        elif any(kw in texto_h for kw in patologia_sobre_tratamiento_kw):
+            color = COLOR_ROJO_RGBA
+            estado_nombre = "rojo"
+        elif trat_realizado:
+            # FIX: caries ya calzada / curada / restaurada en la sesión -> color de tratamiento (azul)
+            color = COLOR_AZUL_RGBA
+            estado_nombre = "azul"
         elif any(kw in texto_h for kw in patologias_kw):
             color = COLOR_ROJO_RGBA
             estado_nombre = "rojo"
         elif any(kw in texto_h for kw in tratamientos_kw):
-            color = COLOR_AZUL_RGBA
-            estado_nombre = "azul"
+            # Solo tratamiento pendiente sin patología explícita: se mantiene como pieza a tratar
+            color = COLOR_ROJO_RGBA if _trat_pendiente else COLOR_AZUL_RGBA
+            estado_nombre = "rojo" if _trat_pendiente else "azul"
 
         if color:
+            fdi_pintados.add(fdi)
             resumen_estados["total_evaluadas"] += 1
             if estado_nombre:
                 resumen_estados[estado_nombre] += 1

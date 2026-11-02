@@ -355,8 +355,103 @@ TEMAS_BIMO = {
         "logo_colors": ["#7C3AED", "#EC4899", "#8B5CF6", "#00F5D4"],
         "corner_radius": 30,
         "corner_btn": 25,
-    }
+    },
+    # Temas de la interfaz moderna (web_ui/temas.css). Los usa el widget de escritorio.
+    # Extras para el widget: on_accent (texto sobre botón principal), pill_bg, btn_secondary(_hover),
+    # hover, scroll(_hover), hi (canto de cristal) y key (color transparente de las esquinas).
+    "claro": {
+        "mode": "light",
+        "bg_dark": "#F2F3F6",
+        "card_dark": "#FFFFFF",
+        "card_inner": "#FFFFFF",
+        "sidebar": "#F4F4F5",
+        "border": "#E2E3E8",
+        "text_primary": "#0A0A0A",
+        "text_muted": "#71717A",
+        "input_bg": "#FFFFFF",
+        "input_border": "#E4E4E7",
+        "card_hover": "#F4F4F5",
+        "aqua": "#18181B",
+        "azul_acero": "#111113",
+        "azul_pastel": "#3F3F46",
+        "amarillo": "#71717A",
+        "fucsia": "#E11D48",
+        "logo_colors": ["#0A0A0A", "#3F3F46", "#71717A", "#A1A1AA"],
+        "corner_radius": 18,
+        "corner_btn": 10,
+        "on_accent": "#FFFFFF",
+        "pill_bg": "#EBECEF",
+        "btn_secondary": "#EBECEF",
+        "btn_secondary_hover": "#E2E3E8",
+        "hover": "#EBECEF",
+        "scroll": "#D4D4D8",
+        "scroll_hover": "#A1A1AA",
+        "hi": "#FFFFFF",
+        "key": "#010203",
+    },
+    "oscuro": {
+        "mode": "dark",
+        "bg_dark": "#121214",
+        "card_dark": "#1B1B1E",
+        "card_inner": "#1B1B1E",
+        "sidebar": "#121214",
+        "border": "#2C2C31",
+        "text_primary": "#FAFAFA",
+        "text_muted": "#A1A1AA",
+        "input_bg": "#1B1B1E",
+        "input_border": "#2C2C31",
+        "card_hover": "#26262A",
+        "aqua": "#FFFFFF",
+        "azul_acero": "#F4F4F5",
+        "azul_pastel": "#FFFFFF",
+        "amarillo": "#A1A1AA",
+        "fucsia": "#FB7185",
+        "logo_colors": ["#FFFFFF", "#D4D4D8", "#A1A1AA", "#71717A"],
+        "corner_radius": 18,
+        "corner_btn": 10,
+        "on_accent": "#0A0A0A",
+        "pill_bg": "#26262A",
+        "btn_secondary": "#26262A",
+        "btn_secondary_hover": "#313136",
+        "hover": "#26262A",
+        "scroll": "#3F3F46",
+        "scroll_hover": "#52525B",
+        "hi": "#4A4A52",
+        "key": "#010203",
+    },
+    "rosa": {
+        "mode": "light",
+        "bg_dark": "#FCEEF5",
+        "card_dark": "#FFFFFF",
+        "card_inner": "#FFFFFF",
+        "sidebar": "#FDF2F8",
+        "border": "#F5D3E3",
+        "text_primary": "#3A1F2B",
+        "text_muted": "#8F6B78",
+        "input_bg": "#FFFFFF",
+        "input_border": "#F5D3E3",
+        "card_hover": "#FDF2F8",
+        "aqua": "#DB2777",
+        "azul_acero": "#EC4899",
+        "azul_pastel": "#DB2777",
+        "amarillo": "#8F6B78",
+        "fucsia": "#E11D48",
+        "logo_colors": ["#EC4899", "#DB2777", "#C4B5FD", "#FDBA74"],
+        "corner_radius": 18,
+        "corner_btn": 10,
+        "on_accent": "#FFFFFF",
+        "pill_bg": "#FCE7F3",
+        "btn_secondary": "#FCE7F3",
+        "btn_secondary_hover": "#FBCFE8",
+        "hover": "#FCE7F3",
+        "scroll": "#F9A8D4",
+        "scroll_hover": "#F472B6",
+        "hi": "#FFFFFF",
+        "key": "#010203",
+    },
 }
+
+TEMAS_INTERFAZ = ("claro", "oscuro", "rosa")
 
 # Tipografía Ejecutiva de Agencia
 FONT_FAMILY = "Segoe UI"
@@ -372,6 +467,11 @@ def obtener_tema_guardado() -> str:
         if os.path.exists(RUTA_CLINICA_CONF):
             with open(RUTA_CLINICA_CONF, "r", encoding="utf-8") as f:
                 d = json.load(f)
+                # El tema elegido en la interfaz moderna (Claro/Oscuro/Rosa) manda sobre el antiguo
+                if d.get("tema_activo") in TEMAS_INTERFAZ:
+                    return d["tema_activo"]
+                if d.get("tema_activo") in ("violet", "cyan", "emerald", "amber"):
+                    return "claro"
                 return d.get("tema_visual", "Obsidian Violet")
     except Exception:
         pass

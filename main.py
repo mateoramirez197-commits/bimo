@@ -31,6 +31,15 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
         pass
 
 import threading
+
+# Identidad propia en la barra de tareas: así Windows muestra la muela de BIMO y no el ícono de Python
+if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Matsword.BIMO.Pro")
+    except Exception:
+        pass
+
 from database import init_db, purgar_datos_prueba
 from startup_manager import esta_registrado_en_inicio, registrar_en_inicio_windows
 

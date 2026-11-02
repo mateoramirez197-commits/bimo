@@ -78,23 +78,18 @@ def autenticar_usuario(email: str, password: str):
 
 def inicializar_usuarios_default():
     """
-    Crea los usuarios predeterminados de prueba comercial si no existen.
-    - Dr. Mateo (Médico): admin@bimo.local / admin123
-    - Asistente Clínica (Asistente): asistente@bimo.local / asistente123
-    En instalaciones empaquetadas de producción (frozen) NO se crean usuarios por defecto (L-E).
+    Ya no se crean cuentas por defecto (antes admin@bimo.local / admin123).
+    La primera cuenta la crea el propio doctor con su correo de Google al abrir BIMO
+    por primera vez (ver crear_cuenta_inicial) o desde el instalador.
     """
-    import sys
-    if getattr(sys, 'frozen', False) and os.environ.get("BIMO_DEV_BACKDOOR") != "1":
-        return
+    return
 
+
+def hay_cuenta_medico() -> bool:
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) AS total FROM usuarios;")
-        count = cursor.fetchone()["total"]
-        if count == 0:
-            registrar_usuario("Dr. Mateo", "admin@bimo.local", "admin123", "medico")
-            registrar_usuario("Asistente Clínica", "asistente@bimo.local", "asistente123", "asistente")
-            print("[AUTH] Usuarios predeterminados creados: admin@bimo.local (Médico), asistente@bimo.local (Asistente)")
+        cursor.execute("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'medico' AND activo = 1;")
+        return cursor.fetchone()["total"] > 0
 
 # Variable de sesión activa en memoria
 _SESION_ACTUAL = None

@@ -676,9 +676,80 @@ def parchear_odontograma_exhaustivo(odonto_lista: list, texto_crudo: str) -> lis
             }
             anadidas += 1
 
+    # 3. FIX: eliminar descripciones anatómicas sueltas ('premolar superior', 'premolar derecho')
+    # que solo repiten hallazgos de una pieza ya registrada con número FDI (ej. 14 y 24),
+    # para que no dupliquen filas ni vuelvan a pintar de rojo una pieza ya tratada.
+    try:
+        _depurar_piezas_anatomicas_redundantes(mapa_fusion)
+    except Exception as e_dep:
+        print(f"[ODONTOGRAMA] Aviso al depurar piezas anatómicas redundantes: {e_dep}")
+
     resultado = list(mapa_fusion.values())
     print(f"[ODONTOGRAMA EXHAUSTIVO] piezas mencionadas: {len(mencionadas)}, en array: {len(resultado)}, añadidas: {anadidas}")
     return resultado
+
+
+_HALLAZGOS_GENERICOS_ODONTO = ("evaluada", "mencionada en el dictado")
+
+
+def _tipo_y_ubicacion_fdi(fdi: str):
+    """Retorna (tipo, arcada, lado) de una pieza FDI: tipo en premolar/molar/canino/incisivo."""
+    q, n = int(fdi[0]), int(fdi[1])
+    temporal = q >= 5
+    if n in (1, 2):
+        tipo = "incisivo"
+    elif n == 3:
+        tipo = "canino"
+    elif n in (4, 5):
+        tipo = "molar" if temporal else "premolar"
+    else:
+        tipo = "molar"
+    arcada = "sup" if q in (1, 2, 5, 6) else "inf"
+    lado = "der" if q in (1, 4, 5, 8) else "izq"
+    return tipo, arcada, lado
+
+
+def _depurar_piezas_anatomicas_redundantes(mapa_fusion: dict) -> None:
+    explicitas = {k: v for k, v in mapa_fusion.items() if re.fullmatch(r'[1-4][1-8]|[5-8][1-5]', str(k))}
+    if not explicitas:
+        return
+    for key in list(mapa_fusion.keys()):
+        if key in explicitas:
+            continue
+        desc = str(key).lower()
+        if "premolar" in desc:
+            tipo = "premolar"
+        elif "molar" in desc or "muela" in desc:
+            tipo = "molar"
+        elif "canin" in desc or "colmill" in desc:
+            tipo = "canino"
+        elif "incisiv" in desc or "paleta" in desc:
+            tipo = "incisivo"
+        else:
+            continue
+        arcada = "sup" if any(k in desc for k in ("superior", "arriba", "maxilar")) else ("inf" if any(k in desc for k in ("inferior", "abajo", "mandibular")) else None)
+        lado = "der" if "derech" in desc else ("izq" if "izquierd" in desc else None)
+
+        compatibles = []
+        for fdi_k, item_k in explicitas.items():
+            t_k, a_k, l_k = _tipo_y_ubicacion_fdi(fdi_k)
+            if t_k != tipo or (arcada and a_k != arcada) or (lado and l_k != lado):
+                continue
+            compatibles.append(item_k)
+        if not compatibles:
+            continue
+
+        hall_expl = set()
+        for it in compatibles:
+            for h in it.get("procedimientos_o_hallazgos", []):
+                hall_expl.add(str(h).strip().lower())
+        hall_txt = [str(h).strip().lower() for h in mapa_fusion[key].get("procedimientos_o_hallazgos", [])]
+        redundante = all(
+            (h in hall_expl) or any(g in h for g in _HALLAZGOS_GENERICOS_ODONTO)
+            for h in hall_txt
+        )
+        if redundante:
+            del mapa_fusion[key]
 
 
 def _normalizar_nombres_espanol(nombre: str) -> str:
@@ -1409,6 +1480,11 @@ def extraer_telefono_dictado(texto: str) -> str:
     if not texto:
         return ""
     t = normalizar_palabras_numericas(texto)
+    # FIX: quitar el número dictado tras 'cédula' para que 'número de cédula ...' no se tome como teléfono
+    try:
+        t = _enmascarar_cedula_en_texto(t)
+    except Exception:
+        pass
 
     # 1. Buscar con prefijo explícito (teléfono, celular, móvil, contacto, whatsapp, cel, al, para)
     patrones_prefijo = [
@@ -1438,6 +1514,254 @@ def extraer_telefono_dictado(texto: str) -> str:
 
     return ""
 
+# ==========================================
+# EXTRACTOR ROBUSTO DE CÉDULA DICTADA (FIX "CIEN / MIL" ECUADOR)
+# ==========================================
+# En Ecuador es muy común dictar la cédula por bloques: "cien, cien, doce, treinta y cuatro..."
+# o "mil, cincuenta y siete...". Whisper suele fusionar "cien doce" en "112" (ciento doce),
+# perdiendo dos ceros (1001234567 -> 11234567). Este bloque reconstruye la cédula de 10 dígitos
+# probando las variantes "cien+N" / "mil+N" y validando con el algoritmo módulo 10 ecuatoriano.
+
+_ANCLA_CEDULA_RE = re.compile(
+    r'(?:c[eé]dula|s[eé]dula|c[eé]lula|identificaci[oó]n|documento|\bidentidad\b|\bc\.\s*i\b\.?|\bci\b|\bruc\b)',
+    re.IGNORECASE
+)
+_PALABRAS_RELLENO_CEDULA = {
+    "es", "el", "la", "de", "del", "numero", "número", "nro", "no", "n", "con", "su", "identidad",
+    "ciudadania", "ciudadanía", "paciente", "seria", "sería", "o", "sea", "este", "ese", "eh", "em", "mm"
+}
+_CENTENAS_CEDULA = {k: v for k, v in _CENTENAS_DICTADAS.items() if k not in ("cien",)}
+
+
+def validar_cedula_ecuatoriana(cedula: str) -> bool:
+    """Valida una cédula ecuatoriana de 10 dígitos (provincia, tercer dígito y módulo 10)."""
+    s = str(cedula or "").strip()
+    if not re.fullmatch(r'\d{10}', s):
+        return False
+    prov = int(s[:2])
+    if not ((1 <= prov <= 24) or prov == 30):
+        return False
+    if int(s[2]) >= 6:
+        return False
+    suma = 0
+    for i, coef in enumerate((2, 1, 2, 1, 2, 1, 2, 1, 2)):
+        p = int(s[i]) * coef
+        suma += p - 9 if p >= 10 else p
+    return (10 - (suma % 10)) % 10 == int(s[9])
+
+
+def _cedula_plausible(s: str) -> bool:
+    """10 dígitos con provincia y tercer dígito coherentes (sin exigir dígito verificador)."""
+    if not re.fullmatch(r'\d{10}', s or ""):
+        return False
+    prov = int(s[:2])
+    return ((1 <= prov <= 24) or prov == 30) and int(s[2]) < 6
+
+
+def _grupos_cedula_desde_segmento(segmento: str) -> list[str]:
+    """
+    Convierte el fragmento dictado después de la palabra 'cédula' en bloques de dígitos,
+    respetando cómo se dicta en Ecuador: 'cien' = '100' (bloque), 'mil' = '1000',
+    'ciento doce' = '112', 'treinta y cuatro' = '34', 'cero' = '0'.
+    Se detiene en la primera palabra que no sea numérica (ej. 'teléfono', 'años', 'acude').
+    """
+    tokens = re.findall(r'\d+|[a-záéíóúüñ]+', segmento.lower())
+    grupos: list[str] = []
+    i = 0
+    rellenos_iniciales = 0
+    n = len(tokens)
+
+    def _num_simple(idx):
+        """Lee un número 0-99 en palabras desde idx. Retorna (valor_str, nuevo_idx) o (None, idx)."""
+        if idx >= n:
+            return None, idx
+        tk = tokens[idx]
+        if tk in _NUMEROS_ESPECIALES_DICTADOS:
+            return _NUMEROS_ESPECIALES_DICTADOS[tk], idx + 1
+        if tk in _DECENAS_DICTADAS:
+            d_val = _DECENAS_DICTADAS[tk]
+            if d_val >= 30 and idx + 2 < n and tokens[idx + 1] == "y" and tokens[idx + 2] in _UNIDADES_DICTADAS and _UNIDADES_DICTADAS[tokens[idx + 2]] > 0:
+                return str(d_val + _UNIDADES_DICTADAS[tokens[idx + 2]]), idx + 3
+            return str(d_val), idx + 1
+        if tk in _UNIDADES_DICTADAS:
+            return str(_UNIDADES_DICTADAS[tk]), idx + 1
+        return None, idx
+
+    _PALABRAS_EDAD = ("años", "anos", "año", "ano", "meses")
+
+    def _cabe(valor, sig_idx):
+        """True si el bloque pertenece a la cédula (no es edad ni excede los 10 dígitos ya completos)."""
+        if len("".join(grupos)) >= 10:
+            return False
+        if sig_idx < n and tokens[sig_idx] in _PALABRAS_EDAD:
+            return False
+        return True
+
+    while i < n:
+        tk = tokens[i]
+        valor, sig = None, i
+        if tk.isdigit():
+            valor, sig = tk, i + 1
+        elif tk == "cien":
+            valor, sig = "100", i + 1
+        elif tk == "mil":
+            valor, sig = "1000", i + 1
+        elif tk == "ciento" or tk in _CENTENAS_CEDULA:
+            base = 100 if tk == "ciento" else _CENTENAS_CEDULA[tk]
+            val, j = _num_simple(i + 1)
+            if val is not None and tokens[i + 1] != "cero":
+                valor, sig = str(base + int(val)), j
+            else:
+                valor, sig = str(base), i + 1
+        elif tk in ("doble", "triple") and i + 1 < n and tokens[i + 1] in _UNIDADES_DICTADAS:
+            d = str(_UNIDADES_DICTADAS[tokens[i + 1]])
+            valor, sig = d * (2 if tk == "doble" else 3), i + 2
+        else:
+            val, j = _num_simple(i)
+            if val is not None:
+                valor, sig = val, j
+
+        if valor is not None:
+            if not _cabe(valor, sig):
+                break
+            grupos.append(valor)
+            i = sig
+            continue
+        if not grupos:
+            # Palabras de relleno antes del número ('cédula número es el ...')
+            if tk in _PALABRAS_RELLENO_CEDULA and rellenos_iniciales < 5:
+                rellenos_iniciales += 1
+                i += 1
+                continue
+            break
+        if tk == "y" and i + 1 < n and (tokens[i + 1].isdigit() or _num_simple(i + 1)[0] is not None or tokens[i + 1] in ("cien", "mil", "ciento")):
+            i += 1
+            continue
+        break
+    return grupos
+
+
+def _reconstruir_cedula_desde_grupos(grupos: list[str]) -> str | None:
+    """
+    Reconstruye la cédula a partir de bloques. Si los bloques no suman 10 dígitos, prueba
+    expandir los bloques que Whisper fusionó ('112' <- 'cien doce' => '10012';
+    '1041' <- 'mil cuarenta y uno' => '100041') y elige la variante de 10 dígitos válida.
+    """
+    if not grupos:
+        return None
+    original = "".join(grupos)
+    if len(original) < 5:
+        return None
+    if len(original) == 10:
+        return original
+
+    import itertools
+    alternativas = []
+    expandibles = 0
+    for g in grupos:
+        alts = [g]
+        if expandibles < 6:
+            v = int(g) if g.isdigit() else -1
+            if len(g) == 3 and 101 <= v <= 199:
+                r = v - 100
+                alts.append("100" + str(r))
+                if r < 10:
+                    alts.append("100" + f"{r:02d}")
+            elif len(g) == 4 and 1001 <= v <= 1999:
+                r = v - 1000
+                alts.append("1000" + str(r))
+                if r < 10:
+                    alts.append("1000" + f"{r:02d}")
+            if len(alts) > 1:
+                expandibles += 1
+        alternativas.append(alts)
+
+    validas, plausibles = [], []
+    for combo in itertools.product(*[list(enumerate(a)) for a in alternativas]):
+        cambios = sum(1 for idx, _ in combo if idx > 0)
+        if cambios == 0:
+            continue
+        cand = "".join(txt for _, txt in combo)
+        if len(cand) != 10:
+            continue
+        if validar_cedula_ecuatoriana(cand):
+            validas.append((cambios, cand))
+        elif _cedula_plausible(cand):
+            plausibles.append((cambios, cand))
+    if validas:
+        return sorted(validas)[0][1]
+    if plausibles:
+        return sorted(plausibles)[0][1]
+
+    # Más de 10 dígitos: rescatar una ventana de 10 que pase el módulo 10
+    if len(original) > 10:
+        for k in range(0, len(original) - 9):
+            ventana = original[k:k + 10]
+            if validar_cedula_ecuatoriana(ventana):
+                return ventana
+    return original
+
+
+def extraer_cedula_dictada_robusta(texto: str) -> str | None:
+    """
+    Extrae la cédula dictada tras la palabra 'cédula' / 'documento' / 'C.I.' admitiendo
+    dígitos con guiones, puntos o comas, palabras habladas y bloques 'cien' / 'mil'.
+    Retorna solo dígitos (idealmente 10) o None si no se dictó cédula.
+    """
+    if not texto or not isinstance(texto, str):
+        return None
+    for m in _ANCLA_CEDULA_RE.finditer(texto):
+        segmento = texto[m.end():m.end() + 160]
+        grupos = _grupos_cedula_desde_segmento(segmento)
+        ced = _reconstruir_cedula_desde_grupos(grupos)
+        if ced:
+            return ced
+    return None
+
+
+def _enmascarar_cedula_en_texto(t: str) -> str:
+    """Elimina el número que sigue a 'cédula' para que no se confunda con un teléfono."""
+    patron = re.compile(
+        r'(?:c[eé]dula|s[eé]dula|c[eé]lula|identificaci[oó]n|documento|\bidentidad\b)'
+        r'(?:(?!tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)[^\d]){0,35}?'
+        r'([0-9][0-9\s\.\-,]{3,40}[0-9])',
+        re.IGNORECASE
+    )
+
+    def _rep(mm):
+        if len(re.sub(r'\D', '', mm.group(1))) > 13:
+            return mm.group(0)
+        return mm.group(0)[:mm.start(1) - mm.start(0)] + ' '
+    return patron.sub(_rep, t)
+
+
+def resolver_cedula_final(doc_llm, texto_crudo: str) -> str:
+    """
+    Decide la cédula definitiva combinando lo que entendió la IA con la extracción determinista
+    del texto dictado. Prioriza una cédula de 10 dígitos (y válida por módulo 10).
+    """
+    doc_limpio = sanitizar_cedula(str(doc_llm or ""))
+    try:
+        ced_det = extraer_cedula_dictada_robusta(texto_crudo or "")
+    except Exception as e_ced:
+        print(f"[CEDULA WARN] {e_ced}")
+        ced_det = None
+    if not ced_det:
+        return doc_limpio
+    dig_llm = re.sub(r'\D', '', doc_limpio) if doc_limpio != "No especificado" else ""
+    if doc_limpio == "No especificado" or not dig_llm:
+        return sanitizar_cedula(ced_det)
+    if dig_llm == ced_det:
+        return doc_limpio
+    if len(ced_det) == 10:
+        if len(dig_llm) != 10:
+            return ced_det
+        if validar_cedula_ecuatoriana(dig_llm) and not validar_cedula_ecuatoriana(ced_det):
+            return doc_limpio
+        return ced_det
+    return doc_limpio
+
+
 def detectar_paciente_en_texto(texto: str) -> dict | None:
     """
     Identifica de forma determinista si en el texto se menciona a un paciente ya registrado
@@ -1462,6 +1786,12 @@ def detectar_paciente_en_texto(texto: str) -> dict | None:
         # Detección de cédula en el texto
         m_ced = re.search(r'(?:c[eé]dula|identificaci[oó]n|documento|c\.i\.?)\s*[:\-]?\s*([0-9\s]{8,15})', t_clean)
         ced_dictada = re.sub(r'\D', '', m_ced.group(1)) if m_ced else None
+        try:
+            ced_rob = extraer_cedula_dictada_robusta(texto)
+            if ced_rob and len(ced_rob) >= 8:
+                ced_dictada = ced_rob
+        except Exception:
+            pass
         
         STOP_WORDS = {"el", "la", "los", "las", "de", "del", "a", "al", "para", "por", "con", "en", "que", "es", "un", "una", "paciente", "cita", "telefono", "celular", "numero", "anos", "edad", "dr", "doctor", "bimo"}
         
@@ -1514,6 +1844,10 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
     if not texto:
         return None, None
     t = normalizar_palabras_numericas(texto)
+    try:
+        ced_robusta = extraer_cedula_dictada_robusta(texto)
+    except Exception:
+        ced_robusta = None
     
     # 1. Cédula por ancla léxica explícita (incluye variantes fonéticas de Whisper: sédula, célula, ci, ruc)
     ced_match = re.search(
@@ -1528,6 +1862,9 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
             ced = digits[:10]
         elif len(digits) in (8, 9):
             ced = digits
+    # FIX cédula dictada por bloques ('cien', 'mil'): el extractor robusto manda si dio 10 dígitos
+    if ced_robusta and len(ced_robusta) == 10:
+        ced = ced_robusta
 
     # 2. Teléfono por ancla léxica explícita
     tel_match = re.search(
@@ -2059,7 +2396,7 @@ REGLAS ESTRICTAS DE FILIACIÓN CLÍNICA:
 - Si se dictan extracciones realizadas, dientes sacados o perdidos, regístralos en 'odontograma' con el hallazgo 'Extracción previa / Ausente' para pintarse en gris.
 
 - 'odontograma': Para CADA pieza dental mencionada, en 'pieza_dental' debes colocar SIEMPRE su NÚMERO FDI (ej: '14', '16', '21', '24', '36', '46'). Si el doctor dice 'premolar superior derecho' conviértelo a '14'; si dice 'premolar superior izquierdo' a '24'; si dice 'premolar inferior izquierdo' a '34'; si dice 'premolar inferior derecho' a '44'; si dice 'molar superior derecho' o 'muela superior derecha' a '16'; si dice 'molar superior izquierdo' o 'muela superior izquierda' a '26'; si dice 'molar inferior izquierdo' o 'muela inferior izquierda' a '36'; si dice 'molar inferior derecho' o 'muela inferior derecha' a '46'. Si el doctor menciona ambos lados (ej: 'premolar superior derecho e izquierdo' o 'premolares superiores'), DEBES crear DOS objetos separados en 'odontograma': uno para '14' y otro para '24' (o '44' y '34' si son inferiores; '16' y '26' si son molares superiores).
-REGLA DE EXHAUSTIVIDAD DEL ODONTOGRAMA (OBLIGATORIA): EL ARRAY 'odontograma' DEBE CONTENER UN OBJETO POR CADA PIEZA DENTAL MENCIONADA EN EL DICTADO. ESTÁ PROHIBIDO RESUMIR, AGRUPAR, OMITIR O DEJAR PIEZAS IMPLÍCITAS. SI EL DOCTOR NOMBRA N PIEZAS (O UN GRUPO DE PIEZAS), EL ARRAY DEBE TENER AL MENOS N OBJETOS. SI UN MISMO HALLAZGO APLICA A VARIAS PIEZAS, REPÍTELO EN CADA UNA. SI UNA PIEZA TIENE VARIOS HALLAZGOS, AGRÚPALOS EN SU LISTA 'procedimientos_o_hallazgos'. NO INVENTES PIEZAS NI HALLAZGOS QUE NO SE DICTARON. ANTES DE RESPONDER, CUENTA LAS PIEZAS DEL DICTADO Y VERIFICA QUE EL ARRAY TENGA ESA CANTIDAD.
+REGLA DE EXHAUSTIVIDAD DEL ODONTOGRAMA (OBLIGATORIA): EL ARRAY 'odontograma' DEBE CONTENER UN OBJETO POR CADA PIEZA DENTAL MENCIONADA EN EL DICTADO. ESTÁ PROHIBIDO RESUMIR, AGRUPAR, OMITIR O DEJAR PIEZAS IMPLÍCITAS. SI EL DOCTOR NOMBRA N PIEZAS (O UN GRUPO DE PIEZAS), EL ARRAY DEBE TENER AL MENOS N OBJETOS. SI UN MISMO HALLAZGO APLICA A VARIAS PIEZAS, REPÍTELO EN CADA UNA. SI UNA PIEZA TIENE VARIOS HALLAZGOS, AGRÚPALOS EN SU LISTA 'procedimientos_o_hallazgos'. SI UN TRATAMIENTO SOLO SE INDICA O PLANIFICA PARA DESPUÉS (NO SE REALIZÓ EN ESTA SESIÓN), ESCRÍBELO CON '(pendiente)' (ej: 'Resina (pendiente)'); SI YA SE REALIZÓ, ESCRÍBELO NORMAL (ej: 'Resina', 'Calza', 'Curación'). NO INVENTES PIEZAS NI HALLAZGOS QUE NO SE DICTARON. ANTES DE RESPONDER, CUENTA LAS PIEZAS DEL DICTADO Y VERIFICA QUE EL ARRAY TENGA ESA CANTIDAD.
 Si el doctor dice 'premolar derecho' sin cuadrante ni número no debe inventarse; si el doctor dice 'premolar derecho, izquierdo' sin más precisión, crea un objeto por cada mención con la designación textual tal como se dictó ('Premolar derecho', 'Premolar izquierdo') y no fabriques un número FDI que no se dijo. Si dice '31 y 32', crea dos objetos (31, 32). Si dice 'del 11 al 13' o 'incisivos superiores derechos', expande solo rangos numéricos explícitos.
 - 'pagos': Si el doctor menciona costo del tratamiento, abono o saldo (ej: 'el tratamiento cuesta 150 dólares, se agrega un abono de 50 y queda 100 restante', 'costo 200, abono 50', 'costo 80 cancelado'):
   "pagos": {{
@@ -2324,7 +2661,7 @@ Texto dictado:
             nom = _normalizar_nombres_espanol(fil.get("nombre", ""))
             fil["nombre"] = nom
             doc_raw = fil.get("documento") or fil.get("cedula") or fil.get("ci") or resultado.get("cedula") or resultado.get("documento") or ""
-            doc_limpio = sanitizar_cedula(str(doc_raw))
+            doc_limpio = resolver_cedula_final(doc_raw, texto_crudo)
             if doc_limpio == "No especificado":
                 ced_det, _ = extraer_cedula_y_telefono_dictados(texto_crudo)
                 if ced_det:
@@ -2513,7 +2850,7 @@ Texto dictado:
                 fil = resultado.setdefault("datos_filiacion", {})
                 nom = _normalizar_nombres_espanol(fil.get("nombre", ""))
                 fil["nombre"] = nom
-                fil["documento"] = sanitizar_cedula(fil.get("documento", ""))
+                fil["documento"] = resolver_cedula_final(fil.get("documento", ""), texto_crudo)
                 fil["edad"] = _limpiar_edad_dictada(fil.get("edad", ""), texto_crudo)
                 sex = fil.get("sexo", "No especificado")
                 if not sex or sex.lower() in ("no especificado", "none", ""):
@@ -2544,7 +2881,7 @@ Texto dictado:
                 if ced_ext:
                     resultado["cedula"] = ced_ext
             else:
-                c_clean = sanitizar_cedula(ced_act)
+                c_clean = resolver_cedula_final(ced_act, texto_crudo)
                 if c_clean and c_clean.lower() != "no especificado":
                     resultado["cedula"] = c_clean
 

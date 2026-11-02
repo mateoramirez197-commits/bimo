@@ -3,6 +3,7 @@ import asyncio
 import threading
 import soundfile as sf
 import sounddevice as sd
+import numpy as np
 import pyttsx3
 import edge_tts
 
@@ -74,11 +75,13 @@ def _reproducir_audio(texto: str):
         try:
             asyncio.run(_generar_audio_edge(texto, ruta_mp3))
             if os.path.exists(ruta_mp3) and os.path.getsize(ruta_mp3) > 0:
-                data, fs = sf.read(ruta_mp3)
+                data, fs = sf.read(ruta_mp3, dtype="float32")
+                data = np.ascontiguousarray(data)
+                channels = data.shape[1] if data.ndim > 1 else 1
                 try:
                     _BIMO_HABLANDO = True
-                    sd.play(data, fs)
-                    sd.wait()
+                    with sd.OutputStream(samplerate=fs, channels=channels, dtype="float32") as stream:
+                        stream.write(data)
                     exito = True
                 finally:
                     time.sleep(0.4)

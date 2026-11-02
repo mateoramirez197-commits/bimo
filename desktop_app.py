@@ -58,6 +58,8 @@ from database import (
 from auth import (
     autenticar_usuario,
     inicializar_usuarios_default,
+    hay_cuenta_medico,
+    registrar_usuario,
     set_sesion_activa,
     cerrar_sesion
 )
@@ -297,6 +299,12 @@ class BimoBridge:
                     self._js(f"if (window.inyectarCedulaPorVoz) window.inyectarCedulaPorVoz({json.dumps(texto_comando)});")
                     return
 
+        from wake_word_listener import extraer_ultima_orden, limpiar_variantes_bimo
+        orden_extraida = extraer_ultima_orden(texto_comando)
+        if orden_extraida:
+            texto_comando = orden_extraida
+            texto_lower = texto_comando.lower().strip()
+
         # Comandos de voz de control de dictado (manos libres)
         if any(w in texto_lower for w in ["inicia dictado", "iniciar dictado", "empezar dictado", "empieza dictado", "grabar dictado"]):
             if not self._grabando and self._window:
@@ -317,7 +325,7 @@ class BimoBridge:
         if self._grabando:
             return
 
-        limpio = texto_comando.lower().replace("bimo", "").replace("hola", "").strip(" ,.?!")
+        limpio = limpiar_variantes_bimo(texto_comando)
         if not limpio or len(limpio) < 3:
             # Activar ventana multi-turn para recibir la orden directa subsiguiente
             if self._wake_listener:
@@ -542,6 +550,64 @@ class BimoBridge:
     # ==========================================
     # AUTENTICACIÓN & SESIÓN
     # ==========================================
+    def estado_cuentas(self):
+        """Indica si ya existe una cuenta de médico (si no, la interfaz pide crearla)."""
+        try:
+            return {"status": "ok", "hay_cuentas": hay_cuenta_medico()}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] estado_cuentas: {e}")
+            return {"status": "error", "message": "No se pudo leer el estado de las cuentas."}
+
+    def crear_cuenta_inicial(self, datos):
+        """
+        Primer uso del equipo: el doctor crea su cuenta con su correo de Google
+        (el mismo que se vincula a Google Calendar), una contraseña y un PIN rápido.
+        Solo funciona mientras no exista ninguna cuenta de médico.
+        """
+        try:
+            if isinstance(datos, str):
+                datos = json.loads(datos)
+            datos = datos or {}
+            nombre = str(datos.get("nombre", "")).strip()
+            email = str(datos.get("email", "")).strip().lower()
+            password = str(datos.get("password", ""))
+            pin = str(datos.get("pin", "")).strip()
+
+            if hay_cuenta_medico():
+                return {"status": "error", "message": "Este equipo ya tiene una cuenta. Inicia sesión."}
+            if len(nombre) < 3:
+                return {"status": "error", "message": "Escribe tu nombre completo."}
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                return {"status": "error", "message": "Escribe un correo válido (el de tu Google Calendar)."}
+            if len(password) < 8:
+                return {"status": "error", "message": "La contraseña debe tener al menos 8 caracteres."}
+            if not (pin.isdigit() and len(pin) == 4):
+                return {"status": "error", "message": "El PIN rápido debe tener 4 dígitos."}
+
+            user_id = registrar_usuario(nombre, email, password, rol="medico")
+            conf = cargar_datos_clinica()
+            conf["nombre_doctor"] = nombre
+            conf["email_google"] = email
+            conf["pin_rapido"] = pin
+            conf["onboarding_completado"] = True
+            guardar_datos_clinica(conf)
+
+            def _vincular_calendar():
+                try:
+                    from calendar_sync import init_google_calendar
+                    init_google_calendar(email)
+                except Exception as e_cal:
+                    print(f"[CALENDAR LINK WARN]: {e_cal}")
+            threading.Thread(target=_vincular_calendar, daemon=True).start()
+
+            user = {"id": user_id, "nombre": nombre, "email": email, "rol": "medico"}
+            self._usuario_actual = user
+            set_sesion_activa(user)
+            return {"status": "ok", "usuario": user}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] crear_cuenta_inicial: {e}")
+            return {"status": "error", "message": "No se pudo crear la cuenta. Revisa los datos e intenta de nuevo."}
+
     def autenticar(self, email, password):
         try:
             email_clean = str(email).strip().lower()
@@ -3215,6 +3281,60 @@ class BimoBridge:
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] guardar_configuracion: {e}")
             return {"status": "error", "message": str(e)}
+
+    # ==========================================
+    # SELECCIÓN DE MICRÓFONO (CONFIGURACIÓN)
+    # ==========================================
+    def listar_microfonos(self):
+        """Lista micrófonos disponibles, el elegido en Configuración y el que está activo ahora."""
+        try:
+            from wake_word_listener import listar_microfonos_disponibles, obtener_microfono_preferido, obtener_estado_microfono
+            mics = listar_microfonos_disponibles()
+            lst = self._wake_listener
+            activo = getattr(lst, "nombre_microfono", "") if lst else ""
+            return {
+                "status": "ok",
+                "microfonos": [{"nombre": m["nombre"], "virtual": bool(m["virtual"]), "predeterminado": bool(m["predeterminado"])} for m in mics],
+                "preferido": obtener_microfono_preferido(),
+                "activo": activo or obtener_estado_microfono().get("nombre", ""),
+                "modo": obtener_estado_microfono().get("modo", "auto")
+            }
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] listar_microfonos: {e}")
+            return {"status": "error", "message": str(e), "microfonos": []}
+
+    def guardar_microfono_preferido(self, nombre=""):
+        """Guarda el micrófono elegido ('' = Automático) y lo aplica sin reiniciar BIMO."""
+        try:
+            nombre = str(nombre or "").strip()
+            conf = cargar_datos_clinica() or {}
+            conf["microfono_preferido"] = nombre
+            guardar_datos_clinica(conf)
+
+            def _aplicar():
+                try:
+                    from wake_word_listener import invalidar_cache_microfono
+                    invalidar_cache_microfono()
+                    if self._wake_listener and hasattr(self._wake_listener, "reconfigurar_microfono"):
+                        self._wake_listener.reconfigurar_microfono()
+                except Exception as e_ap:
+                    print(f"[BIMO DESKTOP WARN] No se pudo aplicar el micrófono: {e_ap}")
+            threading.Thread(target=_aplicar, daemon=True).start()
+            return {"status": "ok", "preferido": nombre}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] guardar_microfono_preferido: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def obtener_nivel_microfono(self):
+        """Nivel de audio actual (0-100) del micrófono activo para el medidor de Configuración."""
+        try:
+            lst = self._wake_listener
+            if not lst:
+                return {"status": "ok", "nivel": 0, "microfono": ""}
+            return {"status": "ok", "nivel": round(float(getattr(lst, "_nivel_actual", 0.0)), 1),
+                    "microfono": getattr(lst, "nombre_microfono", "")}
+        except Exception:
+            return {"status": "ok", "nivel": 0, "microfono": ""}
 
     def obtener_estado_respaldo_drive(self):
         try:

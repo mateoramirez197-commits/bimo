@@ -12,7 +12,7 @@ if (-not (Test-Path $desktop)) {
     $desktop = [System.IO.Path]::Combine($env:USERPROFILE, "Desktop", "BIMO Pro.lnk")
 }
 
-$icoPath = Join-Path $baseDir "assets\bimo_icon.ico"
+$icoPath = Join-Path $baseDir "assets\bimo_muela.ico"
 
 if ($Modo -eq "dev") {
     $target = Join-Path $baseDir "ejecutar_bimo_dev.bat"
