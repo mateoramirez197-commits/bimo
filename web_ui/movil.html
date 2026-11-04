@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{TEMA}}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>BIMO Móvil</title>
+  <!-- Recursos locales servidos por BIMO (licencias en /vendor/*/LICENSE) -->
+  <link rel="stylesheet" href="/vendor/phosphor/regular/style.css">
+  <link rel="stylesheet" href="/vendor/phosphor/light/style.css">
+  <link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+  <style>
+    @font-face { font-family: 'Inter Variable'; font-weight: 100 900; font-display: swap;
+      src: url('/vendor/inter/inter-latin-wght-normal.woff2') format('woff2'); }
+
+    /* ===== Liquid glass: el color lo pone el fondo; los paneles son vidrio ===== */
+    :root, [data-theme="claro"] {
+      --page: #e8edf7;
+      --b1: rgb(120 170 255 / .62); --b2: rgb(196 160 255 / .55); --b3: rgb(255 190 160 / .55); --b4: rgb(140 210 255 / .45);
+      --glass: rgb(255 255 255 / .30); --glass-strong: rgb(255 255 255 / .55); --glass-hover: rgb(255 255 255 / .75);
+      --edge: rgb(255 255 255 / .60); --rim: rgb(255 255 255 / 1); --rim-soft: rgb(255 255 255 / .22);
+      --gloss: rgb(255 255 255 / .40); --shadow: 0 18px 50px rgb(40 55 100 / .18);
+      --txt: #0b0b12; --muted: #5b6070; --accent: #121218; --on-accent: #ffffff; --accent-text: #121218;
+      --field: rgb(255 255 255 / .60); --option-bg: #f4f4f6;
+    }
+    [data-theme="oscuro"] {
+      --page: #06070c;
+      --b1: rgb(64 102 255 / .45); --b2: rgb(150 82 255 / .38); --b3: rgb(255 72 160 / .22); --b4: rgb(40 160 255 / .25);
+      --glass: rgb(22 24 34 / .42); --glass-strong: rgb(255 255 255 / .10); --glass-hover: rgb(255 255 255 / .16);
+      --edge: rgb(255 255 255 / .12); --rim: rgb(255 255 255 / .60); --rim-soft: rgb(255 255 255 / .07);
+      --gloss: rgb(255 255 255 / .08); --shadow: 0 18px 50px rgb(0 0 0 / .55);
+      --txt: #f6f6f9; --muted: #a3a6b4; --accent: #f4f4f6; --on-accent: #0a0a0f; --accent-text: #ffffff;
+      --field: rgb(255 255 255 / .08); --option-bg: #18181b;
+    }
+    [data-theme="rosa"] {
+      --page: #fbe9f2;
+      --b1: rgb(255 120 190 / .55); --b2: rgb(190 160 255 / .55); --b3: rgb(255 175 140 / .48); --b4: rgb(255 160 220 / .45);
+      --glass: rgb(255 255 255 / .30); --glass-strong: rgb(255 255 255 / .55); --glass-hover: rgb(255 255 255 / .75);
+      --edge: rgb(255 255 255 / .60); --rim: rgb(255 255 255 / 1); --rim-soft: rgb(255 255 255 / .22);
+      --gloss: rgb(255 255 255 / .40); --shadow: 0 18px 50px rgb(170 30 100 / .16);
+      --txt: #3a1f2b; --muted: #8f6b78; --accent: #ec4899; --on-accent: #ffffff; --accent-text: #db2777;
+      --field: rgb(255 255 255 / .60); --option-bg: #fff1f6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "Segoe UI", Roboto, sans-serif;
+      background: var(--page); color: var(--txt);
+      display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Fondo de pantalla con luces que derivan lento */
+    .fondo { position: fixed; inset: -20%; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(38% 30% at 15% 12%, var(--b1) 0%, transparent 72%),
+        radial-gradient(36% 28% at 88% 30%, var(--b2) 0%, transparent 72%),
+        radial-gradient(42% 30% at 55% 90%, var(--b3) 0%, transparent 72%),
+        radial-gradient(30% 24% at 25% 62%, var(--b4) 0%, transparent 72%);
+      animation: deriva 40s ease-in-out infinite alternate; }
+    @keyframes deriva { 0% { transform: translate3d(0,0,0) scale(1); } 100% { transform: translate3d(-4%,3%,0) scale(1.08); } }
+    @media (prefers-reduced-motion: reduce) { .fondo { animation: none; } }
+
+    /* Vidrio */
+    .glass {
+      position: relative;
+      background-color: var(--glass);
+      background-image: linear-gradient(180deg, var(--gloss) 0%, transparent 40%);
+      -webkit-backdrop-filter: blur(30px) saturate(200%);
+      backdrop-filter: blur(30px) saturate(200%);
+      border: 1px solid var(--edge);
+      box-shadow: inset 0 1px 0 var(--rim), var(--shadow);
+    }
+    .glass::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+      background: linear-gradient(135deg, var(--rim) 0%, var(--rim-soft) 20%, transparent 42%, transparent 60%, var(--rim-soft) 80%, var(--rim) 100%);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+
+    /* Barra superior flotante */
+    header { position: sticky; top: 0; z-index: 5; padding: calc(env(safe-area-inset-top) + 10px) 14px 6px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 22px; }
+    .marca { display: flex; align-items: center; gap: 10px; }
+    .logo { width: 34px; height: 34px; border-radius: 11px; background: var(--accent); color: var(--on-accent);
+      display: flex; align-items: center; justify-content: center; font-size: 21px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .35); }
+    .marca b { font-size: 18px; font-weight: 800; letter-spacing: .14em; }
+    .seguro { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--muted);
+      padding: 6px 10px; border-radius: 999px; background: var(--glass-strong); }
+
+    .main-content { flex: 1; position: relative; z-index: 1; padding: 14px 16px calc(env(safe-area-inset-bottom) + 104px); display: flex; flex-direction: column; align-items: center; }
+    .tab-content { width: 100%; max-width: 480px; display: none; }
+    .tab-content.active { display: flex; flex-direction: column; align-items: center; animation: entra .28s cubic-bezier(.16,1,.3,1); }
+    @keyframes entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    h2.titulo { align-self: flex-start; font-size: 28px; font-weight: 800; letter-spacing: -.02em; margin: 6px 4px 4px; }
+    p.sub { align-self: flex-start; font-size: 14px; color: var(--muted); margin: 0 4px 18px; }
+
+    /* Micrófono: esfera de vidrio */
+    .mic-card { width: 100%; border-radius: 30px; padding: 34px 20px 26px; display: flex; flex-direction: column; align-items: center; }
+    .btn-mic { width: 176px; height: 176px; border-radius: 50%; border: none; cursor: pointer; position: relative;
+      background: var(--accent); color: var(--on-accent);
+      display: flex; align-items: center; justify-content: center; font-size: 70px;
+      box-shadow: inset 0 2px 0 rgb(255 255 255 / .45), inset 0 22px 30px -18px rgb(255 255 255 / .55), inset 0 -14px 26px rgb(0 0 0 / .18), 0 18px 44px rgb(0 0 0 / .22);
+      transition: transform .25s ease, background-color .3s ease; }
+    .btn-mic::after { content: ""; position: absolute; inset: -14px; border-radius: 50%; border: 1px solid var(--edge); background: var(--glass); z-index: -1;
+      -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+    .btn-mic:active { transform: scale(.96); }
+    .btn-mic.recording { background: #e11d48; color: #fff; animation: pulso 1.4s ease-in-out infinite; }
+    @keyframes pulso { 0%,100% { box-shadow: inset 0 2px 0 rgb(255 255 255 / .45), 0 0 0 0 rgb(225 29 72 / .45), 0 18px 44px rgb(225 29 72 / .35); }
+                       50% { box-shadow: inset 0 2px 0 rgb(255 255 255 / .45), 0 0 0 18px rgb(225 29 72 / 0), 0 18px 44px rgb(225 29 72 / .45); } }
+
+    .status-pill { margin-top: 26px; padding: 11px 20px; border-radius: 999px; font-size: 14px; font-weight: 600; text-align: center;
+      background: var(--glass-strong); border: 1px solid var(--edge); color: var(--muted); }
+    .status-pill.recording { color: #e11d48; }
+    .status-pill.success { color: var(--accent-text); }
+
+    .card { width: 100%; border-radius: 24px; padding: 16px; margin-bottom: 12px; text-align: left; }
+    .instruction-box { margin-top: 14px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .instruction-box strong { color: var(--txt); }
+    .instruction-box .ejemplo { display: block; margin-top: 8px; padding: 10px 12px; border-radius: 14px; background: var(--glass-strong); color: var(--txt); font-style: italic; }
+
+    /* Campos */
+    .etiqueta { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin: 4px 2px 6px; }
+    .search-box { width: 100%; padding: 13px 14px; border-radius: 14px; border: 1px solid var(--edge); background: var(--field); color: var(--txt);
+      font-size: 15px; font-family: inherit; margin-bottom: 14px; outline: none; -webkit-appearance: none; appearance: none; }
+    .search-wrap { position: relative; width: 100%; }
+    .search-wrap .ph { position: absolute; left: 14px; top: 14px; font-size: 18px; color: var(--muted); z-index: 2; pointer-events: none; }
+    .search-wrap .search-box { padding-left: 40px; }
+    select.search-box { background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 20px) 20px, calc(100% - 14px) 20px; background-size: 6px 6px; background-repeat: no-repeat; padding-right: 36px; }
+    select option { background: var(--option-bg); color: var(--txt); }
+
+    /* Botones */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--edge); cursor: pointer;
+      padding: 10px 14px; border-radius: 14px; font-size: 13px; font-weight: 650; font-family: inherit; color: var(--txt);
+      background: var(--glass-strong); box-shadow: inset 0 1px 0 var(--rim); text-decoration: none; }
+    .btn:active { transform: scale(.97); }
+    .btn.primario { background: var(--accent); color: var(--on-accent); border-color: transparent;
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), inset 0 12px 16px -10px rgb(255 255 255 / .4), 0 8px 20px rgb(0 0 0 / .16); }
+    .btn.ancho { width: 100%; padding: 13px; font-size: 14px; }
+    .btn:disabled { opacity: .6; }
+
+    /* Pacientes */
+    .patient-name { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+    .patient-meta { font-size: 13px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+    .acciones { display: flex; gap: 8px; margin-top: 12px; }
+    .acciones .btn { flex: 1; }
+    .consultations-list { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--edge); }
+    .consultation-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 14px;
+      background: var(--glass-strong); margin-bottom: 8px; }
+    .cons-date { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .vacio { text-align: center; color: var(--muted); font-size: 14px; margin-top: 28px; }
+
+    /* Fotos */
+    #patientPhotosGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+    .foto { border-radius: 18px; padding: 8px; text-align: center; }
+    .foto img { width: 100%; height: 110px; object-fit: cover; border-radius: 12px; display: block; }
+    .foto .cat { font-size: 11px; font-weight: 700; margin-top: 6px; }
+    .foto .fecha { font-size: 10px; color: var(--muted); }
+    .subtitulo { align-self: flex-start; font-size: 15px; font-weight: 700; margin: 10px 4px 10px; display: flex; align-items: center; gap: 6px; }
+    #imgPreview { max-width: 100%; max-height: 200px; border-radius: 16px; }
+
+    /* Hoja de contacto (sube desde abajo, como en iOS) */
+    .velo { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / .25); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+      opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+    .velo.abierto { opacity: 1; pointer-events: auto; }
+    .hoja { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); z-index: 21; max-width: 480px; margin: 0 auto;
+      border-radius: 30px; padding: 10px 16px 16px; transform: translateY(120%); transition: transform .32s cubic-bezier(.16,1,.3,1); }
+    .hoja.abierta { transform: none; }
+    .hoja .asa { width: 40px; height: 5px; border-radius: 3px; background: var(--muted); opacity: .4; margin: 0 auto 12px; }
+    .hoja .nombre { font-size: 19px; font-weight: 750; letter-spacing: -.01em; }
+    .hoja .dato { font-size: 14px; color: var(--muted); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+    .hoja .cita { margin-top: 12px; padding: 12px; border-radius: 16px; background: var(--glass-strong); font-size: 13px; line-height: 1.5; }
+    .hoja .opciones { display: grid; gap: 8px; margin-top: 14px; }
+    .btn.whatsapp { background: #25d366; color: #fff; border-color: transparent; }
+
+    /* Barra de pestañas flotante (iOS) */
+    nav.bottom-nav { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 12px); z-index: 6;
+      display: flex; padding: 6px; border-radius: 30px; max-width: 480px; margin: 0 auto; }
+    .nav-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 8px 4px;
+      border-radius: 24px; font-size: 11px; font-weight: 650; color: var(--muted); cursor: pointer; transition: background-color .2s, color .2s; }
+    .nav-tab i { font-size: 24px; }
+    .nav-tab.active { color: var(--accent-text); background: var(--glass-hover); box-shadow: inset 0 1px 0 var(--rim); }
+  </style>
+</head>
+<body>
+  <div class="fondo"></div>
+
+  <header>
+    <div class="topbar glass">
+      <div class="marca">
+        <div class="logo"><i class="ti ti-dental" aria-hidden="true"></i></div>
+        <b>BIMO</b>
+      </div>
+      <div class="seguro"><i class="ph ph-lock-simple" aria-hidden="true"></i> Conexión segura</div>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <!-- PESTAÑA 1: MICRÓFONO INALÁMBRICO (solo audio, sin cámara) -->
+    <div id="tabMic" class="tab-content active">
+      <h2 class="titulo">Dictado</h2>
+      <p class="sub">Tu celular es el micrófono de BIMO.</p>
+      <div class="mic-card glass">
+        <button id="btnMic" class="btn-mic" aria-label="Grabar dictado"><i class="ph-light ph-microphone" aria-hidden="true"></i></button>
+        <div id="statusLabel" class="status-pill">Toca el micrófono para comenzar</div>
+      </div>
+      <div class="card glass instruction-box">
+        <strong>Cómo dictar</strong><br>
+        1. Toca el micrófono para empezar a grabar.<br>
+        2. Dicta los hallazgos clínicos o una orden.<br>
+        3. Toca otra vez para enviarlo a BIMO en tu PC.
+        <span class="ejemplo">"Bimo, una cita para Mateo Ramírez el 2 de febrero a las 3 de la tarde"</span>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 2: HISTORIAS Y VISOR PDF -->
+    <div id="tabPatients" class="tab-content">
+      <h2 class="titulo">Historias</h2>
+      <p class="sub">Pacientes, consultas y PDF.</p>
+      <div class="search-wrap">
+        <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+        <input type="text" id="inputSearch" class="search-box glass" placeholder="Buscar paciente por nombre">
+      </div>
+      <div id="patientsContainer" style="width: 100%;">
+        <div class="vacio">Cargando pacientes...</div>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 3: RADIOGRAFÍAS Y FOTOS CLÍNICAS -->
+    <div id="tabPhotos" class="tab-content">
+      <h2 class="titulo">Radiografías</h2>
+      <p class="sub">Adjunta estudios al expediente.</p>
+      <div class="card glass">
+        <label class="etiqueta" for="selectPhotoPatient">1. Paciente</label>
+        <select id="selectPhotoPatient" class="search-box" onchange="cargarFotosPacienteSeleccionado()">
+          <option value="">Cargando pacientes...</option>
+        </select>
+
+        <label class="etiqueta" for="selectPhotoCategory">2. Tipo de estudio</label>
+        <select id="selectPhotoCategory" class="search-box">
+          <option value="radiografia_panoramica">Radiografía panorámica digital</option>
+          <option value="radiografia_periapical">Radiografía periapical</option>
+          <option value="foto_intraoral">Fotografía intraoral (frontal / oclusal)</option>
+          <option value="foto_facial">Fotografía facial / perfil de ortodoncia</option>
+          <option value="estudio_modelos">Estudio cefalométrico / modelos</option>
+        </select>
+
+        <label class="etiqueta">3. Imagen</label>
+        <!-- Dos entradas: con "capture" el celular abre directo la cámara; sin él, la galería completa -->
+        <input type="file" id="inputPhotoCamera" accept="image/*" capture="environment" style="display: none;" onchange="previewSelectedPhoto(this)">
+        <input type="file" id="inputPhotoFile" accept="image/*,application/pdf" style="display: none;" onchange="previewSelectedPhoto(this)">
+        <div class="acciones" style="margin-top: 0;">
+          <button type="button" class="btn" onclick="document.getElementById('inputPhotoCamera').click()">
+            <i class="ph ph-camera" aria-hidden="true"></i> Tomar foto
+          </button>
+          <button type="button" class="btn" onclick="document.getElementById('inputPhotoFile').click()">
+            <i class="ph ph-images" aria-hidden="true"></i> Galería
+          </button>
+        </div>
+
+        <div id="previewContainer" style="display: none; margin-top: 14px; text-align: center;">
+          <img id="imgPreview" alt="Vista previa del estudio" />
+          <p id="lblPreviewInfo" style="font-size: 12px; color: var(--muted); margin-top: 6px;"></p>
+          <button id="btnUploadPhoto" class="btn primario ancho" style="margin-top: 10px;" onclick="subirFotoClinica()">
+            <i class="ph ph-upload-simple" aria-hidden="true"></i> Adjuntar a la historia clínica
+          </button>
+        </div>
+        <div id="uploadStatus" style="margin-top: 10px; font-size: 13px; text-align: center; font-weight: 600;"></div>
+      </div>
+
+      <div class="subtitulo"><i class="ph ph-images" aria-hidden="true"></i> Estudios adjuntados</div>
+      <div id="patientPhotosGrid">
+        <div class="vacio" style="grid-column: 1 / -1;">Selecciona un paciente para ver sus estudios.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hoja de contacto del paciente -->
+  <div id="veloContacto" class="velo" onclick="cerrarContacto()"></div>
+  <div id="hojaContacto" class="hoja glass" role="dialog" aria-modal="true" aria-labelledby="contactoNombre">
+    <div class="asa"></div>
+    <div id="contactoNombre" class="nombre"></div>
+    <div id="contactoTelefono" class="dato"></div>
+    <div id="contactoCita" class="cita" style="display:none;"></div>
+    <div class="opciones">
+      <a id="btnWhatsapp" class="btn ancho whatsapp" target="_blank" rel="noopener"><i class="ph ph-whatsapp-logo" aria-hidden="true"></i> Escribir por WhatsApp</a>
+      <a id="btnLlamar" class="btn ancho"><i class="ph ph-phone-call" aria-hidden="true"></i> Llamar</a>
+      <button id="btnCambiarNumero" type="button" class="btn ancho"><i class="ph ph-pencil-simple" aria-hidden="true"></i> Cambiar número</button>
+      <button type="button" class="btn ancho" onclick="cerrarContacto()">Cerrar</button>
+    </div>
+  </div>
+
+  <nav class="bottom-nav glass">
+    <div id="navMic" class="nav-tab active" onclick="switchTab('mic')"><i class="ph-light ph-microphone" aria-hidden="true"></i><span>Dictar</span></div>
+    <div id="navPhotos" class="nav-tab" onclick="switchTab('photos')"><i class="ph-light ph-camera" aria-hidden="true"></i><span>Radiografías</span></div>
+    <div id="navPatients" class="nav-tab" onclick="switchTab('patients')"><i class="ph-light ph-files" aria-hidden="true"></i><span>Historias</span></div>
+  </nav>
+
+  <script>
+    // Quitar el código de emparejamiento de la barra de direcciones (ya quedó guardado en la cookie)
+    if (location.search.indexOf('t=') !== -1) {
+      try { history.replaceState(null, '', '/mobile'); } catch (e) {}
+    }
+
+    // Escapar texto que viene de la base de datos antes de insertarlo como HTML
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+
+    const btnMic = document.getElementById('btnMic');
+    const statusLabel = document.getElementById('statusLabel');
+    const ICONO_MIC = '<i class="ph-light ph-microphone" aria-hidden="true"></i>';
+    const ICONO_STOP = '<i class="ph-light ph-stop" aria-hidden="true"></i>';
+
+    btnMic.addEventListener('click', async () => {
+      if (!isRecording) {
+        try {
+          // Solicitud explícita de audio puro (sin cámara)
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+          // Formato admitido por el teléfono (Android: webm; iPhone: mp4)
+          let mimeType = 'audio/webm';
+          if (!MediaRecorder.isTypeSupported('audio/webm')) {
+            if (MediaRecorder.isTypeSupported('audio/mp4')) {
+              mimeType = 'audio/mp4';
+            } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+              mimeType = 'audio/aac';
+            } else {
+              mimeType = '';
+            }
+          }
+
+          mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = e => {
+            if (e.data && e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            statusLabel.textContent = 'Enviando audio a BIMO...';
+            statusLabel.className = 'status-pill';
+
+            const tipo = mediaRecorder.mimeType || mimeType || 'audio/webm';
+            const ext = tipo.includes('mp4') ? 'm4a' : (tipo.includes('aac') ? 'aac' : (tipo.includes('ogg') ? 'ogg' : 'webm'));
+            const audioBlob = new Blob(audioChunks, { type: tipo });
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'mobile_audio.' + ext);
+
+            try {
+              const res = await fetch('/api/upload-audio', { method: 'POST', body: formData });
+              const data = await res.json();
+              if (data.ok) {
+                statusLabel.textContent = 'Audio recibido en BIMO';
+                statusLabel.className = 'status-pill success';
+              } else {
+                statusLabel.textContent = 'No se pudo procesar el audio';
+              }
+            } catch (err) {
+              statusLabel.textContent = 'Sin conexión con la PC';
+            }
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          btnMic.classList.add('recording');
+          btnMic.innerHTML = ICONO_STOP;
+          statusLabel.textContent = 'Grabando... toca para enviar';
+          statusLabel.className = 'status-pill recording';
+
+        } catch (err) {
+          statusLabel.textContent = 'Permiso de micrófono denegado';
+          alert('Permite el acceso al micrófono en tu navegador.');
+        }
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        btnMic.classList.remove('recording');
+        btnMic.innerHTML = ICONO_MIC;
+      }
+    });
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+
+      if (tab === 'mic') {
+        document.getElementById('tabMic').classList.add('active');
+        document.getElementById('navMic').classList.add('active');
+      } else if (tab === 'photos') {
+        document.getElementById('tabPhotos').classList.add('active');
+        document.getElementById('navPhotos').classList.add('active');
+        cargarPacientesSelect();
+      } else {
+        document.getElementById('tabPatients').classList.add('active');
+        document.getElementById('navPatients').classList.add('active');
+        cargarPacientes();
+      }
+    }
+
+    async function cargarPacientesSelect() {
+      const sel = document.getElementById('selectPhotoPatient');
+      try {
+        const res = await fetch('/api/pacientes');
+        const pacs = await res.json();
+        if (!pacs.length) {
+          sel.innerHTML = '<option value="">No hay pacientes registrados</option>';
+          return;
+        }
+        sel.innerHTML = pacs.map(p => `<option value="${esc(p.id)}">${esc(p.nombre)} (${esc(p.edad || 'N/E')} años)</option>`).join('');
+        cargarFotosPacienteSeleccionado();
+      } catch (err) {
+        sel.innerHTML = '<option value="">Error al cargar pacientes</option>';
+      }
+    }
+
+    let archivoFotoSeleccionado = null;
+
+    function previewSelectedPhoto(input) {
+      if (input.files && input.files[0]) {
+        archivoFotoSeleccionado = input.files[0];
+        const img = document.getElementById('imgPreview');
+        if (archivoFotoSeleccionado.type === 'application/pdf') {
+          img.removeAttribute('src');
+          img.style.display = 'none';
+          document.getElementById('lblPreviewInfo').innerText = 'PDF: ' + archivoFotoSeleccionado.name + ' (' + Math.round(archivoFotoSeleccionado.size / 1024) + ' KB)';
+          document.getElementById('previewContainer').style.display = 'block';
+          document.getElementById('uploadStatus').innerText = '';
+          return;
+        }
+        img.style.display = '';
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          document.getElementById('imgPreview').src = e.target.result;
+          document.getElementById('lblPreviewInfo').innerText = archivoFotoSeleccionado.name + ' (' + Math.round(archivoFotoSeleccionado.size / 1024) + ' KB)';
+          document.getElementById('previewContainer').style.display = 'block';
+          document.getElementById('uploadStatus').innerText = '';
+        };
+        reader.readAsDataURL(archivoFotoSeleccionado);
+      }
+    }
+
+    async function subirFotoClinica() {
+      if (!archivoFotoSeleccionado) {
+        alert('Toma o elige una fotografía primero.');
+        return;
+      }
+      const pacId = document.getElementById('selectPhotoPatient').value;
+      if (!pacId) {
+        alert('Elige un paciente.');
+        return;
+      }
+      const cat = document.getElementById('selectPhotoCategory').value;
+      const btn = document.getElementById('btnUploadPhoto');
+      const statusDiv = document.getElementById('uploadStatus');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="ph ph-spinner" aria-hidden="true"></i> Adjuntando...';
+      statusDiv.innerText = 'Procesando imagen...';
+      statusDiv.style.color = 'var(--muted)';
+
+      const formData = new FormData();
+      formData.append('file', archivoFotoSeleccionado);
+      formData.append('paciente_id', pacId);
+      formData.append('categoria', cat);
+
+      try {
+        const res = await fetch('/api/upload-foto', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.ok) {
+          statusDiv.innerText = 'Estudio adjuntado al expediente';
+          statusDiv.style.color = 'var(--accent-text)';
+          document.getElementById('previewContainer').style.display = 'none';
+          archivoFotoSeleccionado = null;
+          document.getElementById('inputPhotoFile').value = '';
+          document.getElementById('inputPhotoCamera').value = '';
+          cargarFotosPacienteSeleccionado();
+        } else {
+          statusDiv.innerText = data.error || 'No se pudo subir la imagen';
+          statusDiv.style.color = '#e11d48';
+        }
+      } catch (err) {
+        statusDiv.innerText = 'Sin conexión con BIMO';
+        statusDiv.style.color = '#e11d48';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ph ph-upload-simple" aria-hidden="true"></i> Adjuntar a la historia clínica';
+      }
+    }
+
+    async function cargarFotosPacienteSeleccionado() {
+      const pacId = document.getElementById('selectPhotoPatient').value;
+      const grid = document.getElementById('patientPhotosGrid');
+      if (!pacId) {
+        grid.innerHTML = '<div class="vacio" style="grid-column:1/-1;">Selecciona un paciente.</div>';
+        return;
+      }
+      grid.innerHTML = '<div class="vacio" style="grid-column:1/-1;">Cargando estudios...</div>';
+      try {
+        const res = await fetch('/api/fotos/' + encodeURIComponent(pacId));
+        const fotos = await res.json();
+        if (!fotos.length) {
+          grid.innerHTML = '<div class="vacio" style="grid-column:1/-1;">Este paciente aún no tiene estudios.</div>';
+          return;
+        }
+        grid.innerHTML = fotos.map(f => `
+          <div class="foto glass">
+            <a href="${esc(f.url)}" target="_blank"><img src="${esc(f.url)}" alt="Estudio clínico" /></a>
+            <div class="cat">${esc(String(f.categoria || '').replace(/_/g, ' '))}</div>
+            <div class="fecha">${esc(String(f.fecha_subida || '').split(' ')[0])}</div>
+          </div>
+        `).join('');
+      } catch (err) {
+        grid.innerHTML = '<div class="vacio" style="grid-column:1/-1;color:#e11d48;">Error al cargar estudios.</div>';
+      }
+    }
+
+    async function cargarPacientes(query = '') {
+      const container = document.getElementById('patientsContainer');
+      try {
+        const res = await fetch('/api/pacientes?q=' + encodeURIComponent(query));
+        const pacientes = await res.json();
+
+        if (!pacientes.length) {
+          container.innerHTML = '<div class="vacio">No hay pacientes registrados.</div>';
+          return;
+        }
+
+        container.innerHTML = pacientes.map(p => {
+          const tel = p.telefono && p.telefono !== 'No especificado' ? p.telefono : '';
+          return `
+          <div class="card glass">
+            <div class="patient-name">${esc(p.nombre)}</div>
+            <div class="patient-meta"><i class="ph ph-identification-card" aria-hidden="true"></i> ${esc(p.documento || 'Sin cédula')} · ${esc(p.edad || 'N/E')} años</div>
+            <div class="patient-meta"><i class="ph ph-phone" aria-hidden="true"></i> ${esc(tel || 'Sin teléfono')}</div>
+            <div class="acciones">
+              <button class="btn" onclick="toggleConsultas(${Number(p.id)})"><i class="ph ph-folder-open" aria-hidden="true"></i> Consultas (${Number(p.total_consultas || 0)})</button>
+              <button class="btn" onclick="abrirContacto(${Number(p.id)})"><i class="ph ph-chat-circle-text" aria-hidden="true"></i> Contactar</button>
+            </div>
+            <div id="consultas_${Number(p.id)}" class="consultations-list" style="display:none;"></div>
+          </div>`;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = '<div class="vacio" style="color:#e11d48;">Error al cargar pacientes.</div>';
+      }
+    }
+
+    async function abrirContacto(pacienteId) {
+      const hoja = document.getElementById('hojaContacto');
+      document.getElementById('contactoNombre').innerText = 'Cargando...';
+      document.getElementById('contactoTelefono').innerText = '';
+      document.getElementById('contactoCita').style.display = 'none';
+      document.getElementById('veloContacto').classList.add('abierto');
+      hoja.classList.add('abierta');
+      try {
+        const res = await fetch('/api/paciente/' + pacienteId + '/contacto');
+        const c = await res.json();
+        document.getElementById('contactoNombre').innerText = c.nombre || 'Paciente';
+        document.getElementById('contactoTelefono').innerHTML = '<i class="ph ph-phone" aria-hidden="true"></i> ' + esc(c.telefono || 'Sin número registrado');
+        const citaDiv = document.getElementById('contactoCita');
+        if (c.cita) {
+          citaDiv.innerHTML = '<strong>Próxima cita</strong><br>' + esc(c.cita.fecha) + ' · ' + esc(c.cita.hora) + '<br>' + esc(c.cita.motivo) +
+            '<br><span style="color:var(--muted)">El mensaje de WhatsApp lleva el recordatorio de esta cita.</span>';
+          citaDiv.style.display = 'block';
+        }
+        const wa = document.getElementById('btnWhatsapp');
+        const tel = document.getElementById('btnLlamar');
+        wa.style.display = c.whatsapp_url ? '' : 'none';
+        tel.style.display = c.llamar_url ? '' : 'none';
+        if (c.whatsapp_url) wa.href = c.whatsapp_url;
+        if (c.llamar_url) tel.href = c.llamar_url;
+        const btnCambiar = document.getElementById('btnCambiarNumero');
+        btnCambiar.innerHTML = '<i class="ph ph-pencil-simple" aria-hidden="true"></i> ' + (c.telefono ? 'Cambiar número' : 'Agregar número');
+        btnCambiar.onclick = () => { cerrarContacto(); modificarTelefonoMovil(pacienteId, c.telefono || ''); };
+      } catch (err) {
+        document.getElementById('contactoNombre').innerText = 'Sin conexión con BIMO';
+      }
+    }
+
+    function cerrarContacto() {
+      document.getElementById('veloContacto').classList.remove('abierto');
+      document.getElementById('hojaContacto').classList.remove('abierta');
+    }
+
+    async function modificarTelefonoMovil(pacienteId, currentTel) {
+      const nuevo = prompt('Nuevo teléfono o celular del paciente:', currentTel || '09');
+      if (nuevo === null) return;
+      const telTrim = nuevo.trim();
+      if (!telTrim) return;
+      try {
+        const res = await fetch('/api/paciente/telefono', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paciente_id: pacienteId, telefono: telTrim })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          alert('Teléfono actualizado');
+          cargarPacientes(document.getElementById('inputSearch').value);
+        } else {
+          alert(data.message || data.error || 'No se pudo actualizar el teléfono');
+        }
+      } catch (err) {
+        alert('Sin conexión con BIMO');
+      }
+    }
+
+    document.getElementById('inputSearch').addEventListener('input', (e) => {
+      cargarPacientes(e.target.value);
+    });
+
+    async function toggleConsultas(pacienteId) {
+      const listDiv = document.getElementById('consultas_' + pacienteId);
+      if (listDiv.style.display === 'none') {
+        listDiv.innerHTML = '<div class="patient-meta">Cargando consultas...</div>';
+        listDiv.style.display = 'block';
+        try {
+          const res = await fetch('/api/consultas/' + pacienteId);
+          const consultas = await res.json();
+          if (!consultas.length) {
+            listDiv.innerHTML = '<div class="patient-meta">Sin consultas registradas.</div>';
+            return;
+          }
+          listDiv.innerHTML = consultas.map(c => `
+            <div class="consultation-item">
+              <div class="cons-date"><i class="ph ph-calendar-blank" aria-hidden="true"></i> ${esc(String(c.fecha_hora || '').split(' ')[0])}</div>
+              <div style="display:flex;gap:6px;">
+                ${c.ruta_pdf ? `
+                  <a class="btn" href="/api/pdf/${Number(c.id)}" target="_blank"><i class="ph ph-eye" aria-hidden="true"></i> Ver</a>
+                  <a class="btn primario" href="/api/pdf/${Number(c.id)}" download><i class="ph ph-download-simple" aria-hidden="true"></i></a>
+                ` : '<span class="patient-meta">Sin PDF</span>'}
+              </div>
+            </div>
+          `).join('');
+        } catch (err) {
+          listDiv.innerHTML = '<div class="patient-meta" style="color:#e11d48;">Error al cargar consultas.</div>';
+        }
+      } else {
+        listDiv.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>

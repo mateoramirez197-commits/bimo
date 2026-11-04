@@ -652,6 +652,13 @@ def parchear_odontograma_exhaustivo(odonto_lista: list, texto_crudo: str) -> lis
         else:
             hallazgos = [str(h_raw).strip()] if str(h_raw).strip() else []
 
+        # Si la IA dejó la pieza sin hallazgo concreto ("Evaluada") pero el dictado sí lo dice
+        # (ej. "caries en el premolar superior derecho y en la 36"), rescatarlo del texto
+        if not hallazgos or all(any(g in h.lower() for g in _HALLAZGOS_GENERICOS_ODONTO) for h in hallazgos):
+            inferido = inferir_hallazgo_pieza(str(p_raw), texto_crudo)
+            if inferido and not inferido.lower().startswith("mencionada"):
+                hallazgos = [inferido]
+
         if key in mapa_fusion:
             for h in hallazgos:
                 if h and h not in mapa_fusion[key]["procedimientos_o_hallazgos"]:
@@ -744,12 +751,90 @@ def _depurar_piezas_anatomicas_redundantes(mapa_fusion: dict) -> None:
             for h in it.get("procedimientos_o_hallazgos", []):
                 hall_expl.add(str(h).strip().lower())
         hall_txt = [str(h).strip().lower() for h in mapa_fusion[key].get("procedimientos_o_hallazgos", [])]
+        # Coincidencia flexible: "endodoncia" repite a "endodoncia (resuelta en consulta)"
         redundante = all(
-            (h in hall_expl) or any(g in h for g in _HALLAZGOS_GENERICOS_ODONTO)
+            any(h == e or h in e or e in h for e in hall_expl) or any(g in h for g in _HALLAZGOS_GENERICOS_ODONTO)
             for h in hall_txt
         )
         if redundante:
             del mapa_fusion[key]
+
+
+_PATOLOGIAS_ODONTO = ("caries", "fractura", "pulpitis", "gingivitis", "periodontitis", "absceso", "infecci",
+                      "ausente", "perdid", "tártaro", "tartaro", "movilidad", "dolor", "necrosis", "retenid")
+_PROCEDIMIENTOS_ODONTO = ("endodoncia", "resina", "obturaci", "extracci", "exodoncia", "corona", "sellante",
+                          "profilaxis", "implante", "incrustaci", "flúor", "fluor", "detartraje", "limpieza",
+                          "prótesis", "protesis", "carilla", "blanqueamiento", "curetaje", "pulpotom", "pulpectom")
+_PLANES_GENERICOS = ("tratamiento odontológico integral", "tratamiento odontologico integral", "evaluación clínica",
+                     "evaluacion clinica", "no especificado", "pendiente", "")
+
+
+def _lista_piezas(piezas: list) -> str:
+    piezas = [p for i, p in enumerate(piezas) if p not in piezas[:i]]
+    etiq = [f"pieza {p}" if str(p).isdigit() else str(p).lower() for p in piezas]
+    return etiq[0] if len(etiq) == 1 else ", ".join(etiq[:-1]) + " y " + etiq[-1]
+
+
+def _pieza_nombrada_en(pieza, texto_low: str) -> bool:
+    """True si el texto ya nombra la pieza: por su número FDI o por su nombre ('premolar superior derecho')."""
+    p = str(pieza).strip().lower()
+    if p in texto_low:
+        return True
+    if re.fullmatch(r'[1-4][1-8]|[5-8][1-5]', p):
+        if re.search(rf'\b{p}\b', texto_low):
+            return True
+        tipo, arcada, lado = _tipo_y_ubicacion_fdi(p)
+        arc = "superior" if arcada == "sup" else "inferior"
+        lad = "derech" if lado == "der" else "izquierd"
+        return bool(re.search(rf'{tipo}\w*\s+{arc}\w*\s+{lad}', texto_low))
+    return False
+
+
+def completar_diagnostico_y_plan(resultado: dict, texto_crudo: str = "") -> dict:
+    """
+    Diagnóstico y plan exhaustivos: la IA a veces resume ("caries en premolar") o deja un plan genérico.
+    A partir del odontograma ya parcheado agrega TODAS las patologías al diagnóstico y TODOS los
+    procedimientos al plan, cada uno con sus piezas (ej. "Caries en pieza 14 y pieza 36").
+    """
+    odonto = resultado.get("odontograma") or []
+    patologias, procedimientos = {}, {}
+    for item in odonto:
+        if not isinstance(item, dict):
+            continue
+        pieza = str(item.get("pieza_dental") or "").strip()
+        if not pieza:
+            continue
+        for h in item.get("procedimientos_o_hallazgos") or []:
+            h_txt = str(h).strip()
+            h_low = h_txt.lower()
+            if not h_txt or any(g in h_low for g in _HALLAZGOS_GENERICOS_ODONTO):
+                continue
+            base = re.sub(r'\s*\(.*?\)\s*', ' ', h_txt).strip().capitalize()
+            if any(k in h_low for k in _PROCEDIMIENTOS_ODONTO):
+                procedimientos.setdefault(base, []).append(pieza)
+            elif any(k in h_low for k in _PATOLOGIAS_ODONTO):
+                patologias.setdefault(base, []).append(pieza)
+
+    def _fusionar(actual: str, grupos: dict) -> str:
+        actual = str(actual or "").strip()
+        es_generico = actual.lower().rstrip(".") in _PLANES_GENERICOS
+        partes = [] if es_generico else [actual.rstrip(". ")]
+        act_low = actual.lower()
+        for nombre, piezas in grupos.items():
+            clave = nombre.lower().split()[0][:8]
+            if not es_generico and clave in act_low:
+                # Solo agregar las piezas que el texto aún no nombra (por número o por nombre anatómico)
+                piezas = [p for p in piezas if not _pieza_nombrada_en(p, act_low)]
+                if not piezas:
+                    continue
+            partes.append(f"{nombre} en {_lista_piezas(piezas)}")
+        return ". ".join(p for p in partes if p) or actual
+
+    if patologias:
+        resultado["diagnostico"] = _fusionar(resultado.get("diagnostico"), patologias)
+    if procedimientos:
+        resultado["plan_tratamiento"] = _fusionar(resultado.get("plan_tratamiento"), procedimientos)
+    return resultado
 
 
 def _normalizar_nombres_espanol(nombre: str) -> str:
@@ -2409,6 +2494,12 @@ Si el doctor dice 'premolar derecho' sin cuadrante ni número no debe inventarse
   }}
   Si no se dictan pagos, escribe "pagos": {{ "costo_total": 0.0, "abono": 0.0, "saldo_pendiente": 0.0, "estado": "Cancelado", "metodo_pago": "No especificado", "notas": "Sin registro de pagos" }}
 
+REGLA EXHAUSTIVA DE DIAGNÓSTICO Y PLAN (OBLIGATORIA):
+- El doctor suele dictar VARIOS hallazgos y tratamientos en la misma consulta (ej: 'hicimos una endodoncia y también tiene caries en el premolar superior derecho y en la 36'). Registra TODOS, sin resumir ni elegir solo uno.
+- 'diagnostico' debe enumerar cada patología con sus piezas (ej: 'Caries en premolar superior derecho y pieza 36').
+- 'plan_tratamiento' debe enumerar cada procedimiento realizado o indicado con sus piezas (ej: 'Endodoncia en premolar superior derecho. Resinas en piezas 14 y 36'). NUNCA escribas un plan genérico como 'Tratamiento odontológico integral'.
+- En 'odontograma', cada pieza lleva TODOS sus hallazgos y procedimientos; nunca pongas 'Evaluada' si el doctor dijo un hallazgo para esa pieza.
+
 DETECCIÓN DE CITAS FUTURAS DENTRO DE HISTORIA CLÍNICA:
 - Si mientras se dicta la historia clínica el doctor menciona una próxima cita o control (ej: 'dejamos cita para dentro de 15 días', 'control en 30 días', 'cita el próximo martes a las 3', 'lo veo en un mes'), activa obligatoriamente en 'cita_programada':
   "cita_programada": {{
@@ -2739,6 +2830,9 @@ Texto dictado:
             if not resultado.get("plan_tratamiento") or str(resultado.get("plan_tratamiento")).strip().lower() in ("no especificado", "none", ""):
                 m_plan = re.search(r'plan\s+(?:de\s+tratamiento\s+)?([^\.]+)', texto_crudo, re.IGNORECASE)
                 resultado["plan_tratamiento"] = m_plan.group(1).strip() if m_plan else "Tratamiento odontológico integral"
+
+            # Diagnóstico y plan exhaustivos: todas las patologías y procedimientos del odontograma
+            completar_diagnostico_y_plan(resultado, texto_crudo)
 
             # Extracción y cálculo matemático estricto de honorarios y pagos
             resultado["pagos"] = _extraer_y_calcular_pagos(resultado.get("pagos", {}), texto_crudo)

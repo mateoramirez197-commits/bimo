@@ -524,6 +524,42 @@ class SegmentoPorTope(np.ndarray):
     pass
 
 
+class SegmentoOrden(np.ndarray):
+    """Audio que empezó dentro de la ventana activa (tras "Bimo"): es la orden, aunque la ventana
+    haya vencido mientras se grababa (con TV de fondo el segmento se alarga y antes se descartaba)."""
+    pass
+
+
+# Duración máxima de la orden tras "Bimo" (con ruido de fondo el silencio puede no llegar nunca)
+SEGMENTO_MAX_ORDEN_SEG = 15.0
+
+
+def aislar_voz_cercana(audio, samplerate, ventana_seg=0.03, relleno_seg=0.18):
+    """
+    Conserva los tramos fuertes (la voz cercana al micrófono) y descarta los débiles (TV, gente lejos).
+    El doctor habla mucho más cerca del micrófono que la fuente de ruido, así que su voz tiene más energía.
+    Si casi nada supera el umbral (todo es igual de fuerte), devuelve el audio original.
+    """
+    a = np.asarray(audio)
+    n = max(1, int(samplerate * ventana_seg))
+    bloques = len(a) // n
+    if bloques < 10:
+        return a
+    x = a[:bloques * n].astype(np.float32).reshape(bloques, n)
+    energia = np.sqrt((x ** 2).mean(axis=1))
+    fondo = float(np.percentile(energia, 30))
+    pico = float(np.percentile(energia, 95))
+    if pico <= 0 or pico < fondo * 2.2:
+        return a  # sin contraste claro entre voz y fondo: no tocar
+    umbral = max(fondo * 1.9, pico * 0.22)
+    fuerte = energia >= umbral
+    pad = max(1, int(relleno_seg / ventana_seg))
+    conservar = np.convolve(fuerte.astype(np.int32), np.ones(2 * pad + 1, dtype=np.int32), mode="same") > 0
+    if conservar.sum() * n < samplerate * 0.35 or conservar.mean() > 0.92:
+        return a
+    return np.concatenate([a[i * n:(i + 1) * n] for i in np.flatnonzero(conservar)])
+
+
 class BackgroundWakeListener:
     """
     Escucha activa continua ultra-reactiva conectada automáticamente al micrófono predeterminado:
@@ -843,6 +879,7 @@ class BackgroundWakeListener:
                 umbral_inicio = max(14.0, min(1600.0, self.ambient_floor * mult_inicio + 8.0))
 
                 if vol > umbral_inicio:
+                    self._inicio_en_ventana = self.esta_en_ventana_activa() and self._callback_tap_manual is None
                     self.hablando = True
                     self.silencio_frames = 0
                     self._frames_voz_reales = 1
@@ -896,6 +933,8 @@ class BackgroundWakeListener:
                             buf = list(self.acumulador_voz)
                             if buf:
                                 audio_np = np.concatenate(buf)
+                                if getattr(self, "_inicio_en_ventana", False):
+                                    audio_np = audio_np.view(SegmentoOrden)
                                 dur_seg = len(audio_np) / self.samplerate
                                 print(f"[VAD] segmento {dur_seg:.1f}s piso={self.ambient_floor:.1f} umbral={umbral_silencio:.1f}")
                                 self._despachar_analisis(audio_np)
@@ -915,12 +954,18 @@ class BackgroundWakeListener:
                     # Corte de seguridad. En reposo (esperando "Bimo") los segmentos son cortos: con ruido de fondo
                     # parecido a voz (TV, video, conversación) el silencio nunca llega y antes se acumulaban 25 s,
                     # con lo que "Bimo" se analizaba tarde o enterrado en ruido. En ventana activa o dictado: 120 s.
-                    en_reposo = not (self.esta_en_ventana_activa() or self._callback_tap_manual is not None)
-                    limite_seg = SEGMENTO_MAX_REPOSO_SEG if en_reposo else 120.0
+                    es_orden = getattr(self, "_inicio_en_ventana", False) and self._callback_tap_manual is None
+                    en_reposo = not es_orden and not (self.esta_en_ventana_activa() or self._callback_tap_manual is not None)
+                    if es_orden:
+                        limite_seg = SEGMENTO_MAX_ORDEN_SEG
+                    elif en_reposo:
+                        limite_seg = SEGMENTO_MAX_REPOSO_SEG
+                    else:
+                        limite_seg = 120.0
                     if total_samples >= int(self.samplerate * limite_seg):
                         buf = list(self.acumulador_voz)
                         resto = []
-                        if en_reposo and len(buf) > 4:
+                        if (en_reposo or es_orden) and len(buf) > 4:
                             # Cortar en el bloque más silencioso del último ~1.5 s (pausa entre palabras)
                             # y conservar lo que sigue para el próximo segmento: "Bimo" no queda partido.
                             ventana = min(len(buf) - 2, max(2, int(1.5 * self.samplerate / max(1, len(datos)))))
@@ -929,13 +974,17 @@ class BackgroundWakeListener:
                             buf, resto = buf[:corte], buf[corte:]
                         if buf:
                             audio_np = np.concatenate(buf)
-                            if en_reposo:
+                            if es_orden:
+                                audio_np = audio_np.view(SegmentoOrden)
+                            elif en_reposo:
                                 audio_np = audio_np.view(SegmentoPorTope)
                             dur_seg = len(audio_np) / self.samplerate
                             print(f"[VAD] segmento {dur_seg:.1f}s (tope) piso={self.ambient_floor:.1f} umbral={umbral_silencio:.1f}")
                             self._despachar_analisis(audio_np)
                         self.acumulador_voz = list(resto)
                         self.hablando = bool(resto)
+                        if es_orden:
+                            self._inicio_en_ventana = False  # lo que sigue a la orden ya no es parte de ella
                         self.silencio_frames = 0
                         self._frames_voz_reales = len(resto)
                         self._peak_voz = max((float(np.abs(b.astype(np.float32)).mean()) for b in resto), default=0.0)
@@ -990,6 +1039,7 @@ class BackgroundWakeListener:
     def _analizar_audio(self, audio_np):
         try:
             por_tope = isinstance(audio_np, SegmentoPorTope)
+            es_orden = isinstance(audio_np, SegmentoOrden)
             audio_np = np.asarray(audio_np)
             # 1. Filtro de energía acústica y duración en memoria RAM (hasta 120s)
             duracion_seg = len(audio_np) / self.samplerate
@@ -999,6 +1049,8 @@ class BackgroundWakeListener:
 
             # Normalización, remuestreo a 16000Hz y Control Automático de Ganancia (AGC equilibrado)
             from ai_engine import normalizar_audio_para_stt
+            # Con TV o conversación de fondo: quedarse con la voz cercana (la del doctor) antes de transcribir
+            audio_np = aislar_voz_cercana(audio_np, self.samplerate)
             _, audio_float, tiene_energia = normalizar_audio_para_stt(audio_np, samplerate=self.samplerate)
             if not tiene_energia or audio_float.size == 0:
                 return
@@ -1068,7 +1120,7 @@ class BackgroundWakeListener:
             palabras = texto_limpio.split()
 
             # Verificar si estamos dentro de la ventana activa multi-turn (el usuario YA dijo 'Bimo' previamente)
-            if self.esta_en_ventana_activa():
+            if self.esta_en_ventana_activa() or es_orden:
                 palabras_activas = [w for w in palabras if w not in ('eh', 'este', 'em', 'mm', 'ah', 'oh')]
                 # Si fue solo un suspiro, muletilla o ruido corto mientras el doctor piensa, mantener la ventana activa abierta
                 if len(palabras_activas) < 2 and duracion_seg < 1.8:

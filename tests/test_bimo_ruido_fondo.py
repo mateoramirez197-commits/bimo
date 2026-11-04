@@ -23,9 +23,12 @@ sys.path.insert(0, str(BASE_DIR))
 
 from wake_word_listener import (  # noqa: E402
     BackgroundWakeListener,
+    SegmentoOrden,
     SegmentoPorTope,
+    SEGMENTO_MAX_ORDEN_SEG,
     SEGMENTO_MAX_REPOSO_SEG,
     ESPERA_ORDEN_PENDIENTE_SEG,
+    aislar_voz_cercana,
 )
 
 SR = 16000
@@ -114,6 +117,42 @@ class TestBimoConRuidoDeFondo(unittest.TestCase):
         self.assertEqual(len(comandos), 2)
         self.assertIn("qué hora es", comandos[1])
         self.assertEqual(l._orden_pendiente, "")
+
+    def test_06_orden_con_tv_se_corta_en_15s_y_se_marca_como_orden(self):
+        comandos = []
+        l = _listener(comandos)
+        despachados = []
+        l._despachar_analisis = lambda audio: despachados.append(audio)
+        np.random.seed(3)
+        for _ in range(20):
+            l._audio_callback(np.random.randint(-40, 40, 1024, dtype=np.int16), 1024, None, None)
+        l.activar_ventana_activa(15.0)
+        for i in range(400):  # ~25 s de voz + TV sin silencio
+            amp = 1500 if i % 9 else 900
+            l._audio_callback(np.random.randint(-amp, amp, 1024, dtype=np.int16), 1024, None, None)
+        self.assertTrue(despachados)
+        self.assertIsInstance(despachados[0], SegmentoOrden)
+        self.assertLessEqual(len(despachados[0]) / SR, SEGMENTO_MAX_ORDEN_SEG + 0.1)
+
+    def test_07_orden_se_ejecuta_aunque_la_ventana_venza_mientras_se_graba(self):
+        comandos = []
+        l = _listener(comandos)
+        l.tiempo_ventana_activa = 0.0  # la ventana ya venció
+        with patch("wake_word_listener.get_whisper_engine", _whisper("agenda una cita para Juan mañana a las tres")):
+            l._analizar_audio(_audio(16.0).view(SegmentoOrden))
+        self.assertEqual(len(comandos), 1)
+        self.assertIn("agenda una cita", comandos[0])
+
+    def test_08_aislar_voz_cercana_descarta_la_tv(self):
+        np.random.seed(5)
+        tv = np.random.randint(-500, 500, SR * 6).astype(np.int16)
+        voz = tv.copy()
+        voz[SR * 2:SR * 3] = np.random.randint(-6000, 6000, SR).astype(np.int16)  # 1 s de doctor cerca
+        limpio = aislar_voz_cercana(voz, SR)
+        self.assertLess(len(limpio) / SR, 2.0)
+        self.assertGreater(len(limpio) / SR, 0.9)
+        # Audio parejo (sin contraste voz / fondo): no se toca
+        self.assertEqual(len(aislar_voz_cercana(tv, SR)), len(tv))
 
     def test_05_segmento_normal_mantiene_regla_estricta(self):
         comandos = []
