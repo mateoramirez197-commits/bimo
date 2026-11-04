@@ -1,0 +1,16 @@
+{
+  "tema_activo": "cyan",
+  "whatsapp": {
+    "mensaje_plantilla": "Hola {paciente}, le recordamos su cita dental el {fecha} a las {hora}.",
+    "dias_adelanto": 1,
+    "hora_envio": "09:00"
+  },
+  "nombre_clinica": "BIMO Dental Clinic",
+  "nombre_doctor": "Dr. Odontólogo",
+  "registro_profesional": "",
+  "telefono_contacto": "",
+  "modo_bajo_rendimiento": false,
+  "onboarding_completado": false,
+  "email_google": "",
+  "pin_rapido": ""
+}

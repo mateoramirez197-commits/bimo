@@ -303,15 +303,20 @@ class BimoUninstallerWizard(tk.Tk):
                 self.update_idletasks()
 
             conservar = self.conservar_pacientes.get()
-            carpetas_protegidas = {"Pacientes", "data"} if conservar else set()
+            ITEMS_PROTEGIDOS = {
+                "Pacientes", "data", "bimo.db", "bimo.db-wal", "bimo.db-shm",
+                "bimo.vault", "clinica.json", "token.json", "Respaldos_Locales",
+                "vocabulario_aprendido.json", "bimo.lic"
+            } if conservar else set()
 
             # Recorrer directorio y eliminar elementos no protegidos
             for item in os.listdir(self.destino_dir):
                 item_path = os.path.join(self.destino_dir, item)
                 
-                # Proteger expedientes si el usuario lo solicitó
-                if item in carpetas_protegidas:
-                    continue
+                # Proteger expedientes y datos clínicos si el usuario lo solicitó (P-D)
+                if conservar:
+                    if item in ITEMS_PROTEGIDOS or item.startswith("bimo.vault.bak") or item.startswith("bimo.lic.ajeno"):
+                        continue
 
                 # No intentar eliminar el propio ejecutable del desinstalador mientras corre
                 if getattr(sys, 'frozen', False) and os.path.abspath(item_path) == os.path.abspath(sys.executable):
@@ -369,6 +374,18 @@ class BimoUninstallerWizard(tk.Tk):
 
     def _avanzar(self):
         if self.paso_actual == 1:
+            if not self.conservar_pacientes.get():
+                resp = messagebox.askyesno(
+                    "Confirmación de Eliminación Definitiva",
+                    "ATENCIÓN: Ha desmarcado la casilla de conservación.\n\n"
+                    "Se borrarán definitivamente las historias clínicas, consultas, "
+                    "odontogramas y expedientes de pacientes.\n\n"
+                    "¿Está completamente seguro de continuar con la eliminación total?",
+                    icon="warning",
+                    parent=self
+                )
+                if not resp:
+                    return
             self._mostrar_paso(2)
         elif self.paso_actual == 3:
             self._limpieza_final_y_salir()

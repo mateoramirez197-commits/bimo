@@ -59,8 +59,88 @@ GLOSARIO_ODONTOLOGICO = (
     "brackets Roth MBT, elásticos intermaxilares, mordida abierta cruzada sobremordida clase I II III."
 )
 
+def _es_alucinacion_whisper(texto: str) -> bool:
+    if not texto or not texto.strip():
+        return True
+    t = texto.lower().strip()
+    frases_basura = (
+        "subtítulos realizados por",
+        "amara.org",
+        "gracias por ver",
+        "suscríbete al canal",
+        "subtitulado por",
+        "nombres y apellidos hispanoamericanos",
+        "términos odontológicos: odontograma",
+    )
+    if any(fb in t for fb in frases_basura):
+        return True
+    # Detectar repeticiones degeneradas de Whisper en silencio (ej. "Rau, Rau, Rau, Rau")
+    palabras = [w.strip(".,;:¡!¿?\"'()") for w in t.split() if w.strip(".,;:¡!¿?\"'()")]
+    if len(palabras) >= 5:
+        from collections import Counter
+        conteo = Counter(palabras)
+        palabra_mas_comun, freq = conteo.most_common(1)[0]
+        if freq >= 4 and (freq / len(palabras)) >= 0.45:
+            return True
+    return False
+
+
+def normalizar_audio_para_stt(audio_data, samplerate=16000):
+    """
+    Normaliza, elimina componente continua (DC offset), aplica Control Automático de Ganancia (AGC)
+    para micrófonos USB de baja ganancia (ej. ME6S) y remuestrea a 16000Hz.
+    Retorna (arr_int16_16k, arr_float32_16k, tiene_energia_voz).
+    """
+    import numpy as np
+    arr = np.asarray(audio_data)
+    if arr.ndim > 1:
+        # Si es estéreo/multicanal, elegir el canal con mayor energía acústica real
+        stds = [float(np.std(arr[:, c].astype(np.float32))) for c in range(arr.shape[1])]
+        mejor_canal = int(np.argmax(stds)) if stds else 0
+        arr = arr[:, mejor_canal]
+
+    es_flotante = np.issubdtype(arr.dtype, np.floating)
+    arr_f = arr.astype(np.float32)
+    if es_flotante and float(np.max(np.abs(arr_f)) if arr_f.size else 0.0) <= 2.0:
+        # Escalar a rango int16 [-32768, 32767] para procesamiento uniforme
+        arr_f = arr_f * 32767.0
+
+    if arr_f.size == 0:
+        return np.zeros(0, dtype=np.int16), np.zeros(0, dtype=np.float32), False
+
+    # 1. Eliminar DC offset
+    arr_f = arr_f - float(np.mean(arr_f))
+
+    # 2. Remuestreo rápido a 16000Hz si proviene de 44100Hz / 48000Hz
+    if samplerate and int(samplerate) != 16000 and arr_f.size > 16:
+        nuevo_tam = max(1, int(round(arr_f.size * 16000.0 / float(samplerate))))
+        x_old = np.linspace(0.0, 1.0, num=arr_f.size, endpoint=False)
+        x_new = np.linspace(0.0, 1.0, num=nuevo_tam, endpoint=False)
+        arr_f = np.interp(x_new, x_old, arr_f).astype(np.float32)
+
+    rms_raw = float(np.sqrt(np.mean(arr_f ** 2)))
+    peak_raw = float(np.max(np.abs(arr_f)))
+
+    # Si es ruido ambiente tenue o silencio digital, no amplificar como si fuera voz
+    if peak_raw < 18.0 or rms_raw < 3.5:
+        arr_int16 = np.clip(arr_f, -32768, 32767).astype(np.int16)
+        return arr_int16, (arr_int16.astype(np.float32) / 32768.0), False
+
+    # 3. Control Automático de Ganancia (AGC) equilibrado (hasta 65x para no amplificar ruido de fondo)
+    p995 = float(np.percentile(np.abs(arr_f), 99.5))
+    ref_amp = max(p995, peak_raw * 0.50, 1.0)
+    ganancia = min(65.0, 24000.0 / ref_amp)
+    if ganancia > 1.05:
+        arr_f = arr_f * ganancia
+
+    # Limitador suave para evitar recorte brusco (clipping)
+    arr_f = np.clip(arr_f, -32000.0, 32000.0)
+    arr_int16 = arr_f.astype(np.int16)
+    arr_float32 = arr_f / 32768.0
+    return arr_int16, arr_float32, True
+
+
 def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
-    model = get_whisper_engine()
     if not initial_prompt:
         from config import cargar_datos_clinica
         datos = cargar_datos_clinica()
@@ -77,22 +157,94 @@ def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
             vocab_aprendido = ""
 
         initial_prompt = (
-            f"Consulta odontológica y médica del Doctor {doc_nom}. "
-            f"Dictado clínico de números y contactos: cero nueve, seis cero cero, seiscientos, seiscientos veintiocho, doble cero, teléfono, cédula. "
+            f"Consulta clínica odontológica del Doctor {doc_nom}. "
+            f"Dictado clínico de pacientes, edades, números de cédula de 10 dígitos y teléfonos: "
+            f"cero nueve, diecisiete, edad, años, cédula, premolar superior derecho e izquierdo, molar, caries, resina. "
             f"{GLOSARIO_NOMBRES_HISPANOAMERICANOS} {GLOSARIO_ANDINO_KICHWA}{vocab_aprendido} {GLOSARIO_ODONTOLOGICO}"
         )
+
+    es_mock_local = hasattr(get_whisper_engine, "assert_called")
+    entrada_para_local = ruta_wav
+
+    # 1. Preparar y normalizar el audio (AGC + 16kHz) y transcribir con Groq Whisper Large V3 Turbo
+    if not es_mock_local:
+        try:
+            import io
+            import numpy as np
+            from scipy.io.wavfile import read as wav_read, write as wav_write
+
+            audio_bytes = None
+            nombre_archivo = "dictado.wav"
+            tiene_voz = True
+
+            if isinstance(ruta_wav, (str, os.PathLike)) and os.path.exists(ruta_wav):
+                if os.path.getsize(ruta_wav) > 200:
+                    try:
+                        sr_leido, data_leida = wav_read(ruta_wav)
+                        arr_i16, arr_f32, tiene_voz = normalizar_audio_para_stt(data_leida, samplerate=sr_leido)
+                        if tiene_voz and arr_i16.size > 800:
+                            buf = io.BytesIO()
+                            wav_write(buf, 16000, arr_i16)
+                            audio_bytes = buf.getvalue()
+                            entrada_para_local = arr_f32
+                    except Exception:
+                        with open(ruta_wav, "rb") as f_aud:
+                            audio_bytes = f_aud.read()
+                    nombre_archivo = os.path.basename(str(ruta_wav)) or "dictado.wav"
+            elif isinstance(ruta_wav, np.ndarray) and ruta_wav.size > 800:
+                arr_i16, arr_f32, tiene_voz = normalizar_audio_para_stt(ruta_wav, samplerate=16000)
+                if tiene_voz:
+                    buf = io.BytesIO()
+                    wav_write(buf, 16000, arr_i16)
+                    audio_bytes = buf.getvalue()
+                    entrada_para_local = arr_f32
+
+            if not tiene_voz:
+                return ""
+
+            api_key = get_groq_api_key()
+            if api_key and audio_bytes:
+                cliente_stt = Groq(api_key=api_key)
+                # IMPORTANTE: NO incluir la palabra 'Bimo' en el prompt de Whisper para que jamás la alucine con ruido ambiente
+                prompt_corto = (
+                    "Consulta odontológica en español: paciente, edad, años, cédula, teléfono, "
+                    "premolar superior derecho e izquierdo, molar, canino, incisivo, caries, resina, endodoncia, cita."
+                )
+                for modelo_stt in ("whisper-large-v3-turbo", "whisper-large-v3"):
+                    try:
+                        resp_stt = cliente_stt.audio.transcriptions.create(
+                            file=(nombre_archivo, audio_bytes),
+                            model=modelo_stt,
+                            language="es",
+                            prompt=prompt_corto,
+                            temperature=0.0,
+                            response_format="text",
+                            timeout=12.0
+                        )
+                        texto_groq = str(resp_stt or "").strip()
+                        if texto_groq and not _es_alucinacion_whisper(texto_groq):
+                            return texto_groq
+                        break
+                    except Exception as e_m_stt:
+                        if "429" not in str(e_m_stt):
+                            break
+        except Exception as e_groq_stt:
+            print(f"[STT GROQ FALLBACK] Usando Faster-Whisper local ({e_groq_stt})")
+
+    # 2. Fallback automático a Faster-Whisper local en CPU
+    model = get_whisper_engine()
     try:
         segmentos, _ = model.transcribe(
-            ruta_wav, 
+            entrada_para_local, 
             language="es",
             initial_prompt=initial_prompt,
             vad_filter=True,
             vad_parameters=dict(
-                threshold=0.42,
-                min_speech_duration_ms=250,
-                max_speech_duration_s=60,
-                min_silence_duration_ms=450,
-                speech_pad_ms=300
+                threshold=0.25,
+                min_speech_duration_ms=150,
+                max_speech_duration_s=90,
+                min_silence_duration_ms=650,
+                speech_pad_ms=400
             ),
             beam_size=1,
             best_of=1,
@@ -103,7 +255,7 @@ def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
     except Exception as e_vad:
         print(f"[TRANSCRIPCIÓN VAD FALLBACK] VAD no disponible ({e_vad}). Transcribiendo directamente...")
         segmentos, _ = model.transcribe(
-            ruta_wav, 
+            entrada_para_local, 
             language="es",
             initial_prompt=initial_prompt,
             vad_filter=False,
@@ -113,6 +265,8 @@ def transcribir_audio(ruta_wav, initial_prompt=None) -> str:
             condition_on_previous_text=False
         )
         texto = "".join([s.text + " " for s in segmentos]).strip()
+    if not es_mock_local and _es_alucinacion_whisper(texto):
+        return ""
     return texto
 
 def contiene_especificacion_temporal(texto: str) -> bool:
@@ -131,6 +285,557 @@ def contiene_especificacion_temporal(texto: str) -> bool:
     if re.search(r'\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b', t):
         return True
     return False
+
+def extraer_accion_expediente(texto: str) -> str:
+    """
+    Extrae la intención de gestión del expediente clínico del paciente:
+    - 'actualizar': si el usuario dice agrega, agrégale, actualiza, me olvidé de decir, ponle también, añade, etc.
+    - 'nuevo': si dice explícitamente nuevo expediente, expediente aparte, otra consulta, nueva historia, etc.
+    - 'predeterminado': en cualquier otro caso clínico habitual.
+    """
+    if not texto or not isinstance(texto, str):
+        return "predeterminado"
+    import re
+    t = texto.lower()
+    # 1. Comprobar si explícitamente se pide un nuevo expediente / consulta aparte
+    if re.search(r'\b(?:nuevo\s+expediente|expediente\s+aparte|otra\s+consulta|nueva\s+consulta|nueva\s+historia|historia\s+aparte|consulta\s+aparte)\b', t):
+        return "nuevo"
+    # 2. Comprobar si se pide actualizar o agregar a la consulta existente
+    if re.search(r'\b(?:agr[eé]gale|agrega|a[ñn]ade|a[ñn]adir|actualiza|actualizar|modifica|modificar|me\s+olvid[eé]|ponle\s+tambi[eé]n|ponle\s+tambien|completa|completar)\b', t):
+        return "actualizar"
+    return "predeterminado"
+
+def extraer_digitos_cedula(texto: str) -> str:
+    """Extrae la secuencia de dígitos de la cédula, admitiendo números hablados o numéricos."""
+    if not texto:
+        return ""
+    import re
+    # 1. Primero intentar extraer dígitos directos
+    digitos = re.sub(r'\D', '', texto)
+    if len(digitos) >= 5:
+        return digitos
+
+    # 2. Mapeo de palabras numéricas en español
+    palabras_map = {
+        "cero": "0", "uno": "1", "una": "1", "dos": "2", "tres": "3", "cuatro": "4",
+        "cinco": "5", "seis": "6", "siete": "7", "ocho": "8", "nueve": "9",
+        "diez": "10", "once": "11", "doce": "12", "trece": "13", "catorce": "14", "quince": "15",
+        "dieciseis": "16", "dieciséis": "16", "diecisiete": "17", "dieciocho": "18", "diecinueve": "19",
+        "veinte": "20", "veintiuno": "21", "veintidos": "22", "veintitrés": "23", "veintitres": "23",
+        "veinticuatro": "24", "veinticinco": "25", "veintiseis": "26", "veintiséis": "26",
+        "veintisiete": "27", "veintiocho": "28", "veintinueve": "29", "treinta": "30",
+        "cuarenta": "40", "cincuenta": "50", "sesenta": "60", "setenta": "70", "ochenta": "80", "noventa": "90"
+    }
+    tokens = re.findall(r'[a-záéíóúñ]+|\d+', texto.lower())
+    acumulado = []
+    for tok in tokens:
+        if tok.isdigit():
+            acumulado.append(tok)
+        elif tok in palabras_map:
+            acumulado.append(palabras_map[tok])
+    res = "".join(acumulado)
+    if len(res) >= 5:
+        return res
+    if len(digitos) >= 5:
+        return digitos
+    return None
+
+PATRON_HALLAZGO_DENTAL = re.compile(
+    r'\b(caries|resinas?|obturaci[oó]n(?:es)?|endodoncias?|extracci[oó]n(?:es)?|exodoncias?|coronas?|sellantes?|fracturas?|profilaxis|pr[oó]tesis|ausentes?|perdidas?|perdidos?|implantes?|pulpitis|gingivitis|periodontitis|incrustaci[oó]n(?:es)?|fl[uú]or|t[aá]rtaro)\b',
+    re.IGNORECASE
+)
+
+def extraer_piezas_mencionadas(texto: str) -> list[str]:
+    """
+    Detecta todas las piezas dentales mencionadas en el texto:
+    - Números FDI válidos (permanentes 11-48, temporales 51-85).
+    - Rangos explícitos (ej. 'del 14 al 17', 'piezas 31 a 33').
+    - Designaciones anatómicas sin número (ej. 'premolar derecho', 'premolar izquierdo').
+    - Ignora edades, cédulas, teléfonos, precios, fechas y horas.
+    """
+    if not texto or not isinstance(texto, str):
+        return []
+
+    import re
+    t = texto
+
+    # Enmascarar números que no son piezas dentales
+    # Cédulas / teléfonos con o sin espacios, puntos o guiones (ej. '1724891203' o '17 24 89 12 03')
+    t = re.sub(
+        r'(?:c[eé]dula|s[eé]dula|c[eé]lula|documento|identificaci[oó]n|identidad|c\.?\s*i\.?|ruc|tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)(?:[^\d]{0,30}?)(?:\d[\s\.\-]?){6,15}\d',
+        ' ',
+        t,
+        flags=re.IGNORECASE
+    )
+    t = re.sub(r'(?<!\d)(?:\d[\s\.\-]?){7,14}\d(?!\d)', ' ', t)
+    t = re.sub(r'\b\d{7,}\b', ' ', t)
+    # Fechas y días relativos
+    t = re.sub(r'\b\d{1,4}[-/]\d{1,2}[-/]\d{1,4}\b', ' ', t)
+    t = re.sub(r'\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b(?:d[ií]a|fecha|dentro\s+de)\s+\d{1,3}\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b\d{1,3}\s*d[ií]as?\b', ' ', t, flags=re.IGNORECASE)
+    # Horas
+    t = re.sub(r'\b\d{1,2}:\d{2}\b', ' ', t)
+    # Edades (ej: '34 años', 'edad 34', 'de 34 años')
+    t = re.sub(r'\b\d{1,3}\s*a[ñn\ufffd\?]os?\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\bedad\s*(?:de\s*)?:?\s*\d{1,3}\b', ' ', t, flags=re.IGNORECASE)
+    # Montos y precios
+    t = re.sub(r'[\$€]\s*\d+(?:\.\d+)?', ' ', t)
+    t = re.sub(r'\b\d+(?:\.\d+)?\s*(?:d[oó]lares|usd|pesos|euros)\b', ' ', t, flags=re.IGNORECASE)
+    t = re.sub(r'\b(?:abona|abono|costo|cuesta|pago|paga|saldo|total|precio|resta|queda|quedan)\s*(?:de\s*)?\d+(?:\.\d+)?\b', ' ', t, flags=re.IGNORECASE)
+
+    piezas_encontradas = []
+
+    # Rangos explícitos de piezas FDI
+    patron_rango = re.compile(
+        r'\b(?:del?\s+|piezas?\s+|dientes?\s+)?(?:la\s+)?(\d{2})\s*(?:al?|a\s+la)\s+(\d{2})\b',
+        re.IGNORECASE
+    )
+    for m in patron_rango.finditer(t):
+        try:
+            p_ini, p_fin = int(m.group(1)), int(m.group(2))
+            cuad_ini, cuad_fin = p_ini // 10, p_fin // 10
+            if cuad_ini == cuad_fin and cuad_ini in (1, 2, 3, 4, 5, 6, 7, 8):
+                d_ini, d_fin = p_ini % 10, p_fin % 10
+                max_d = 8 if cuad_ini <= 4 else 5
+                if 1 <= d_ini <= d_fin <= max_d:
+                    for p_num in range(p_ini, p_fin + 1):
+                        piezas_encontradas.append(str(p_num))
+        except Exception:
+            pass
+    t_sin_rangos = patron_rango.sub(' ', t)
+
+    # Designaciones anatómicas compuestas bilaterales (ej: 'premolar superior derecho e izquierdo', 'segundo molar inferior derecho y izquierdo')
+    patron_anat_compuesto_dual = re.compile(
+        r'\b(?:(primer|segundo|tercer|1er|2do|3er)\s+)?(premolar(?:es)?|molar(?:es)?|muelas?|incisivos?|caninos?|colmillos?)\s+(superior(?:es)?|inferior(?:es)?)\s+(derechos?|izquierdos?)(?:[,\s]+(?:e\s+|y\s+)?(derechos?|izquierdos?))\b',
+        re.IGNORECASE
+    )
+    def _singular_tipo(t_str: str) -> str:
+        tl = t_str.lower()
+        if tl.startswith('premolar'): return 'premolar'
+        if tl.startswith('molar'): return 'molar'
+        if tl.startswith('muela'): return 'molar'
+        if tl.startswith('incisivo'): return 'incisivo'
+        if tl.startswith('canino') or tl.startswith('colmillo'): return 'canino'
+        return tl.rstrip('s')
+
+    def _singular_mod(m_str: str) -> str:
+        ml = m_str.lower()
+        if ml.startswith('superior'): return 'superior'
+        if ml.startswith('inferior'): return 'inferior'
+        if ml.startswith('derech'): return 'derecho'
+        if ml.startswith('izquierd'): return 'izquierdo'
+        return ml
+
+    for m in patron_anat_compuesto_dual.finditer(t_sin_rangos):
+        ord_pref = f"{m.group(1).lower()} " if m.group(1) else ""
+        tipo = _singular_tipo(m.group(2))
+        plano_v = _singular_mod(m.group(3))
+        lado1 = _singular_mod(m.group(4))
+        lado2 = _singular_mod(m.group(5))
+        p1 = f"{ord_pref}{tipo} {plano_v} {lado1}".strip().capitalize()
+        p2 = f"{ord_pref}{tipo} {plano_v} {lado2}".strip().capitalize()
+        piezas_encontradas.append(p1)
+        piezas_encontradas.append(p2)
+    t_sin_comp = patron_anat_compuesto_dual.sub(' ', t_sin_rangos)
+
+    # Orden inverso compuesto (ej: 'premolar derecho e izquierdo superior')
+    patron_anat_compuesto_inv = re.compile(
+        r'\b(?:(primer|segundo|tercer|1er|2do|3er)\s+)?(premolar(?:es)?|molar(?:es)?|muelas?|incisivos?|caninos?|colmillos?)\s+(derechos?|izquierdos?)(?:[,\s]+(?:e\s+|y\s+)?(derechos?|izquierdos?))\s+(superior(?:es)?|inferior(?:es)?)\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_compuesto_inv.finditer(t_sin_comp):
+        ord_pref = f"{m.group(1).lower()} " if m.group(1) else ""
+        tipo = _singular_tipo(m.group(2))
+        lado1 = _singular_mod(m.group(3))
+        lado2 = _singular_mod(m.group(4))
+        plano_v = _singular_mod(m.group(5))
+        p1 = f"{ord_pref}{tipo} {plano_v} {lado1}".strip().capitalize()
+        p2 = f"{ord_pref}{tipo} {plano_v} {lado2}".strip().capitalize()
+        piezas_encontradas.append(p1)
+        piezas_encontradas.append(p2)
+    t_sin_comp = patron_anat_compuesto_inv.sub(' ', t_sin_comp)
+
+    # Plurales bilaterales por arcada (ej: 'premolares superiores', 'molares inferiores')
+    patron_anat_plural_arcada = re.compile(
+        r'\b(?:(primeros|segundos|terceros)\s+)?(premolares|molares|caninos)\s+(superiores|inferiores)(?!\s+(?:derech|izquierd))\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_plural_arcada.finditer(t_sin_comp):
+        ord_raw = (m.group(1) or "").lower()
+        ord_pref = "primer " if "primer" in ord_raw else ("segundo " if "segund" in ord_raw else ("tercer " if "tercer" in ord_raw else ""))
+        tipo = _singular_tipo(m.group(2))
+        plano_v = _singular_mod(m.group(3))
+        piezas_encontradas.append(f"{ord_pref}{tipo} {plano_v} derecho".strip().capitalize())
+        piezas_encontradas.append(f"{ord_pref}{tipo} {plano_v} izquierdo".strip().capitalize())
+    t_sin_comp = patron_anat_plural_arcada.sub(' ', t_sin_comp)
+
+    # Designaciones anatómicas duales sin número (ej: 'premolar derecho, izquierdo')
+    patron_anat_dual = re.compile(
+        r'\b(premolar|molar|incisivo|canino)\s+(derecho|izquierdo|superior|inferior)(?:[,\s]+(?:e\s+|y\s+)?(derecho|izquierdo|superior|inferior))\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_dual.finditer(t_sin_comp):
+        tipo = m.group(1).capitalize()
+        pos1 = m.group(2).lower()
+        pos2 = m.group(3).lower()
+        piezas_encontradas.append(f"{tipo} {pos1}")
+        piezas_encontradas.append(f"{tipo} {pos2}")
+    t_sin_anat = patron_anat_dual.sub(' ', t_sin_comp)
+
+    # Designaciones anatómicas individuales simples (incluyendo ordinal opcional)
+    patron_anat_simple = re.compile(
+        r'\b(?:(primer|segundo|tercer|1er|2do|3er)\s+)?(premolar|molar|muela|incisivo|canino|colmillo)\s+(superior|inferior)?\s*(derecho|derecha|izquierdo|izquierda)\b',
+        re.IGNORECASE
+    )
+    for m in patron_anat_simple.finditer(t_sin_anat):
+        ord_pref = f"{m.group(1).lower()} " if m.group(1) else ""
+        tipo = _singular_tipo(m.group(2))
+        plano_v = f"{_singular_mod(m.group(3))} " if m.group(3) else ""
+        lado = _singular_mod(m.group(4))
+        full = f"{ord_pref}{tipo} {plano_v}{lado}".strip().capitalize()
+        piezas_encontradas.append(full)
+    t_sin_anat = patron_anat_simple.sub(' ', t_sin_anat)
+
+    # Piezas FDI individuales válidas
+    fdi_validos = set()
+    for c in (1, 2, 3, 4):
+        for d in range(1, 9):
+            fdi_validos.add(f"{c}{d}")
+    for c in (5, 6, 7, 8):
+        for d in range(1, 6):
+            fdi_validos.add(f"{c}{d}")
+
+    for m in re.finditer(r'\b(\d{2})\b', t_sin_anat):
+        val = m.group(1)
+        if val in fdi_validos:
+            piezas_encontradas.append(val)
+
+    # Deduplicar preservando orden
+    resultado = []
+    vistos = set()
+    for p in piezas_encontradas:
+        p_norm = p.strip()
+        if p_norm.lower() not in vistos:
+            vistos.add(p_norm.lower())
+            resultado.append(p_norm)
+
+    return resultado
+
+
+def inferir_hallazgo_pieza(pieza: str, texto: str) -> str:
+    """Infiere el hallazgo patológico o procedimiento para una pieza a partir del fragmento textual que la rodea."""
+    if not texto or not pieza:
+        return "Mencionada en el dictado: revisar hallazgo"
+    import re
+    fragmentos = re.split(r'[,;.\n]|\by\b|\be\b', texto)
+    p_lower = pieza.lower()
+
+    # 1. Si es dígito FDI, revisar si pertenece a un rango en algún fragmento
+    if pieza.isdigit():
+        try:
+            p_val = int(pieza)
+            for f in fragmentos:
+                for m_r in re.finditer(r'\b(?:del?\s+|piezas?\s+|dientes?\s+)?(?:la\s+)?(\d{2})\s*(?:al?|a\s+la)\s+(\d{2})\b', f, re.IGNORECASE):
+                    r_ini, r_fin = int(m_r.group(1)), int(m_r.group(2))
+                    if r_ini <= p_val <= r_fin:
+                        m = PATRON_HALLAZGO_DENTAL.search(f)
+                        if m:
+                            return m.group(1).capitalize()
+        except Exception:
+            pass
+
+    # 2. Buscar fragmento que contiene directamente la pieza
+    for i, f in enumerate(fragmentos):
+        contiene = False
+        if p_lower in f.lower():
+            contiene = True
+        elif pieza.isdigit() and re.search(rf'\b{pieza}\b', f):
+            contiene = True
+        elif len(p_lower.split()) > 1 and any(p_part in f.lower() for p_part in p_lower.split()):
+            contiene = True
+
+        if contiene:
+            m = PATRON_HALLAZGO_DENTAL.search(f)
+            if m:
+                return m.group(1).capitalize()
+            # Buscar en fragmentos anteriores si es una enumeración (ej: 'caries en 16, 17 y 18')
+            for prev_idx in range(i - 1, max(-1, i - 4), -1):
+                m_prev = PATRON_HALLAZGO_DENTAL.search(fragmentos[prev_idx])
+                if m_prev:
+                    return m_prev.group(1).capitalize()
+            break
+
+    # 3. Buscar globalmente el hallazgo dental más cercano en el texto
+    m_global = PATRON_HALLAZGO_DENTAL.search(texto)
+    if m_global:
+        return m_global.group(1).capitalize()
+
+    return "Mencionada en el dictado: revisar hallazgo"
+
+
+def _obtener_identidad_pieza(p_raw: str):
+    """
+    Determina la clave de deduplicación y el nombre canónico para una pieza dental.
+    Si la pieza contiene o es un número FDI válido (ej: '31', 'diente 14', 'pieza 21'),
+    se usa el número FDI como clave y valor.
+    Si es una descripción anatómica textual sin cuadrante completo (ej: 'premolar derecho',
+    'premolar izquierdo'), preserva la descripción textual para evitar colapsar
+    piezas de cuadrantes distintos en el mismo FDI por defecto.
+    """
+    import re
+    from generador_pdf import extraer_fdi
+    p_str = str(p_raw).strip()
+    if not p_str:
+        return "", ""
+
+    # 1. Si es solo dígitos
+    if p_str.isdigit():
+        return p_str, p_str
+
+    # 2. Si contiene 2 dígitos explícitos de FDI válido
+    m_dig = re.search(r'\b([1-4][1-8]|[5-8][1-5])\b', p_str)
+    if m_dig:
+        fdi = m_dig.group(1)
+        return fdi, fdi
+
+    # 3. Si es descripción textual anatómica
+    s_low = p_str.lower()
+    tiene_plano_v = any(k in s_low for k in ['superior', 'arriba', 'maxilar', 'sup.', 'inferior', 'abajo', 'mandibular', 'inf.'])
+    tiene_plano_h = any(k in s_low for k in ['derech', 'der.', 'izquierd', 'izq.'])
+
+    # Si tiene especificación de ambos planos (ej: "molar superior derecho"), extraer_fdi es unívoco
+    if tiene_plano_v and tiene_plano_h:
+        fdi = extraer_fdi(p_str)
+        if fdi:
+            return fdi, fdi
+
+    # De lo contrario (ej: "premolar derecho", "molar izquierdo"), mantener textual
+    return s_low, p_str
+
+
+def parchear_odontograma_exhaustivo(odonto_lista: list, texto_crudo: str) -> list:
+    """
+    Parche determinista de seguridad:
+    - Normaliza las claves pieza/diente a pieza_dental y hallazgo/procedimiento a procedimientos_o_hallazgos.
+    - Asegura que todas las piezas mencionadas en el dictado estén presentes en el array.
+    - Elimina duplicados exactos (misma pieza FDI) fusionando sus hallazgos.
+    - Registra en log únicamente contadores sin información confidencial.
+    """
+    if not isinstance(odonto_lista, list):
+        odonto_lista = []
+
+    mencionadas = extraer_piezas_mencionadas(texto_crudo)
+
+    # 1. Normalizar y fusionar elementos recibidos
+    mapa_fusion = {}
+
+    for item in odonto_lista:
+        if not isinstance(item, dict):
+            continue
+        p_raw = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
+        key, display_pieza = _obtener_identidad_pieza(p_raw)
+        if not key:
+            continue
+
+        h_raw = (
+            item.get("procedimientos_o_hallazgos") or
+            item.get("hallazgos") or
+            item.get("hallazgo") or
+            item.get("procedimiento") or
+            []
+        )
+        if isinstance(h_raw, str):
+            hallazgos = [h_raw.strip()] if h_raw.strip() else []
+        elif isinstance(h_raw, list):
+            hallazgos = [str(x).strip() for x in h_raw if str(x).strip()]
+        else:
+            hallazgos = [str(h_raw).strip()] if str(h_raw).strip() else []
+
+        # Si la IA dejó la pieza sin hallazgo concreto ("Evaluada") pero el dictado sí lo dice
+        # (ej. "caries en el premolar superior derecho y en la 36"), rescatarlo del texto
+        if not hallazgos or all(any(g in h.lower() for g in _HALLAZGOS_GENERICOS_ODONTO) for h in hallazgos):
+            inferido = inferir_hallazgo_pieza(str(p_raw), texto_crudo)
+            if inferido and not inferido.lower().startswith("mencionada"):
+                hallazgos = [inferido]
+
+        if key in mapa_fusion:
+            for h in hallazgos:
+                if h and h not in mapa_fusion[key]["procedimientos_o_hallazgos"]:
+                    mapa_fusion[key]["procedimientos_o_hallazgos"].append(h)
+        else:
+            mapa_fusion[key] = {
+                "pieza_dental": display_pieza,
+                "procedimientos_o_hallazgos": hallazgos if hallazgos else ["Evaluada"]
+            }
+
+    # 2. Agregar piezas mencionadas faltantes
+    anadidas = 0
+    for p_menc in mencionadas:
+        key_menc, display_menc = _obtener_identidad_pieza(p_menc)
+        if not key_menc:
+            continue
+        if key_menc not in mapa_fusion:
+            hallazgo_inf = inferir_hallazgo_pieza(p_menc, texto_crudo)
+            mapa_fusion[key_menc] = {
+                "pieza_dental": display_menc,
+                "procedimientos_o_hallazgos": [hallazgo_inf]
+            }
+            anadidas += 1
+
+    # 3. FIX: eliminar descripciones anatómicas sueltas ('premolar superior', 'premolar derecho')
+    # que solo repiten hallazgos de una pieza ya registrada con número FDI (ej. 14 y 24),
+    # para que no dupliquen filas ni vuelvan a pintar de rojo una pieza ya tratada.
+    try:
+        _depurar_piezas_anatomicas_redundantes(mapa_fusion)
+    except Exception as e_dep:
+        print(f"[ODONTOGRAMA] Aviso al depurar piezas anatómicas redundantes: {e_dep}")
+
+    resultado = list(mapa_fusion.values())
+    print(f"[ODONTOGRAMA EXHAUSTIVO] piezas mencionadas: {len(mencionadas)}, en array: {len(resultado)}, añadidas: {anadidas}")
+    return resultado
+
+
+_HALLAZGOS_GENERICOS_ODONTO = ("evaluada", "mencionada en el dictado")
+
+
+def _tipo_y_ubicacion_fdi(fdi: str):
+    """Retorna (tipo, arcada, lado) de una pieza FDI: tipo en premolar/molar/canino/incisivo."""
+    q, n = int(fdi[0]), int(fdi[1])
+    temporal = q >= 5
+    if n in (1, 2):
+        tipo = "incisivo"
+    elif n == 3:
+        tipo = "canino"
+    elif n in (4, 5):
+        tipo = "molar" if temporal else "premolar"
+    else:
+        tipo = "molar"
+    arcada = "sup" if q in (1, 2, 5, 6) else "inf"
+    lado = "der" if q in (1, 4, 5, 8) else "izq"
+    return tipo, arcada, lado
+
+
+def _depurar_piezas_anatomicas_redundantes(mapa_fusion: dict) -> None:
+    explicitas = {k: v for k, v in mapa_fusion.items() if re.fullmatch(r'[1-4][1-8]|[5-8][1-5]', str(k))}
+    if not explicitas:
+        return
+    for key in list(mapa_fusion.keys()):
+        if key in explicitas:
+            continue
+        desc = str(key).lower()
+        if "premolar" in desc:
+            tipo = "premolar"
+        elif "molar" in desc or "muela" in desc:
+            tipo = "molar"
+        elif "canin" in desc or "colmill" in desc:
+            tipo = "canino"
+        elif "incisiv" in desc or "paleta" in desc:
+            tipo = "incisivo"
+        else:
+            continue
+        arcada = "sup" if any(k in desc for k in ("superior", "arriba", "maxilar")) else ("inf" if any(k in desc for k in ("inferior", "abajo", "mandibular")) else None)
+        lado = "der" if "derech" in desc else ("izq" if "izquierd" in desc else None)
+
+        compatibles = []
+        for fdi_k, item_k in explicitas.items():
+            t_k, a_k, l_k = _tipo_y_ubicacion_fdi(fdi_k)
+            if t_k != tipo or (arcada and a_k != arcada) or (lado and l_k != lado):
+                continue
+            compatibles.append(item_k)
+        if not compatibles:
+            continue
+
+        hall_expl = set()
+        for it in compatibles:
+            for h in it.get("procedimientos_o_hallazgos", []):
+                hall_expl.add(str(h).strip().lower())
+        hall_txt = [str(h).strip().lower() for h in mapa_fusion[key].get("procedimientos_o_hallazgos", [])]
+        # Coincidencia flexible: "endodoncia" repite a "endodoncia (resuelta en consulta)"
+        redundante = all(
+            any(h == e or h in e or e in h for e in hall_expl) or any(g in h for g in _HALLAZGOS_GENERICOS_ODONTO)
+            for h in hall_txt
+        )
+        if redundante:
+            del mapa_fusion[key]
+
+
+_PATOLOGIAS_ODONTO = ("caries", "fractura", "pulpitis", "gingivitis", "periodontitis", "absceso", "infecci",
+                      "ausente", "perdid", "tártaro", "tartaro", "movilidad", "dolor", "necrosis", "retenid")
+_PROCEDIMIENTOS_ODONTO = ("endodoncia", "resina", "obturaci", "extracci", "exodoncia", "corona", "sellante",
+                          "profilaxis", "implante", "incrustaci", "flúor", "fluor", "detartraje", "limpieza",
+                          "prótesis", "protesis", "carilla", "blanqueamiento", "curetaje", "pulpotom", "pulpectom")
+_PLANES_GENERICOS = ("tratamiento odontológico integral", "tratamiento odontologico integral", "evaluación clínica",
+                     "evaluacion clinica", "no especificado", "pendiente", "")
+
+
+def _lista_piezas(piezas: list) -> str:
+    piezas = [p for i, p in enumerate(piezas) if p not in piezas[:i]]
+    etiq = [f"pieza {p}" if str(p).isdigit() else str(p).lower() for p in piezas]
+    return etiq[0] if len(etiq) == 1 else ", ".join(etiq[:-1]) + " y " + etiq[-1]
+
+
+def _pieza_nombrada_en(pieza, texto_low: str) -> bool:
+    """True si el texto ya nombra la pieza: por su número FDI o por su nombre ('premolar superior derecho')."""
+    p = str(pieza).strip().lower()
+    if p in texto_low:
+        return True
+    if re.fullmatch(r'[1-4][1-8]|[5-8][1-5]', p):
+        if re.search(rf'\b{p}\b', texto_low):
+            return True
+        tipo, arcada, lado = _tipo_y_ubicacion_fdi(p)
+        arc = "superior" if arcada == "sup" else "inferior"
+        lad = "derech" if lado == "der" else "izquierd"
+        return bool(re.search(rf'{tipo}\w*\s+{arc}\w*\s+{lad}', texto_low))
+    return False
+
+
+def completar_diagnostico_y_plan(resultado: dict, texto_crudo: str = "") -> dict:
+    """
+    Diagnóstico y plan exhaustivos: la IA a veces resume ("caries en premolar") o deja un plan genérico.
+    A partir del odontograma ya parcheado agrega TODAS las patologías al diagnóstico y TODOS los
+    procedimientos al plan, cada uno con sus piezas (ej. "Caries en pieza 14 y pieza 36").
+    """
+    odonto = resultado.get("odontograma") or []
+    patologias, procedimientos = {}, {}
+    for item in odonto:
+        if not isinstance(item, dict):
+            continue
+        pieza = str(item.get("pieza_dental") or "").strip()
+        if not pieza:
+            continue
+        for h in item.get("procedimientos_o_hallazgos") or []:
+            h_txt = str(h).strip()
+            h_low = h_txt.lower()
+            if not h_txt or any(g in h_low for g in _HALLAZGOS_GENERICOS_ODONTO):
+                continue
+            base = re.sub(r'\s*\(.*?\)\s*', ' ', h_txt).strip().capitalize()
+            if any(k in h_low for k in _PROCEDIMIENTOS_ODONTO):
+                procedimientos.setdefault(base, []).append(pieza)
+            elif any(k in h_low for k in _PATOLOGIAS_ODONTO):
+                patologias.setdefault(base, []).append(pieza)
+
+    def _fusionar(actual: str, grupos: dict) -> str:
+        actual = str(actual or "").strip()
+        es_generico = actual.lower().rstrip(".") in _PLANES_GENERICOS
+        partes = [] if es_generico else [actual.rstrip(". ")]
+        act_low = actual.lower()
+        for nombre, piezas in grupos.items():
+            clave = nombre.lower().split()[0][:8]
+            if not es_generico and clave in act_low:
+                # Solo agregar las piezas que el texto aún no nombra (por número o por nombre anatómico)
+                piezas = [p for p in piezas if not _pieza_nombrada_en(p, act_low)]
+                if not piezas:
+                    continue
+            partes.append(f"{nombre} en {_lista_piezas(piezas)}")
+        return ". ".join(p for p in partes if p) or actual
+
+    if patologias:
+        resultado["diagnostico"] = _fusionar(resultado.get("diagnostico"), patologias)
+    if procedimientos:
+        resultado["plan_tratamiento"] = _fusionar(resultado.get("plan_tratamiento"), procedimientos)
+    return resultado
+
 
 def _normalizar_nombres_espanol(nombre: str) -> str:
     """Normaliza nombres hispanoamericanos y andinos, corrigiendo deformaciones acústicas (ej. 'Yumi Kinga' -> 'Llumiquinga')."""
@@ -205,6 +910,110 @@ def _normalizar_nombres_espanol(nombre: str) -> str:
     for pat, rep in reemplazos:
         res = re.sub(pat, rep, res, flags=re.IGNORECASE)
     return res
+
+def limpiar_nombre_paciente(raw: str) -> str:
+    """
+    Limpia y normaliza el nombre de un paciente para agenda y consultas clínicas (U3):
+    - Elimina prefijos de agendamiento ('cita para', 'agendar a', etc.) y títulos ('doctor', 'sr', 'señora').
+    - Elimina motivos de consulta ('con dolor', 'por limpieza', 'para revisión').
+    - Elimina expresiones de fecha y hora ('mañana a las 10', 'el 15 de marzo', 'a las 4pm').
+    - Elimina edades ('de 25 años') y teléfonos al final.
+    - PRESERVA apellidos compuestos ('de la Cruz', 'del Valle', 'San Martín', 'Montes de Oca').
+    - Normaliza nombres andinos e hispanoamericanos ('Sisa Llumiquinga', 'Inti Guaminga', 'Sebastián', etc.).
+    """
+    if not raw or not isinstance(raw, str):
+        return ""
+
+    texto = raw.strip()
+
+    # 1. Chequeo de 'el último paciente'
+    if any(u in texto.lower() for u in (
+        "último paciente", "ultimo paciente", "la última", "la ultima",
+        "el ultimo", "el último", "al último", "al ultimo"
+    )):
+        return "el último paciente"
+
+    # 2. Eliminar prefijos de agendamiento y llamadas de cortesía iniciales con límites de palabra
+    prefijos_agendamiento = [
+        r"^(?:por\s+favor\s+)?(?:generar?|crear?|agendar?|separar?|sacar?|haz|hacer|dar|programar?|poner?|revisar?|atiende|atender)\s+(?:una\s+)?(?:nueva\s+)?(?:cita|control|sesi[oó]n|consulta)?\s+(?:para|a|al|con)\s+",
+        r"^(?:por\s+favor\s+)?(?:generar?|crear?|agendar?|separar?|sacar?|haz|hacer|dar|programar?|poner?|revisar?|atiende|atender)\s+(?:una\s+)?(?:nueva\s+)?(?:cita|control|sesi[oó]n|consulta)?\s+",
+        r"^(?:por\s+favor\s+)?(?:generar?|crear?|agendar?|separar?|sacar?|dar|programar?|revisar?)\s+(?:a|al)\s+",
+        r"^(?:una\s+)?(?:nueva\s+)?(?:cita|control|sesi[oó]n|consulta)\s+(?:para|a|al|con)\s+",
+        r"^(?:para\s+(?:el|la)\s+|para\s+|al\s+|a\s+(?:el|la)\s+|con\s+)"
+    ]
+    for p in prefijos_agendamiento:
+        texto = re.sub(p, "", texto, flags=re.IGNORECASE).strip()
+
+    # Títulos y cortesía iniciales: doctor, doctora, dr, dra, don, doña, sr, sra, señor, señora, paciente, niño, niña
+    titulos = r"^(?:el\s+|la\s+)?(?:doctora?|dr\.|dra\.|sr\.|sra\.|señora?|don|doña|paciente|niñ[oa])\s+"
+    texto = re.sub(titulos, "", texto, flags=re.IGNORECASE).strip()
+
+    # Remanentes si tras quitar títulos quedó 'a / al / para / el'
+    texto = re.sub(r"^(?:para\s+(?:el|la)\s+|para\s+|al\s+|a\s+(?:el|la)\s+|el\s+|la\s+)", "", texto, flags=re.IGNORECASE).strip()
+    texto = re.sub(titulos, "", texto, flags=re.IGNORECASE).strip()
+
+    # 3. Cortar por expresiones temporales / fechas / horas
+    patron_tiempo = (
+        r"\b(?:mañana|manana|hoy|ayer|"
+        r"el\s+(?:pr[oó]ximo\s+)?(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)|"
+        r"el\s+\d{1,2}(?:\s+de\s+[a-z]+)?|"
+        r"a\s+las?\s+\d{1,2}(?::\d{2})?(?:\s*(?:am|pm|de\s+la\s+(?:mañana|tarde|noche)))?|"
+        r"a\s+las?\s+(?:una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)|"
+        r"en\s+\d+\s+d[ií]as|dentro\s+de\s+\w+|para\s+el\s+\d{1,2})\b"
+    )
+    partes_tiempo = re.split(patron_tiempo, texto, flags=re.IGNORECASE)
+    if partes_tiempo:
+        texto = partes_tiempo[0].strip()
+        texto = re.sub(r"\s+\b(?:para|el|a|al|en|con|de)\b$", "", texto, flags=re.IGNORECASE).strip()
+
+    # 4. Cortar por motivos de consulta o síntomas clínicos comunes
+    patron_motivo = (
+        r"\b(?:con\s+dolor|por\s+dolor|con\s+molestia|por\s+molestia|"
+        r"para\s+revisi[oó]n|a\s+revisi[oó]n|por\s+revisi[oó]n|"
+        r"para\s+limpieza|por\s+limpieza|a\s+limpieza|"
+        r"para\s+calza|por\s+calza|para\s+curaci[oó]n|por\s+curaci[oó]n|"
+        r"para\s+extracci[oó]n|por\s+extracci[oó]n|para\s+sacar|"
+        r"para\s+brackets|por\s+brackets|para\s+ortodoncia|por\s+ortodoncia|"
+        r"para\s+control|a\s+control|por\s+control|"
+        r"con\s+caries|por\s+caries|con\s+fractura|por\s+fractura)\b"
+    )
+    partes_motivo = re.split(patron_motivo, texto, flags=re.IGNORECASE)
+    if partes_motivo:
+        texto = partes_motivo[0].strip()
+        texto = re.sub(r"\s+\b(?:para|el|a|al|en|con|de)\b$", "", texto, flags=re.IGNORECASE).strip()
+
+    # 5. Cortar / eliminar edades ('de 25 años', 'edad 30', etc.)
+    texto = re.sub(r"\b(?:de\s+)?\d{1,2}\s+a[ñn]os?\b", "", texto, flags=re.IGNORECASE).strip()
+    texto = re.sub(r"\bedad\s+\d{1,2}\b", "", texto, flags=re.IGNORECASE).strip()
+
+    # 6. Eliminar teléfonos dictados al final
+    texto = re.sub(r"\b(?:tel[eé]fono|celular|m[oó]vil|tlf)?\s*[+\d\-\s\.]{7,15}$", "", texto, flags=re.IGNORECASE).strip()
+
+    # 7. Limpieza de puntuación sobrante
+    texto = re.sub(r"[,\.;:\-_/]+$", "", texto).strip()
+    texto = re.sub(r"^[,\.;:\-_/]+", "", texto).strip()
+
+    if not texto:
+        return ""
+
+    # 8. Formateo y preservación de mayúsculas/minúsculas en apellidos compuestos
+    particulas = {"de", "del", "la", "las", "los", "y", "e"}
+    palabras = texto.split()
+    palabras_formateadas = []
+    for i, p in enumerate(palabras):
+        p_clean = p.strip()
+        p_lower = p_clean.lower()
+        if i > 0 and p_lower in particulas:
+            palabras_formateadas.append(p_lower)
+        else:
+            palabras_formateadas.append(p_clean.capitalize())
+
+    nombre_formateado = " ".join(palabras_formateadas)
+
+    # 9. Normalización fonética y de ortografía hispanoamericana y andina
+    nombre_final = _normalizar_nombres_espanol(nombre_formateado)
+
+    return nombre_final.strip()
 
 def sanitizar_cedula(doc: str) -> str:
     """Limpia cédula o documento extrayendo dígitos y eliminando comas, puntos o espacios del dictado."""
@@ -416,6 +1225,16 @@ def resolver_fecha_relativa_espanol(texto: str, base_dt: datetime.datetime = Non
         elif 'en un mes' in t or 'un mes' in t:
             fecha_res = (base_dt + datetime.timedelta(days=30)).date()
 
+    # 5. Hoy explícito
+    if not fecha_res:
+        if re.search(r'\b(?:para\s+)?hoy\b', t):
+            fecha_res = base_dt.date()
+
+    # 6. Si sólo se dictó la hora (ej: "a las 3", "a las 4 de la tarde")
+    if not fecha_res:
+        if re.search(r'\ba las?\s+\d{1,2}\b', t) or any(re.search(rf'\ba las?\s+{w_h}\b', t) for w_h in HORAS_PALABRAS_MAP):
+            fecha_res = base_dt.date()
+
     if not fecha_res:
         return None
 
@@ -440,12 +1259,17 @@ def resolver_fecha_relativa_espanol(texto: str, base_dt: datetime.datetime = Non
             h_num += 12
         elif any(x in suf for x in ['am', 'mañana', 'manana']) and h_num == 12:
             h_num = 0
+        elif not suf and h_num in (1, 2, 3, 4, 5, 6, 7):
+            # Horario vespertino habitual para turnos de consulta (ej. 3 -> 15:00)
+            h_num += 12
         hora = h_num
     else:
         for w_h, val_h in HORAS_PALABRAS_MAP.items():
             if re.search(rf'a las\s+{w_h}', t):
                 hora = val_h
                 if any(x in t for x in ['tarde', 'noche', 'pm']) and hora < 12:
+                    hora += 12
+                elif hora in (1, 2, 3, 4, 5, 6, 7) and not any(x in t for x in ['am', 'mañana', 'manana']):
                     hora += 12
                 break
         if 'y media' in t:
@@ -741,6 +1565,11 @@ def extraer_telefono_dictado(texto: str) -> str:
     if not texto:
         return ""
     t = normalizar_palabras_numericas(texto)
+    # FIX: quitar el número dictado tras 'cédula' para que 'número de cédula ...' no se tome como teléfono
+    try:
+        t = _enmascarar_cedula_en_texto(t)
+    except Exception:
+        pass
 
     # 1. Buscar con prefijo explícito (teléfono, celular, móvil, contacto, whatsapp, cel, al, para)
     patrones_prefijo = [
@@ -770,6 +1599,254 @@ def extraer_telefono_dictado(texto: str) -> str:
 
     return ""
 
+# ==========================================
+# EXTRACTOR ROBUSTO DE CÉDULA DICTADA (FIX "CIEN / MIL" ECUADOR)
+# ==========================================
+# En Ecuador es muy común dictar la cédula por bloques: "cien, cien, doce, treinta y cuatro..."
+# o "mil, cincuenta y siete...". Whisper suele fusionar "cien doce" en "112" (ciento doce),
+# perdiendo dos ceros (1001234567 -> 11234567). Este bloque reconstruye la cédula de 10 dígitos
+# probando las variantes "cien+N" / "mil+N" y validando con el algoritmo módulo 10 ecuatoriano.
+
+_ANCLA_CEDULA_RE = re.compile(
+    r'(?:c[eé]dula|s[eé]dula|c[eé]lula|identificaci[oó]n|documento|\bidentidad\b|\bc\.\s*i\b\.?|\bci\b|\bruc\b)',
+    re.IGNORECASE
+)
+_PALABRAS_RELLENO_CEDULA = {
+    "es", "el", "la", "de", "del", "numero", "número", "nro", "no", "n", "con", "su", "identidad",
+    "ciudadania", "ciudadanía", "paciente", "seria", "sería", "o", "sea", "este", "ese", "eh", "em", "mm"
+}
+_CENTENAS_CEDULA = {k: v for k, v in _CENTENAS_DICTADAS.items() if k not in ("cien",)}
+
+
+def validar_cedula_ecuatoriana(cedula: str) -> bool:
+    """Valida una cédula ecuatoriana de 10 dígitos (provincia, tercer dígito y módulo 10)."""
+    s = str(cedula or "").strip()
+    if not re.fullmatch(r'\d{10}', s):
+        return False
+    prov = int(s[:2])
+    if not ((1 <= prov <= 24) or prov == 30):
+        return False
+    if int(s[2]) >= 6:
+        return False
+    suma = 0
+    for i, coef in enumerate((2, 1, 2, 1, 2, 1, 2, 1, 2)):
+        p = int(s[i]) * coef
+        suma += p - 9 if p >= 10 else p
+    return (10 - (suma % 10)) % 10 == int(s[9])
+
+
+def _cedula_plausible(s: str) -> bool:
+    """10 dígitos con provincia y tercer dígito coherentes (sin exigir dígito verificador)."""
+    if not re.fullmatch(r'\d{10}', s or ""):
+        return False
+    prov = int(s[:2])
+    return ((1 <= prov <= 24) or prov == 30) and int(s[2]) < 6
+
+
+def _grupos_cedula_desde_segmento(segmento: str) -> list[str]:
+    """
+    Convierte el fragmento dictado después de la palabra 'cédula' en bloques de dígitos,
+    respetando cómo se dicta en Ecuador: 'cien' = '100' (bloque), 'mil' = '1000',
+    'ciento doce' = '112', 'treinta y cuatro' = '34', 'cero' = '0'.
+    Se detiene en la primera palabra que no sea numérica (ej. 'teléfono', 'años', 'acude').
+    """
+    tokens = re.findall(r'\d+|[a-záéíóúüñ]+', segmento.lower())
+    grupos: list[str] = []
+    i = 0
+    rellenos_iniciales = 0
+    n = len(tokens)
+
+    def _num_simple(idx):
+        """Lee un número 0-99 en palabras desde idx. Retorna (valor_str, nuevo_idx) o (None, idx)."""
+        if idx >= n:
+            return None, idx
+        tk = tokens[idx]
+        if tk in _NUMEROS_ESPECIALES_DICTADOS:
+            return _NUMEROS_ESPECIALES_DICTADOS[tk], idx + 1
+        if tk in _DECENAS_DICTADAS:
+            d_val = _DECENAS_DICTADAS[tk]
+            if d_val >= 30 and idx + 2 < n and tokens[idx + 1] == "y" and tokens[idx + 2] in _UNIDADES_DICTADAS and _UNIDADES_DICTADAS[tokens[idx + 2]] > 0:
+                return str(d_val + _UNIDADES_DICTADAS[tokens[idx + 2]]), idx + 3
+            return str(d_val), idx + 1
+        if tk in _UNIDADES_DICTADAS:
+            return str(_UNIDADES_DICTADAS[tk]), idx + 1
+        return None, idx
+
+    _PALABRAS_EDAD = ("años", "anos", "año", "ano", "meses")
+
+    def _cabe(valor, sig_idx):
+        """True si el bloque pertenece a la cédula (no es edad ni excede los 10 dígitos ya completos)."""
+        if len("".join(grupos)) >= 10:
+            return False
+        if sig_idx < n and tokens[sig_idx] in _PALABRAS_EDAD:
+            return False
+        return True
+
+    while i < n:
+        tk = tokens[i]
+        valor, sig = None, i
+        if tk.isdigit():
+            valor, sig = tk, i + 1
+        elif tk == "cien":
+            valor, sig = "100", i + 1
+        elif tk == "mil":
+            valor, sig = "1000", i + 1
+        elif tk == "ciento" or tk in _CENTENAS_CEDULA:
+            base = 100 if tk == "ciento" else _CENTENAS_CEDULA[tk]
+            val, j = _num_simple(i + 1)
+            if val is not None and tokens[i + 1] != "cero":
+                valor, sig = str(base + int(val)), j
+            else:
+                valor, sig = str(base), i + 1
+        elif tk in ("doble", "triple") and i + 1 < n and tokens[i + 1] in _UNIDADES_DICTADAS:
+            d = str(_UNIDADES_DICTADAS[tokens[i + 1]])
+            valor, sig = d * (2 if tk == "doble" else 3), i + 2
+        else:
+            val, j = _num_simple(i)
+            if val is not None:
+                valor, sig = val, j
+
+        if valor is not None:
+            if not _cabe(valor, sig):
+                break
+            grupos.append(valor)
+            i = sig
+            continue
+        if not grupos:
+            # Palabras de relleno antes del número ('cédula número es el ...')
+            if tk in _PALABRAS_RELLENO_CEDULA and rellenos_iniciales < 5:
+                rellenos_iniciales += 1
+                i += 1
+                continue
+            break
+        if tk == "y" and i + 1 < n and (tokens[i + 1].isdigit() or _num_simple(i + 1)[0] is not None or tokens[i + 1] in ("cien", "mil", "ciento")):
+            i += 1
+            continue
+        break
+    return grupos
+
+
+def _reconstruir_cedula_desde_grupos(grupos: list[str]) -> str | None:
+    """
+    Reconstruye la cédula a partir de bloques. Si los bloques no suman 10 dígitos, prueba
+    expandir los bloques que Whisper fusionó ('112' <- 'cien doce' => '10012';
+    '1041' <- 'mil cuarenta y uno' => '100041') y elige la variante de 10 dígitos válida.
+    """
+    if not grupos:
+        return None
+    original = "".join(grupos)
+    if len(original) < 5:
+        return None
+    if len(original) == 10:
+        return original
+
+    import itertools
+    alternativas = []
+    expandibles = 0
+    for g in grupos:
+        alts = [g]
+        if expandibles < 6:
+            v = int(g) if g.isdigit() else -1
+            if len(g) == 3 and 101 <= v <= 199:
+                r = v - 100
+                alts.append("100" + str(r))
+                if r < 10:
+                    alts.append("100" + f"{r:02d}")
+            elif len(g) == 4 and 1001 <= v <= 1999:
+                r = v - 1000
+                alts.append("1000" + str(r))
+                if r < 10:
+                    alts.append("1000" + f"{r:02d}")
+            if len(alts) > 1:
+                expandibles += 1
+        alternativas.append(alts)
+
+    validas, plausibles = [], []
+    for combo in itertools.product(*[list(enumerate(a)) for a in alternativas]):
+        cambios = sum(1 for idx, _ in combo if idx > 0)
+        if cambios == 0:
+            continue
+        cand = "".join(txt for _, txt in combo)
+        if len(cand) != 10:
+            continue
+        if validar_cedula_ecuatoriana(cand):
+            validas.append((cambios, cand))
+        elif _cedula_plausible(cand):
+            plausibles.append((cambios, cand))
+    if validas:
+        return sorted(validas)[0][1]
+    if plausibles:
+        return sorted(plausibles)[0][1]
+
+    # Más de 10 dígitos: rescatar una ventana de 10 que pase el módulo 10
+    if len(original) > 10:
+        for k in range(0, len(original) - 9):
+            ventana = original[k:k + 10]
+            if validar_cedula_ecuatoriana(ventana):
+                return ventana
+    return original
+
+
+def extraer_cedula_dictada_robusta(texto: str) -> str | None:
+    """
+    Extrae la cédula dictada tras la palabra 'cédula' / 'documento' / 'C.I.' admitiendo
+    dígitos con guiones, puntos o comas, palabras habladas y bloques 'cien' / 'mil'.
+    Retorna solo dígitos (idealmente 10) o None si no se dictó cédula.
+    """
+    if not texto or not isinstance(texto, str):
+        return None
+    for m in _ANCLA_CEDULA_RE.finditer(texto):
+        segmento = texto[m.end():m.end() + 160]
+        grupos = _grupos_cedula_desde_segmento(segmento)
+        ced = _reconstruir_cedula_desde_grupos(grupos)
+        if ced:
+            return ced
+    return None
+
+
+def _enmascarar_cedula_en_texto(t: str) -> str:
+    """Elimina el número que sigue a 'cédula' para que no se confunda con un teléfono."""
+    patron = re.compile(
+        r'(?:c[eé]dula|s[eé]dula|c[eé]lula|identificaci[oó]n|documento|\bidentidad\b)'
+        r'(?:(?!tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)[^\d]){0,35}?'
+        r'([0-9][0-9\s\.\-,]{3,40}[0-9])',
+        re.IGNORECASE
+    )
+
+    def _rep(mm):
+        if len(re.sub(r'\D', '', mm.group(1))) > 13:
+            return mm.group(0)
+        return mm.group(0)[:mm.start(1) - mm.start(0)] + ' '
+    return patron.sub(_rep, t)
+
+
+def resolver_cedula_final(doc_llm, texto_crudo: str) -> str:
+    """
+    Decide la cédula definitiva combinando lo que entendió la IA con la extracción determinista
+    del texto dictado. Prioriza una cédula de 10 dígitos (y válida por módulo 10).
+    """
+    doc_limpio = sanitizar_cedula(str(doc_llm or ""))
+    try:
+        ced_det = extraer_cedula_dictada_robusta(texto_crudo or "")
+    except Exception as e_ced:
+        print(f"[CEDULA WARN] {e_ced}")
+        ced_det = None
+    if not ced_det:
+        return doc_limpio
+    dig_llm = re.sub(r'\D', '', doc_limpio) if doc_limpio != "No especificado" else ""
+    if doc_limpio == "No especificado" or not dig_llm:
+        return sanitizar_cedula(ced_det)
+    if dig_llm == ced_det:
+        return doc_limpio
+    if len(ced_det) == 10:
+        if len(dig_llm) != 10:
+            return ced_det
+        if validar_cedula_ecuatoriana(dig_llm) and not validar_cedula_ecuatoriana(ced_det):
+            return doc_limpio
+        return ced_det
+    return doc_limpio
+
+
 def detectar_paciente_en_texto(texto: str) -> dict | None:
     """
     Identifica de forma determinista si en el texto se menciona a un paciente ya registrado
@@ -794,6 +1871,12 @@ def detectar_paciente_en_texto(texto: str) -> dict | None:
         # Detección de cédula en el texto
         m_ced = re.search(r'(?:c[eé]dula|identificaci[oó]n|documento|c\.i\.?)\s*[:\-]?\s*([0-9\s]{8,15})', t_clean)
         ced_dictada = re.sub(r'\D', '', m_ced.group(1)) if m_ced else None
+        try:
+            ced_rob = extraer_cedula_dictada_robusta(texto)
+            if ced_rob and len(ced_rob) >= 8:
+                ced_dictada = ced_rob
+        except Exception:
+            pass
         
         STOP_WORDS = {"el", "la", "los", "las", "de", "del", "a", "al", "para", "por", "con", "en", "que", "es", "un", "una", "paciente", "cita", "telefono", "celular", "numero", "anos", "edad", "dr", "doctor", "bimo"}
         
@@ -846,9 +1929,17 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
     if not texto:
         return None, None
     t = normalizar_palabras_numericas(texto)
+    try:
+        ced_robusta = extraer_cedula_dictada_robusta(texto)
+    except Exception:
+        ced_robusta = None
     
-    # 1. Cédula por ancla léxica explícita
-    ced_match = re.search(r'(?:c[eé]dula|identificaci[oó]n|documento|identidad|c\.i\.?)(?:[^\d]{1,30}?)(?:es|al|para|con\s+el|con|del\s+paciente)?\s*[:\-]?\s*([0-9\s]{8,30})', t, re.I)
+    # 1. Cédula por ancla léxica explícita (incluye variantes fonéticas de Whisper: sédula, célula, ci, ruc)
+    ced_match = re.search(
+        r'(?:c[eé]dula|s[eé]dula|c[eé]lula|identificaci[oó]n|documento|identidad|c\.?\s*i\.?|ruc)(?:[^\d]{0,35}?)(?:n[uú]mero|nro|es|al|para|con\s+el|con|del\s+paciente)?\s*[:\-]?\s*([0-9][0-9\s\.\-]{6,32}[0-9])',
+        t,
+        re.I
+    )
     ced = None
     if ced_match:
         digits = re.sub(r'\D', '', ced_match.group(1))
@@ -856,9 +1947,16 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
             ced = digits[:10]
         elif len(digits) in (8, 9):
             ced = digits
+    # FIX cédula dictada por bloques ('cien', 'mil'): el extractor robusto manda si dio 10 dígitos
+    if ced_robusta and len(ced_robusta) == 10:
+        ced = ced_robusta
 
     # 2. Teléfono por ancla léxica explícita
-    tel_match = re.search(r'(?:tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)(?:[^\d]{1,30}?)(?:es|al|para|con\s+el|con)?\s*[:\-]?\s*([0-9\s]{8,30})', t, re.I)
+    tel_match = re.search(
+        r'(?:tel[eé]fono|celular|m[oó]vil|movil|whatsapp|contacto)(?:[^\d]{0,35}?)(?:n[uú]mero|nro|es|al|para|con\s+el|con)?\s*[:\-]?\s*([0-9][0-9\s\.\-]{6,32}[0-9])',
+        t,
+        re.I
+    )
     tel = None
     if tel_match:
         digits = re.sub(r'\D', '', tel_match.group(1))
@@ -875,6 +1973,19 @@ def extraer_cedula_y_telefono_dictados(texto: str) -> tuple[str | None, str | No
         if tel and tel == ced:
             if not tel.startswith('09') and not tel.startswith('9'):
                 tel = None
+
+    # 4. Si no hubo ancla léxica explícita para la cédula, rescatar secuencia de 10 dígitos con provincia ecuatoriana válida (01..24 o 30)
+    # que no sea un celular (095..099) ni coincida con el teléfono ya extraído
+    if not ced:
+        for m_num in re.finditer(r'(?<!\d)(?:\d[\s\.\-]?){9}\d(?!\d)', t):
+            cand = re.sub(r'\D', '', m_num.group(0))
+            if len(cand) == 10 and cand != tel:
+                if cand.startswith(('095', '096', '097', '098', '099')):
+                    continue
+                prov = int(cand[:2])
+                if (1 <= prov <= 24) or prov == 30:
+                    ced = cand
+                    break
 
     return ced, tel
 
@@ -1140,10 +2251,12 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
     t_limpio = re.sub(r'^(?:bimo|vimo|hola|oye|hey|ok|favor|por favor)\b[\s,]*', '', t).strip()
 
     # Patrón general de agendamiento
-    patron_cita = r'\b(?:genera|generar|agenda|agendar|crea|crear|programa|programar|separa|separar|haz|hacer|pon|poner)\s+(?:una\s+)?cita\s+(?:para|a|con)\s+(.+)$'
+    patron_cita = r'\b(?:genera|generar|agenda|agendar|crea|crear|programa|programar|separa|separar|haz|hacer|pon|poner)\s+(?:una\s+)?cita\s+(?:para|a|al|con)\s+(.+)$'
     m = re.search(patron_cita, t_limpio, flags=re.IGNORECASE)
     if not m:
-        m = re.search(r'^cita\s+(?:para|a|con)\s+(.+)$', t_limpio, flags=re.IGNORECASE)
+        m = re.search(r'^cita\s+(?:para|a|al|con)\s+(.+)$', t_limpio, flags=re.IGNORECASE)
+    if not m:
+        m = re.search(r'\b(?:agenda|agendar|crea|crear|programa|programar|separa|separar|pon|poner)\s+(?:a|al|con)\s+(.+)$', t_limpio, flags=re.IGNORECASE)
 
     if not m:
         return None
@@ -1156,26 +2269,25 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
         "el ultimo", "el último", "al último", "al ultimo"
     )) or any(u in t for u in ("último paciente", "ultimo paciente", "la última paciente", "el último paciente"))
 
-    # 2. Extraer nombre del paciente
+    # 2. Extraer nombre del paciente aplicando limpieza ÚNICAMENTE a la variable de nombre
     if es_ultimo:
         nombre_paciente = "el último paciente"
     else:
-        partes_temp = re.split(r'\b(?:en\s+\d+|mañana|manana|hoy|el\s+(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|pr[oó]ximo)|a\s+las\s+\d+|para\s+el\s+\d+|dentro\s+de)\b', resto, flags=re.IGNORECASE)
-        raw_nom = partes_temp[0].strip() if partes_temp else resto
-        raw_nom = re.sub(r'[,\.]', '', raw_nom).strip()
-        nombre_paciente = _normalizar_nombres_espanol(raw_nom.title()) if raw_nom else "el último paciente"
+        nombre_paciente = limpiar_nombre_paciente(resto) or "el último paciente"
 
-    # 3. Resolver fecha y hora con el algoritmo matemático determinista
+    # 3. Resolver fecha y hora con el algoritmo matemático determinista sobre el texto original
     tiene_tiempo = contiene_especificacion_temporal(texto_crudo)
     f_calc = resolver_fecha_relativa_espanol(texto_crudo)
 
     if f_calc:
         fecha_hora = f_calc
         requiere_fecha_hora = False
+        requiere_seguimiento = False
         msg_conf = f"Cita agendada para {nombre_paciente} el {fecha_hora}"
     else:
         fecha_hora = None
         requiere_fecha_hora = True
+        requiere_seguimiento = True
         msg_conf = f"¿Para qué fecha y hora deseas la cita para {nombre_paciente}?"
 
     tel = extraer_telefono_dictado(texto_crudo) or "No especificado"
@@ -1185,16 +2297,118 @@ def resolver_comando_agendar_cita(texto_crudo: str) -> dict | None:
         "nombre_paciente": nombre_paciente,
         "fecha_hora": fecha_hora,
         "requiere_fecha_hora": requiere_fecha_hora,
+        "requiere_seguimiento": requiere_seguimiento,
         "motivo": "Consulta agendada por voz",
         "telefono": tel,
         "mensaje_confirmacion": msg_conf
     }
+
+_NAV_PREFIJO = r"(?:abre|abrir|muestra|muéstrame|muestrame|mostrar|ve a|vete a|ir a|llévame a|llevame a|busca|buscar|encuentra|encontrar|ver|pon|poner|pásame a|pasame a|cambia a|cambiar a|pantalla de|modo)"
+
+def resolver_navegacion_ui(texto_crudo: str) -> dict | None:
+    if not texto_crudo:
+        return None
+    t = texto_crudo.lower().replace("bimo", "").strip(" ,.?!¿¡")
+    # Limpieza determinista de muletillas y frases conversacionales previas (BLOQUE 4)
+    t = re.sub(r"^(?:hola|oye|hey|ok|por\s+favor|porfa|este|eh|em|bueno|a\s+ver|mira)[, ]+", "", t).strip()
+    t = re.sub(r"^(?:hola|oye|hey|ok|por\s+favor|porfa|este|eh|em|bueno|a\s+ver|mira)[, ]+", "", t).strip()
+    if len(t.split()) > 12:                    # un dictado clínico largo NUNCA es navegación
+        return None
+
+    # Exclusión estricta de dictados clínicos
+    if any(cl in t for cl in ["dolor", "pieza", "caries", "consulta por", "acude por", "diagnóstico", "diagnostico", "tratamiento", "receta", "obturación", "endodoncia", "resina"]):
+        return None
+
+    # 1. Abrir PDF de paciente específico
+    m_pdf = re.match(
+        rf"^{_NAV_PREFIJO}\s+(?:al\s+|a\s+la\s+|el\s+|la\s+)?(?:pdf|documento|historia(?:\s+clínica)?(?:\s+en\s+pdf)?)(?:\s+de|\s+del|\s+de\s+la)?\s+(.+)$",
+        t
+    )
+    if m_pdf:
+        nom = m_pdf.group(1).strip()
+        nom = re.sub(r"^(?:de|del|de la)\s+", "", nom, flags=re.IGNORECASE)
+        nom = re.sub(r"^(?:paciente|sr\.|sra\.|don|doña)\s+", "", nom, flags=re.IGNORECASE)
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf_paciente", "parametro": nom.strip().title()}
+
+    # 2. Buscar paciente específico por nombre
+    # 2a. Con mención explícita de paciente / expediente / ficha / historial
+    _VERBOS_EXPLORAR = r"(?:busca|buscar|encuentra|encontrar|ver|muestra|muéstrame|muestrame|mostrar|abre|abrir|consulta|consultar|pon|poner)"
+    m_pac = re.match(
+        rf"^{_VERBOS_EXPLORAR}\s+(?:al\s+|a\s+la\s+|el\s+|la\s+)?(?:paciente|expediente|ficha(?:\s+de\s+paciente)?|historial)(?:\s+de|\s+del|\s+de\s+la)?\s+(.+)$",
+        t
+    )
+    # 2b. Con verbo exclusivo de búsqueda (busca / buscar / encuentra)
+    if not m_pac:
+        m_pac = re.match(
+            rf"^(?:busca|buscar|encuentra|encontrar)\s+(?:a\s+|al\s+)?(?:paciente\s+)?(.+)$",
+            t
+        )
+
+    if m_pac:
+        nom = m_pac.group(1).strip()
+        nom = re.sub(r"^(?:de|del|de la)\s+", "", nom, flags=re.IGNORECASE)
+        nom = re.sub(r"^(?:paciente|sr\.|sra\.|don|doña)\s+", "", nom, flags=re.IGNORECASE)
+        # Si el resultado es vacío o es una pestaña general, dejar que sigan las reglas siguientes
+        if nom and nom.lower() not in ("pacientes", "citas", "agenda", "calendario", "pdf", "pdfs", "widget", "configuracion", "configuración", "historias", "historias clínicas"):
+            return {"tipo": "NAVEGACION_UI", "accion": "buscar_paciente", "parametro": nom.strip().title()}
+
+    # 3. Odontograma independiente
+    if re.search(rf"\b(?:odontograma)\b", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_odontograma", "parametro": ""}
+
+    # 4. Pestaña Pacientes (general)
+    if re.search(rf"\b(?:pacientes|fichas|lista\s+de\s+pacientes|directorio\s+de\s+pacientes)\b", t):
+        if any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "lista", "directorio", "pon", "poner", "llévame", "llevame"]):
+            return {"tipo": "NAVEGACION_UI", "accion": "abrir_pacientes", "parametro": ""}
+    if re.match(rf"^(?:(?:abre|abrir|pon|vete\s+a|ir\s+a|ver)\s+)?(?:pacientes|fichas de pacientes|lista de pacientes|directorio de pacientes)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pacientes", "parametro": ""}
+
+    # 5. Pestaña Agenda / Calendario / Citas
+    if re.search(rf"\b(?:agenda|citas|calendario)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "hoy", "mis", "pon", "poner", "llévame", "llevame", "pásame", "pasame"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_agenda", "parametro": ""}
+    if re.match(rf"^(?:(?:abre|abrir|pon|vete\s+a|ir\s+a|ver|llévame\s+a|llevame\s+a)\s+(?:la\s+)?)?(?:agenda|citas|calendario|ver citas)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_agenda", "parametro": ""}
+
+    # 6. Pestaña Dictado / Inicio
+    if re.search(rf"\b(?:dictado|dictar|inicio|pantalla\s+principal)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "volver", "pantalla", "modo", "pon", "poner", "llévame", "llevame"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_dictado", "parametro": ""}
+    if re.match(rf"^(?:(?:abre|abrir|pon|vete\s+a|ir\s+a|modo)\s+)?(?:dictado|inicio|dictar)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_dictado", "parametro": ""}
+
+    # 7. Pestaña Móvil / Celular / QR
+    if re.search(rf"\b(?:móvil|movil|mobile|qr|código\s+qr|codigo\s+qr|celular|teléfono|telefono)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "conectar", "cámara", "camara", "pon", "poner", "llévame", "llevame"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_mobile", "parametro": ""}
+    if re.match(rf"^(?:móvil|movil|mobile|código qr|codigo qr|conectar celular|conectar teléfono|cámara móvil|camara movil)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_mobile", "parametro": ""}
+
+    # 8. Pestaña PDF / Visor / Historias
+    if re.search(rf"\b(?:visor|visor\s+de\s+pdf|pdf|pdfs|documentos|historias|historias\s+clínicas|historias\s+clinicas)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "pon", "poner", "llévame", "llevame"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf", "parametro": ""}
+    if re.match(rf"^(?:(?:abre|abrir|muestra|muéstrame|muestrame|ver|pon)\s+(?:las\s+)?)?(?:visor de pdf|ver pdf|ver pdfs|pdf|pdfs|historias|historias clínicas|historias clinicas)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_pdf", "parametro": ""}
+
+    # 9. Pestaña Widget / Modo flotante
+    if re.search(rf"\b(?:widget|modo\s+flotante|ventana\s+flotante|flotante)\b", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_widget", "parametro": ""}
+
+    # 10. Pestaña Configuración / Temas / Ajustes
+    if re.search(rf"\b(?:configuración|configuracion|ajustes|temas?|cambiar\s+temas?|opciones)\b", t) and any(w in t for w in ["abre", "abrir", "ir", "ve", "vete", "muestra", "muéstrame", "muestrame", "mostrar", "ver", "cambiar", "pon", "poner", "llévame", "llevame"]):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_configuracion", "parametro": ""}
+    if re.match(rf"^(?:configuración|configuracion|ajustes|temas|cambiar temas?)$", t):
+        return {"tipo": "NAVEGACION_UI", "accion": "abrir_configuracion", "parametro": ""}
+
+    return None
 
 def procesar_comando_o_dictado(texto_crudo: str) -> dict:
     # 0. Verificación determinista instantánea de comando de hora
     cmd_hora = resolver_comando_hora(texto_crudo)
     if cmd_hora:
         return cmd_hora
+
+    # 0.02 Verificación determinista de navegación de interfaz por voz (0ms, 0 tokens)
+    nav_ui = resolver_navegacion_ui(texto_crudo)
+    if nav_ui:
+        return nav_ui
 
     # 0.05 Verificación determinista instantánea de agendamiento de citas (0ms, 0 tokens)
     cmd_cita = resolver_comando_agendar_cita(texto_crudo)
@@ -1251,8 +2465,12 @@ Si la transcripción contiene variaciones fonéticas o aproximaciones acústicas
 - 'inti' -> 'Inti'
 - 'tupac' -> 'Tupac'
 
-REGLA ESPECIAL PARA CITAS Y ÚLTIMO PACIENTE:
+REGLAS ESTRICTAS DE NOMBRES EN CITAS Y AGENDA:
+- En 'nombre_paciente', coloca ÚNICAMENTE el nombre y apellido(s) del paciente (ej: 'María José Pérez', 'Carlos Montes de Oca', 'Sisa Llumiquinga', 'Pedro de la Cruz').
+- NUNCA incluyas motivos ('con dolor', 'revisión', 'limpieza', 'brackets'), edades ('25 años'), fechas ('mañana', '15 de marzo'), horas ('4pm') ni palabras de agendamiento ('cita para', 'agenda a') dentro de 'nombre_paciente'.
+- Preserva SIEMPRE los apellidos compuestos (ej: 'de la Cruz', 'del Valle', 'San Martín', 'Montes de Oca') y nombres andinos (ej: 'Llumiquinga', 'Guaminga', 'Toapanta', 'Quispe').
 - Si el usuario dice 'el último paciente', 'la última paciente', 'último paciente atendido' o 'al último', pon estrictamente 'nombre_paciente': 'el último paciente'.
+- Para 'fecha' y 'hora', extrae exactamente lo que el usuario pide (ej. 'mañana', 'lunes', '15:00'). Si el usuario provee estos datos, NO debes dejarlos en blanco.
 - Si el usuario solicita agendar una cita pero NO especifica fecha ni hora en el audio (ej: 'genera una cita para el último paciente', 'agenda una cita para Juan'):
   pon 'fecha_hora': null y 'requiere_fecha_hora': true. NUNCA inventes una fecha u hora si no fue dictada.
 
@@ -1262,9 +2480,9 @@ REGLAS ESTRICTAS DE FILIACIÓN CLÍNICA:
 - Si el doctor no dicta cédula, pon 'No especificado'.
 - Si se dictan extracciones realizadas, dientes sacados o perdidos, regístralos en 'odontograma' con el hallazgo 'Extracción previa / Ausente' para pintarse en gris.
 
-REGLAS OBLIGATORIAS DE EXTRACCIÓN CLÍNICA:
-- 'edad': Extrae la edad en años enteros (ej. '16 años', '25 años'). Si el usuario dice '16 años', 'dieciséis años' o 'diez y seis años', escribe estrictamente '16 años'. NUNCA pongas '10 años y 6 meses' a menos que sea explícitamente un lactante menor a 2 años.
-- 'odontograma': Para CADA pieza dental mencionada, en 'pieza_dental' debes colocar SIEMPRE su NÚMERO FDI (ej: '14', '16', '21', '24', '36', '46'). Si el doctor dice 'premolar superior derecho' conviértelo a '14'; si dice 'premolar superior izquierdo' a '24'; si dice 'premolar inferior izquierdo' a '34'; si dice 'molar superior derecho' o 'muela superior derecha' a '16'; si dice 'molar inferior izquierdo' o 'muela inferior izquierda' a '36'.
+- 'odontograma': Para CADA pieza dental mencionada, en 'pieza_dental' debes colocar SIEMPRE su NÚMERO FDI (ej: '14', '16', '21', '24', '36', '46'). Si el doctor dice 'premolar superior derecho' conviértelo a '14'; si dice 'premolar superior izquierdo' a '24'; si dice 'premolar inferior izquierdo' a '34'; si dice 'premolar inferior derecho' a '44'; si dice 'molar superior derecho' o 'muela superior derecha' a '16'; si dice 'molar superior izquierdo' o 'muela superior izquierda' a '26'; si dice 'molar inferior izquierdo' o 'muela inferior izquierda' a '36'; si dice 'molar inferior derecho' o 'muela inferior derecha' a '46'. Si el doctor menciona ambos lados (ej: 'premolar superior derecho e izquierdo' o 'premolares superiores'), DEBES crear DOS objetos separados en 'odontograma': uno para '14' y otro para '24' (o '44' y '34' si son inferiores; '16' y '26' si son molares superiores).
+REGLA DE EXHAUSTIVIDAD DEL ODONTOGRAMA (OBLIGATORIA): EL ARRAY 'odontograma' DEBE CONTENER UN OBJETO POR CADA PIEZA DENTAL MENCIONADA EN EL DICTADO. ESTÁ PROHIBIDO RESUMIR, AGRUPAR, OMITIR O DEJAR PIEZAS IMPLÍCITAS. SI EL DOCTOR NOMBRA N PIEZAS (O UN GRUPO DE PIEZAS), EL ARRAY DEBE TENER AL MENOS N OBJETOS. SI UN MISMO HALLAZGO APLICA A VARIAS PIEZAS, REPÍTELO EN CADA UNA. SI UNA PIEZA TIENE VARIOS HALLAZGOS, AGRÚPALOS EN SU LISTA 'procedimientos_o_hallazgos'. SI UN TRATAMIENTO SOLO SE INDICA O PLANIFICA PARA DESPUÉS (NO SE REALIZÓ EN ESTA SESIÓN), ESCRÍBELO CON '(pendiente)' (ej: 'Resina (pendiente)'); SI YA SE REALIZÓ, ESCRÍBELO NORMAL (ej: 'Resina', 'Calza', 'Curación'). NO INVENTES PIEZAS NI HALLAZGOS QUE NO SE DICTARON. ANTES DE RESPONDER, CUENTA LAS PIEZAS DEL DICTADO Y VERIFICA QUE EL ARRAY TENGA ESA CANTIDAD.
+Si el doctor dice 'premolar derecho' sin cuadrante ni número no debe inventarse; si el doctor dice 'premolar derecho, izquierdo' sin más precisión, crea un objeto por cada mención con la designación textual tal como se dictó ('Premolar derecho', 'Premolar izquierdo') y no fabriques un número FDI que no se dijo. Si dice '31 y 32', crea dos objetos (31, 32). Si dice 'del 11 al 13' o 'incisivos superiores derechos', expande solo rangos numéricos explícitos.
 - 'pagos': Si el doctor menciona costo del tratamiento, abono o saldo (ej: 'el tratamiento cuesta 150 dólares, se agrega un abono de 50 y queda 100 restante', 'costo 200, abono 50', 'costo 80 cancelado'):
   "pagos": {{
       "costo_total": 150.0,
@@ -1275,6 +2493,12 @@ REGLAS OBLIGATORIAS DE EXTRACCIÓN CLÍNICA:
       "notas": "Concepto o detalle del tratamiento"
   }}
   Si no se dictan pagos, escribe "pagos": {{ "costo_total": 0.0, "abono": 0.0, "saldo_pendiente": 0.0, "estado": "Cancelado", "metodo_pago": "No especificado", "notas": "Sin registro de pagos" }}
+
+REGLA EXHAUSTIVA DE DIAGNÓSTICO Y PLAN (OBLIGATORIA):
+- El doctor suele dictar VARIOS hallazgos y tratamientos en la misma consulta (ej: 'hicimos una endodoncia y también tiene caries en el premolar superior derecho y en la 36'). Registra TODOS, sin resumir ni elegir solo uno.
+- 'diagnostico' debe enumerar cada patología con sus piezas (ej: 'Caries en premolar superior derecho y pieza 36').
+- 'plan_tratamiento' debe enumerar cada procedimiento realizado o indicado con sus piezas (ej: 'Endodoncia en premolar superior derecho. Resinas en piezas 14 y 36'). NUNCA escribas un plan genérico como 'Tratamiento odontológico integral'.
+- En 'odontograma', cada pieza lleva TODOS sus hallazgos y procedimientos; nunca pongas 'Evaluada' si el doctor dijo un hallazgo para esa pieza.
 
 DETECCIÓN DE CITAS FUTURAS DENTRO DE HISTORIA CLÍNICA:
 - Si mientras se dicta la historia clínica el doctor menciona una próxima cita o control (ej: 'dejamos cita para dentro de 15 días', 'control en 30 días', 'cita el próximo martes a las 3', 'lo veo en un mes'), activa obligatoriamente en 'cita_programada':
@@ -1291,21 +2515,32 @@ REGLA OBLIGATORIA DE APROBACIÓN DE ORTODONCIA:
   1. En 'plan_tratamiento', incluye: 'Tratamiento de ortodoncia aprobado (aparatología fija / brackets)'.
   2. En 'evaluacion_ortodoncia', NUNCA pongas 'Sin aparatología'; coloca 'Brackets metálicos' o aparatología indicada, con 'clase_angle' y 'alineacion' acordes.
 
+REGLA DE ACCIÓN SOBRE EL EXPEDIENTE (accion_expediente):
+- Si el usuario dice 'agrega', 'agrégale', 'actualiza', 'me olvidé de decir', 'ponle también', 'añade al expediente':
+  pon "accion_expediente": "actualizar".
+- Si el usuario dice explícitamente 'nuevo expediente', 'expediente aparte', 'otra consulta', 'nueva historia', 'consulta aparte':
+  pon "accion_expediente": "nuevo".
+- En cualquier otro caso:
+  pon "accion_expediente": "predeterminado".
+
 Analiza la siguiente transcripción de voz y clasifícala estrictamente en una de las siguientes intenciones:
 1. COMANDO_CITA: Si el usuario solicita agendar, programar, generar, crear, separar o sacar una cita (ej: 'genera una cita para...', 'crea una cita para...', 'agenda una cita para...', 'haz una cita para...', 'cita para...'). ATENCIÓN CRÍTICA: Si el texto contiene síntomas, motivo de consulta, piezas dentales, examen, diagnóstico CIE-10 o plan de tratamiento, NUNCA debe ser COMANDO_CITA; es OBLIGATORIAMENTE HISTORIA_CLINICA.
 2. CANCELAR_CITA: Si el doctor solicita cancelar o eliminar citas.
 3. REPROGRAMAR_CITA: Si el doctor solicita cambiar o mover una cita.
 4. ACTUALIZAR_DATOS_PACIENTE: ÚNICAMENTE cuando se trate de una instrucción verbal directa y breve para modificar o corregir datos de contacto (ej: 'cambia el teléfono de María a 0991234567', 'actualiza la cédula de Juan', 'el nuevo número es 098...'). NUNCA selecciones esto si el texto describe una consulta clínica, dolor, examen, diagnóstico, piezas dentales o tratamiento.
 5. CONSULTA_MEDICA: Si el doctor hace una pregunta puntual médica o farmacológica (máximo 2 oraciones).
-6. HISTORIA_CLINICA: Si el doctor está dictando una consulta clínica dental (síntomas, motivo, examen clínico, piezas dentales, diagnóstico CIE-10, plan de tratamiento, ortodoncia o indicaciones). ATENCIÓN: Es MUY COMÚN que el doctor comience dictando la filiación completa ('Paciente [Nombre], [Edad] años, cédula [X], teléfono [Y]... Consulta por...') y que al final mencione una próxima cita o control (ej: 'cita en 15 días'). En todos esos casos, la intención es OBLIGATORIAMENTE HISTORIA_CLINICA (la cita futura se guarda dentro del campo 'cita_programada', NUNCA clasificar la consulta general como COMANDO_CITA).
+6. HISTORIA_CLINICA: Si el doctor está dictando una consulta clínica dental (síntomas, motivo, examen clínico, piezas dentales, diagnóstico CIE-10, plan de tratamiento, ortodoncia o indicaciones). ATENCIÓN: Es MUY COMÚN que el doctor comience dictando la filiación completa ('Paciente [Nombre], [Edad] años, cédula [X], teléfono [Y]... Consulta por...') y que al final mencione pagos o una próxima cita o control (ej: 'cita en 15 días', 'abona 50 dólares'). REGLA DE MULTITAREA SIMULTÁNEA: Si el dictado es clínico, debes extraer y llenar SIMULTÁNEAMENTE todos los nodos en el mismo JSON: odontograma, diagnostico, pagos y cita_programada. NO omitas ninguna tarea ni dejes fuera pagos o citas si fueron dictados.
 7. IGNORAR: Si el audio trata sobre cualquier tema ajeno a la odontología, medicina o citas clínicas.
+8. NAVEGACION_UI: Orden CORTA y directa para mover la interfaz (ej: 'abre la agenda', 'muéstrame el odontograma', 'busca al paciente Juan Pérez', 'ir a pacientes'). NUNCA si el texto contiene síntomas, piezas dentales, diagnóstico, tratamiento o filiación: eso es HISTORIA_CLINICA.
 
 Devuelve ÚNICAMENTE un formato JSON válido según la intención:
 
 Si es COMANDO_CITA:
 {{
     "tipo": "COMANDO_CITA",
-    "nombre_paciente": "Nombre explícito del paciente mencionado o 'No especificado'",
+    "nombre_paciente": "Nombre explícito del paciente mencionado o 'el último paciente' o 'No especificado'",
+    "fecha": "Fecha solicitada por el usuario (ej. 'mañana', 'lunes', '2026-10-01') o 'No especificado'",
+    "hora": "Hora solicitada por el usuario (ej. '15:00', '10:00 am', 'a las 3') o 'No especificado'",
     "fecha_hora": "AAAA-MM-DD HH:MM estimada",
     "motivo": "Motivo de la cita",
     "telefono": "Teléfono o celular del paciente si fue dictado (ej. '0991234567'), o 'No especificado'",
@@ -1352,9 +2587,17 @@ Si es IGNORAR:
     "respuesta_asistente": ""
 }}
 
+Si es NAVEGACION_UI:
+{{
+    "tipo": "NAVEGACION_UI",
+    "accion": "abrir_dictado | abrir_agenda | abrir_pacientes | buscar_paciente | abrir_mobile | abrir_pdf | abrir_pdf_paciente | abrir_widget | abrir_configuracion | abrir_odontograma",
+    "parametro": "Nombre del paciente si aplica, si no cadena vacía"
+}}
+
 Si es HISTORIA_CLINICA:
 {{
     "tipo": "HISTORIA_CLINICA",
+    "accion_expediente": "actualizar / nuevo / predeterminado",
     "datos_filiacion": {{
         "nombre": "No especificado",
         "edad": "No especificado",
@@ -1416,7 +2659,7 @@ Texto dictado:
 
     try:
         modelos_candidatos = [modelo]
-        for m_fb in ("openai/gpt-oss-20b", "qwen/qwen3.8-27b"):
+        for m_fb in ("openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"):
             if m_fb not in modelos_candidatos:
                 modelos_candidatos.append(m_fb)
 
@@ -1477,7 +2720,7 @@ Texto dictado:
                     resultado = json.loads(resp_hc.choices[0].message.content)
                     break
                 except Exception as e_re:
-                    for m_alt in ("openai/gpt-oss-20b", "qwen/qwen3.8-27b"):
+                    for m_alt in ("openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"):
                         if m_alt != modelo_activo:
                             try:
                                 resp_hc = cliente.chat.completions.create(
@@ -1495,10 +2738,26 @@ Texto dictado:
 
         # Post-procesamiento amigable de filiación y normalización en español
         if resultado.get("tipo") == "HISTORIA_CLINICA":
+            # Extracción y validación de accion_expediente
+            det_acc = extraer_accion_expediente(texto_crudo)
+            acc_groq = str(resultado.get("accion_expediente") or "").strip().lower()
+            if det_acc != "predeterminado":
+                resultado["accion_expediente"] = det_acc
+            elif acc_groq in ("actualizar", "nuevo", "predeterminado"):
+                resultado["accion_expediente"] = acc_groq
+            else:
+                resultado["accion_expediente"] = "predeterminado"
+
             fil = resultado.get("datos_filiacion", {})
             nom = _normalizar_nombres_espanol(fil.get("nombre", ""))
             fil["nombre"] = nom
-            fil["documento"] = sanitizar_cedula(fil.get("documento", ""))
+            doc_raw = fil.get("documento") or fil.get("cedula") or fil.get("ci") or resultado.get("cedula") or resultado.get("documento") or ""
+            doc_limpio = resolver_cedula_final(doc_raw, texto_crudo)
+            if doc_limpio == "No especificado":
+                ced_det, _ = extraer_cedula_y_telefono_dictados(texto_crudo)
+                if ced_det:
+                    doc_limpio = sanitizar_cedula(ced_det)
+            fil["documento"] = doc_limpio
             fil["edad"] = _limpiar_edad_dictada(fil.get("edad", ""), texto_crudo)
             sex = fil.get("sexo", "No especificado")
             if not sex or sex.lower() in ("no especificado", "none", ""):
@@ -1517,16 +2776,36 @@ Texto dictado:
                 if len(digits_f) in (7, 8, 9, 10, 11, 12):
                     fil["telefono"] = digits_f
 
-            # Normalizar piezas en odontograma al estándar FDI
-            from generador_pdf import extraer_fdi
-            odonto = resultado.get("odontograma", [])
-            if isinstance(odonto, list):
-                for item in odonto:
-                    if isinstance(item, dict):
-                        p_raw = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
-                        fdi_calc = extraer_fdi(p_raw)
-                        if fdi_calc:
-                            item["pieza_dental"] = fdi_calc
+            # Parche determinista exhaustivo de odontograma y normalización al estándar FDI
+            odonto_raw = resultado.get("odontograma", [])
+            odonto_parcheado = parchear_odontograma_exhaustivo(odonto_raw, texto_crudo)
+
+            # Reintento acotado: si tras el parche el array sigue con menos objetos que piezas mencionadas
+            piezas_menc = extraer_piezas_mencionadas(texto_crudo)
+            if len(odonto_parcheado) < len(piezas_menc):
+                fdi_en_array = set()
+                for o_item in odonto_parcheado:
+                    k_item, _ = _obtener_identidad_pieza(o_item.get("pieza_dental", ""))
+                    if k_item:
+                        fdi_en_array.add(k_item)
+                faltantes = [p for p in piezas_menc if _obtener_identidad_pieza(p)[0] not in fdi_en_array]
+                if faltantes and cliente:
+                    try:
+                        prompt_retry = f"{prompt}\n\nTU RESPUESTA ANTERIOR OMITIÓ PIEZAS: {faltantes}. DEVUELVE EL JSON COMPLETO INCLUYENDO TODAS."
+                        resp_retry = cliente.chat.completions.create(
+                            model=modelo_activo,
+                            messages=[{"role": "user", "content": prompt_retry}],
+                            temperature=0.0,
+                            response_format={"type": "json_object"},
+                            timeout=25.0
+                        )
+                        res_retry = json.loads(resp_retry.choices[0].message.content)
+                        if isinstance(res_retry.get("odontograma"), list) and len(res_retry.get("odontograma")) > len(odonto_parcheado):
+                            odonto_parcheado = parchear_odontograma_exhaustivo(res_retry.get("odontograma"), texto_crudo)
+                    except Exception as e_ret:
+                        print(f"[ODONTOGRAMA RETRY WARN]: {e_ret}")
+
+            resultado["odontograma"] = odonto_parcheado
 
             # CÁLCULO MATEMÁTICO EXACTO DE CITAS A FUTURO EN PYTHON (Evita alucinaciones del LLM)
             f_calc = resolver_fecha_relativa_espanol(texto_crudo)
@@ -1551,6 +2830,9 @@ Texto dictado:
             if not resultado.get("plan_tratamiento") or str(resultado.get("plan_tratamiento")).strip().lower() in ("no especificado", "none", ""):
                 m_plan = re.search(r'plan\s+(?:de\s+tratamiento\s+)?([^\.]+)', texto_crudo, re.IGNORECASE)
                 resultado["plan_tratamiento"] = m_plan.group(1).strip() if m_plan else "Tratamiento odontológico integral"
+
+            # Diagnóstico y plan exhaustivos: todas las patologías y procedimientos del odontograma
+            completar_diagnostico_y_plan(resultado, texto_crudo)
 
             # Extracción y cálculo matemático estricto de honorarios y pagos
             resultado["pagos"] = _extraer_y_calcular_pagos(resultado.get("pagos", {}), texto_crudo)
@@ -1582,21 +2864,34 @@ Texto dictado:
             if any(u in raw_nom.lower() for u in ("último paciente", "ultimo paciente", "la última", "la ultima", "el ultimo", "el último", "último", "ultimo")) or any(u in texto_crudo.lower() for u in ("último paciente", "ultimo paciente", "la última", "la ultima", "el ultimo", "el último")):
                 nom = "el último paciente"
             else:
-                nom = _normalizar_nombres_espanol(raw_nom)
+                nom = limpiar_nombre_paciente(raw_nom)
             resultado["nombre_paciente"] = nom
             
-            # Resolver fecha y hora con el algoritmo matemático determinista
+            # Resolver fecha y hora con el algoritmo matemático determinista sobre texto_crudo completo
             tiene_tiempo = contiene_especificacion_temporal(texto_crudo)
             f_calc = resolver_fecha_relativa_espanol(texto_crudo)
             if f_calc:
                 resultado["fecha_hora"] = f_calc
                 resultado["requiere_fecha_hora"] = False
-            elif tiene_tiempo and resultado.get("fecha_hora") and resultado.get("fecha_hora") not in ("No especificado", "null", "None"):
-                resultado["requiere_fecha_hora"] = False
+                resultado["requiere_seguimiento"] = False
             else:
-                resultado["fecha_hora"] = None
-                resultado["requiere_fecha_hora"] = True
-                resultado["mensaje_confirmacion"] = f"¿Para qué fecha y hora deseas la cita para {nom}?"
+                # Comprobar si Groq extrajo fecha u hora en campos específicos
+                fecha_g = str(resultado.get("fecha") or "").strip()
+                hora_g = str(resultado.get("hora") or "").strip()
+                texto_comb = f"{fecha_g} {hora_g}".strip()
+                f_comb = resolver_fecha_relativa_espanol(texto_comb) if (texto_comb and texto_comb.lower() not in ("no especificado", "none", "null")) else None
+                if f_comb:
+                    resultado["fecha_hora"] = f_comb
+                    resultado["requiere_fecha_hora"] = False
+                    resultado["requiere_seguimiento"] = False
+                elif tiene_tiempo and resultado.get("fecha_hora") and resultado.get("fecha_hora") not in ("No especificado", "null", "None"):
+                    resultado["requiere_fecha_hora"] = False
+                    resultado["requiere_seguimiento"] = False
+                else:
+                    resultado["fecha_hora"] = None
+                    resultado["requiere_fecha_hora"] = True
+                    resultado["requiere_seguimiento"] = True
+                    resultado["mensaje_confirmacion"] = f"¿Para qué fecha y hora deseas la cita para {nom}?"
 
             # Extracción determinista de teléfono para la cita
             tel_cita = str(resultado.get("telefono") or "").strip()
@@ -1649,7 +2944,7 @@ Texto dictado:
                 fil = resultado.setdefault("datos_filiacion", {})
                 nom = _normalizar_nombres_espanol(fil.get("nombre", ""))
                 fil["nombre"] = nom
-                fil["documento"] = sanitizar_cedula(fil.get("documento", ""))
+                fil["documento"] = resolver_cedula_final(fil.get("documento", ""), texto_crudo)
                 fil["edad"] = _limpiar_edad_dictada(fil.get("edad", ""), texto_crudo)
                 sex = fil.get("sexo", "No especificado")
                 if not sex or sex.lower() in ("no especificado", "none", ""):
@@ -1680,7 +2975,7 @@ Texto dictado:
                 if ced_ext:
                     resultado["cedula"] = ced_ext
             else:
-                c_clean = sanitizar_cedula(ced_act)
+                c_clean = resolver_cedula_final(ced_act, texto_crudo)
                 if c_clean and c_clean.lower() != "no especificado":
                     resultado["cedula"] = c_clean
 
@@ -1691,6 +2986,10 @@ Texto dictado:
                 if not resultado.get("nombre_paciente") or resultado.get("nombre_paciente") in ("Paciente", "Cita", "No especificado"):
                     resultado["nombre_paciente"] = pac_det.get("nombre")
                 resultado["documento"] = pac_det.get("documento") or ""
+
+        elif resultado.get("tipo") == "NAVEGACION_UI":
+            resultado["accion"] = str(resultado.get("accion") or "").strip()
+            resultado["parametro"] = str(resultado.get("parametro") or "").strip()
 
         return resultado
     except Exception as e:

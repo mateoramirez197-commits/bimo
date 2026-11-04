@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Instalador Automático Universal BIMO Pro (Setup_BIMO_Pro.exe)
 Desempaqueta la aplicación compilada, inicializa la base de datos,
@@ -19,8 +19,41 @@ def obtener_ruta_instalacion_default():
 
 def extraer_payload(zip_path, destino_dir):
     os.makedirs(destino_dir, exist_ok=True)
+    dest_db = os.path.join(destino_dir, "bimo.db")
+    if os.path.exists(dest_db):
+        resp_dir = os.path.join(destino_dir, "Respaldos_Locales")
+        os.makedirs(resp_dir, exist_ok=True)
+        import datetime, sqlite3
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        bk_path = os.path.join(resp_dir, f"bimo_pre_update_{ts}.db")
+        try:
+            with sqlite3.connect(dest_db) as src, sqlite3.connect(bk_path) as dst:
+                src.backup(dst)
+            print(f"      -> Copia de seguridad pre-actualización creada: {bk_path}")
+        except Exception as e_bk:
+            print(f"      [WARN] No se pudo crear copia previa: {e_bk}")
+
+    PROTECTED_FILES = {
+        "bimo.db", "bimo.db-wal", "bimo.db-shm", "bimo.vault",
+        "clinica.json", "vocabulario_aprendido.json", "token.json", "bimo.lic"
+    }
     with zipfile.ZipFile(zip_path, 'r') as zf:
-        zf.extractall(destino_dir)
+        for m in zf.infolist():
+            m_norm = os.path.normpath(m.filename)
+            if os.path.basename(m_norm) in PROTECTED_FILES and os.path.exists(os.path.join(destino_dir, m_norm)):
+                continue
+            if (m_norm.startswith("Pacientes\\") or m_norm.startswith("Pacientes/")) and os.path.exists(os.path.join(destino_dir, m_norm)):
+                continue
+            zf.extract(m, destino_dir)
+
+    # Copiar clinica.default.json si clinica.json no existe
+    clinica_dst = os.path.join(destino_dir, "clinica.json")
+    clinica_def = os.path.join(destino_dir, "clinica.default.json")
+    if not os.path.exists(clinica_dst) and os.path.exists(clinica_def):
+        try:
+            shutil.copy2(clinica_def, clinica_dst)
+        except Exception:
+            pass
 
 def crear_acceso_directo(destino_dir, exe_path, ico_path):
     try:
@@ -85,6 +118,7 @@ def main():
     os.makedirs(os.path.join(destino_dir, "Pacientes", "Pacientes_Adultos"), exist_ok=True)
     os.makedirs(os.path.join(destino_dir, "Pacientes", "Pacientes_Pediatricos"), exist_ok=True)
     os.makedirs(os.path.join(destino_dir, "data"), exist_ok=True)
+    os.makedirs(os.path.join(destino_dir, "Respaldos_Locales"), exist_ok=True)
     print("      -> Directorios de pacientes inicializados.")
 
     # 3. Crear accesos directos
@@ -98,8 +132,11 @@ def main():
     try:
         # Ejecutar BIMO_Pro.exe en modo silencioso de inicialización para registrar HWID y DB
         cmd_init = [exe_path, "--setup-init"]
-        subprocess.run(cmd_init, cwd=destino_dir, timeout=15)
-        print("      -> Licencia vinculada al hardware y base de datos inicializada.")
+        proc = subprocess.run(cmd_init, cwd=destino_dir, timeout=120)
+        if proc.returncode != 0:
+            print(f"      [WARN] --setup-init retorno codigo {proc.returncode}")
+        else:
+            print("      -> Licencia vinculada al hardware y base de datos inicializada.")
     except Exception as e:
         print(f"      -> Advertencia al vincular licencia: {e}")
 

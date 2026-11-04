@@ -6,8 +6,11 @@ from pathlib import Path
 import qrcode
 from PIL import Image
 import re
+import secrets
+import hmac
+import tempfile
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 import uvicorn
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -17,9 +20,31 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from config import MOBILE_SERVER_PORT, BASE_DIR, sanitizar_nombre_carpeta
 from database import buscar_pacientes, listar_consultas_paciente, obtener_consulta_por_id
 
+def obtener_o_crear_movil_token() -> str:
+    from config import obtener_parametro_boveda, guardar_parametro_boveda
+    tok = obtener_parametro_boveda("movil_token")
+    if not tok or len(str(tok).strip()) < 16:
+        tok = secrets.token_urlsafe(24)
+        guardar_parametro_boveda("movil_token", tok)
+    return str(tok).strip()
+
 app = FastAPI(title="BIMO Mobile Bridge & Clinical Viewer")
 
+@app.middleware("http")
+async def verificar_autenticacion_movil(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/"):
+        token_esperado = obtener_o_crear_movil_token()
+        cookie_t = request.cookies.get("bimo_t", "")
+        header_t = request.headers.get("X-Bimo-Token", "")
+        query_t = request.query_params.get("t", "")
+        present_tok = header_t or cookie_t or query_t
+        if not present_tok or not hmac.compare_digest(str(present_tok), str(token_esperado)):
+            return JSONResponse({"status": "error", "message": "No autorizado. Dispositivo móvil no emparejado."}, status_code=401)
+    return await call_next(request)
+
 _CALLBACK_AUDIO = None
+_CALLBACK_TEXTO = None
 _SERVIDOR_HILO = None
 _ULTIMO_AUDIO_RUTA = "temp_mobile_audio.wav"
 
@@ -85,617 +110,162 @@ def generar_codigo_qr_url(url: str):
 
 
 # ==========================================
-# WEB APP MÓVIL (HTTPS 100% AUDIO - CERO CÁMARA)
+# WEB APP MÓVIL (HTTPS, solo audio, sin cámara para el dictado)
+# La página vive en web_ui/movil.html y usa los recursos locales de web_ui/vendor.
 # ==========================================
-HTML_MOVIL = """<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>BIMO Micrófono Clínico</title>
-    <style>
-        :root {
-            --bg-app: #080C14;
-            --card-app: #101622;
-            --accent-app: #00F5D4;
-            --border-app: #1E293B;
-            --btn-app: #0284C7;
-            --txt-app: #FFFFFF;
-            --txt-muted: #94A3B8;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        body {
-            background-color: var(--bg-app);
-            color: var(--txt-app);
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        header {
-            background: var(--card-app);
-            padding: 16px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--border-app);
-        }
-        .brand { font-size: 22px; font-weight: 900; letter-spacing: 2px; }
-        .brand span.b { color: #00F5D4; }
-        .brand span.i { color: #70D6FF; }
-        .brand span.m { color: #FF006E; }
-        .brand span.o { color: #FFBE0B; }
-        .doc-badge { font-size: 11px; color: #00F5D4; background: rgba(0, 245, 212, 0.1); padding: 4px 10px; border-radius: 12px; font-weight: 700; }
+def _carpeta_web_ui() -> Path:
+    import sys
+    candidatos = [Path(BASE_DIR) / "web_ui"]
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).parent
+        candidatos = [Path(getattr(sys, "_MEIPASS", exe_dir)) / "web_ui", exe_dir / "web_ui", exe_dir / "_internal" / "web_ui"] + candidatos
+    candidatos.append(Path(__file__).resolve().parent / "web_ui")
+    return next((c for c in candidatos if (c / "movil.html").exists()), candidatos[-1])
 
-        .main-content {
-            flex: 1;
-            padding: 24px 16px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow-y: auto;
-        }
 
-        .tab-content { width: 100%; max-width: 480px; display: none; }
-        .tab-content.active { display: flex; flex-direction: column; align-items: center; }
+WEB_UI_DIR = _carpeta_web_ui()
 
-        .mic-wrapper { margin: 40px 0 20px; text-align: center; }
-        .btn-mic {
-            width: 170px;
-            height: 170px;
-            border-radius: 50%;
-            background: radial-gradient(circle, #1e293b, #0f172a);
-            border: 4px solid #00F5D4;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto;
-            cursor: pointer;
-            box-shadow: 0 10px 30px rgba(0, 245, 212, 0.25);
-            transition: all 0.3s ease;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .btn-mic svg { width: 75px; height: 75px; fill: #00F5D4; transition: all 0.3s; }
-        .btn-mic.recording {
-            background: #FF006E;
-            border-color: #ff3388;
-            box-shadow: 0 0 45px rgba(255, 0, 110, 0.75);
-            animation: pulse 1.3s infinite;
-        }
-        .btn-mic.recording svg { fill: #ffffff; }
 
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.06); }
-            100% { transform: scale(1); }
-        }
+def _pagina_movil(tema: str) -> str:
+    html = (WEB_UI_DIR / "movil.html").read_text(encoding="utf-8")
+    return html.replace("{{TEMA}}", tema if tema in ("claro", "oscuro", "rosa") else "claro")
 
-        .status-pill {
-            margin-top: 22px;
-            padding: 10px 22px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-            background: #161f30;
-            border: 1px solid #24324a;
-            color: #94a3b8;
-            text-align: center;
-        }
-        .status-pill.recording { background: rgba(255, 0, 110, 0.2); border-color: #FF006E; color: #ff3388; }
-        .status-pill.success { background: rgba(0, 245, 212, 0.2); border-color: #00F5D4; color: #00F5D4; }
 
-        .instruction-box {
-            background: #161f30;
-            border: 1px solid #24324a;
-            padding: 16px;
-            border-radius: 12px;
-            font-size: 12px;
-            color: #94a3b8;
-            line-height: 1.6;
-            max-width: 340px;
-            margin-top: 24px;
-            text-align: left;
-        }
+def _pagina_aviso(titulo: str, texto: str, status_code: int = 401) -> HTMLResponse:
+    """Aviso (no emparejado / código inválido) con el mismo estilo de vidrio, sin recursos externos."""
+    return HTMLResponse(
+        "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1.0, viewport-fit=cover'><title>BIMO</title>"
+        "<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;"
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0b0b12;text-align:center;"
+        "background:radial-gradient(40% 30% at 15% 15%,rgba(120,170,255,.6),transparent 70%),"
+        "radial-gradient(40% 30% at 85% 30%,rgba(196,160,255,.55),transparent 70%),"
+        "radial-gradient(45% 30% at 55% 90%,rgba(255,190,160,.55),transparent 70%),#e8edf7}"
+        ".card{max-width:380px;padding:28px 24px;border-radius:28px;background:rgba(255,255,255,.35);"
+        "-webkit-backdrop-filter:blur(30px) saturate(200%);backdrop-filter:blur(30px) saturate(200%);"
+        "border:1px solid rgba(255,255,255,.7);box-shadow:inset 0 1px 0 #fff,0 18px 50px rgba(40,55,100,.18)}"
+        "h2{margin:0 0 10px;font-size:22px;letter-spacing:-.02em}p{margin:0;color:#5b6070;line-height:1.55;font-size:15px}</style>"
+        f"</head><body><div class='card'><h2>{titulo}</h2><p>{texto}</p></div></body></html>",
+        status_code=status_code,
+    )
 
-        /* Directorio de Pacientes y Visor de PDF */
-        .search-box {
-            width: 100%;
-            padding: 12px 16px;
-            background: #161f30;
-            border: 1px solid #24324a;
-            border-radius: 10px;
-            color: #ffffff;
-            font-size: 14px;
-            margin-bottom: 16px;
-        }
-        .patient-card {
-            width: 100%;
-            background: #161f30;
-            border: 1px solid #24324a;
-            border-radius: 12px;
-            padding: 14px 16px;
-            margin-bottom: 12px;
-            text-align: left;
-        }
-        .patient-name { font-size: 16px; font-weight: 700; color: #70d6ff; }
-        .patient-meta { font-size: 12px; color: #94a3b8; margin: 4px 0 10px; }
-        .btn-view-history {
-            background: #3A86FF;
-            color: white;
-            border: none;
-            padding: 8px 14px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .consultations-list { margin-top: 10px; padding-top: 10px; border-top: 1px solid #24324a; }
-        .consultation-item {
-            background: #0b0f19;
-            padding: 10px 12px;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .cons-date { font-size: 12px; color: #f8fafc; }
-        .btn-open-pdf {
-            background: #00F5D4;
-            color: #0b0f19;
-            text-decoration: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 800;
-        }
 
-        /* Barra Inferior de Pestañas */
-        nav.bottom-nav {
-            background: #161f30;
-            border-top: 1px solid #24324a;
-            display: flex;
-            height: 60px;
-        }
-        .nav-tab {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 600;
-            color: #64748b;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .nav-tab.active { color: #00F5D4; border-top: 2px solid #00F5D4; }
-    </style>
-</head>
-<body>
-    <header>
-        <div class="brand">
-            <span class="b">B</span><span class="i">I</span><span class="m">M</span><span class="o">O</span>
-        </div>
-        <div class="doc-badge">🔒 Enlace Seguro HTTPS</div>
-    </header>
+CATEGORIAS_PERMITIDAS = (
+    "radiografia", "fotografia", "intraoral", "perfil", "panoramica", "otro",
+    # Tipos que ofrece la app del celular (antes se guardaban como "otro")
+    "radiografia_panoramica", "radiografia_periapical", "foto_intraoral", "foto_facial", "estudio_modelos",
+)
+EXTS_AUDIO = (".webm", ".m4a", ".mp4", ".aac", ".ogg", ".wav")
+EXTS_PERMITIDAS = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".pdf")
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 
-    <div class="main-content">
-        <!-- PESTAÑA 1: MICRÓFONO INALÁMBRICO PURO (SIN CÁMARA) -->
-        <div id="tabMic" class="tab-content active">
-            <div class="mic-wrapper">
-                <button id="btnMic" class="btn-mic">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                    </svg>
-                </button>
-                <div id="statusLabel" class="status-pill">Toca el micrófono para comenzar</div>
-            </div>
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+if (WEB_UI_DIR / "vendor").is_dir():
+    app.mount("/vendor", StaticFiles(directory=str(WEB_UI_DIR / "vendor")), name="vendor")
 
-            <div class="instruction-box">
-                🎙️ <strong>Dictado Directo (Solo Micrófono):</strong><br>
-                1. Toca el botón verde para iniciar el dictado.<br>
-                2. Dicta los hallazgos clínicos o comandos tipo:<br>
-                <span style="color:#FFBE0B;">"Bimo, una cita para Mateo Ramírez para el 2 de febrero a las 3 de la tarde"</span>.<br>
-                3. Vuelve a tocar el botón rojo para enviar al PC.
-            </div>
-        </div>
-
-        <!-- PESTAÑA 2: HISTORIAS Y VISOR PDF -->
-        <div id="tabPatients" class="tab-content">
-            <input type="text" id="inputSearch" class="search-box" placeholder="🔍 Buscar paciente por nombre...">
-            <div id="patientsContainer" style="width: 100%;">
-                <div style="text-align: center; color: #64748b; margin-top: 30px;">Cargando directorio de pacientes...</div>
-            </div>
-        </div>
-
-        <!-- PESTAÑA 3: RADIOGRAFÍAS Y FOTOS CLÍNICAS -->
-        <div id="tabPhotos" class="tab-content">
-            <div class="patient-card" style="margin-bottom: 14px;">
-                <label style="font-size: 11px; font-weight: 700; color: #70d6ff; text-transform: uppercase;">1. Seleccionar Paciente:</label>
-                <select id="selectPhotoPatient" class="search-box" style="margin-top: 6px; margin-bottom: 12px; background: #0b0f19;" onchange="cargarFotosPacienteSeleccionado()">
-                    <option value="">Cargando pacientes...</option>
-                </select>
-
-                <label style="font-size: 11px; font-weight: 700; color: #70d6ff; text-transform: uppercase;">2. Tipo de Estudio Clínico:</label>
-                <select id="selectPhotoCategory" class="search-box" style="margin-top: 6px; margin-bottom: 12px; background: #0b0f19;">
-                    <option value="radiografia_panoramica">Radiografía Panorámica Digital</option>
-                    <option value="radiografia_periapical">Radiografía Periapical</option>
-                    <option value="foto_intraoral">Fotografía Intraoral (Frontal / Oclusal)</option>
-                    <option value="foto_facial">Fotografía Facial / Perfil de Ortodoncia</option>
-                    <option value="estudio_modelos">Estudio Cefalométrico / Modelos</option>
-                </select>
-
-                <label style="font-size: 11px; font-weight: 700; color: #70d6ff; text-transform: uppercase;">3. Capturar o Seleccionar Imagen:</label>
-                <div style="margin-top: 8px;">
-                    <input type="file" id="inputPhotoFile" accept="image/*" capture="environment" style="display: none;" onchange="previewSelectedPhoto(this)">
-                    <button type="button" class="btn-view-history" style="width: 100%; padding: 12px; font-size: 13px; background: #1b365d; border: 1px dashed #70d6ff; border-radius: 8px;" onclick="document.getElementById('inputPhotoFile').click()">
-                        📷 Abrir Cámara o Elegir de Galería
-                    </button>
-                </div>
-
-                <div id="previewContainer" style="display: none; margin-top: 14px; text-align: center;">
-                    <img id="imgPreview" style="max-width: 100%; max-height: 180px; border-radius: 8px; border: 1px solid #38bdf8;" />
-                    <p id="lblPreviewInfo" style="font-size: 11px; color: #94a3b8; margin-top: 4px;"></p>
-                    <button id="btnUploadPhoto" class="btn-view-history" style="width: 100%; margin-top: 8px; background: #00F5D4; color: #0b0f19; font-weight: 800; font-size: 13px;" onclick="subirFotoClinica()">
-                        📤 Subir y Adjuntar a Historia Clínica
-                    </button>
-                </div>
-                <div id="uploadStatus" style="margin-top: 8px; font-size: 12px; text-align: center; color: #70d6ff; font-weight: bold;"></div>
-            </div>
-
-            <div style="margin-top: 14px;">
-                <h4 style="font-size: 13px; color: #cbd5e1; margin-bottom: 8px;">🖼️ Estudios y Radiografías Adjuntadas</h4>
-                <div id="patientPhotosGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <div style="grid-column: 1 / -1; text-align: center; color: #64748b; font-size: 12px;">Selecciona un paciente para ver sus estudios.</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <nav class="bottom-nav">
-        <div id="navMic" class="nav-tab active" onclick="switchTab('mic')">
-            <span>🎙️ Dictar</span>
-        </div>
-        <div id="navPhotos" class="nav-tab" onclick="switchTab('photos')">
-            <span>📷 Radiografías</span>
-        </div>
-        <div id="navPatients" class="nav-tab" onclick="switchTab('patients')">
-            <span>📋 Historias</span>
-        </div>
-    </nav>
-
-    <script>
-        let mediaRecorder;
-        let audioChunks = [];
-        let isRecording = false;
-
-        const btnMic = document.getElementById('btnMic');
-        const statusLabel = document.getElementById('statusLabel');
-
-        btnMic.addEventListener('click', async () => {
-            if (!isRecording) {
-                try {
-                    // Solicitud explícita de audio puro (CERO cámara de video)
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                    
-                    // Elegir formato de audio admitido nativamente por el teléfono
-                    let mimeType = 'audio/webm';
-                    if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                        if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                            mimeType = 'audio/mp4';
-                        } else if (MediaRecorder.isTypeSupported('audio/aac')) {
-                            mimeType = 'audio/aac';
-                        }
-                    }
-
-                    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-                    audioChunks = [];
-
-                    mediaRecorder.ondataavailable = e => {
-                        if (e.data && e.data.size > 0) audioChunks.push(e.data);
-                    };
-
-                    mediaRecorder.onstop = async () => {
-                        statusLabel.textContent = "Transmitiendo audio a Bimo PC...";
-                        statusLabel.className = "status-pill";
-
-                        const audioBlob = new Blob(audioChunks, { type: mimeType || 'audio/wav' });
-                        const formData = new FormData();
-                        formData.append('file', audioBlob, 'mobile_audio.webm');
-
-                        try {
-                            const res = await fetch('/api/upload-audio', { method: 'POST', body: formData });
-                            const data = await res.json();
-                            if (data.ok) {
-                                statusLabel.textContent = "✅ Audio procesado en Bimo PC";
-                                statusLabel.className = "status-pill success";
-                            } else {
-                                statusLabel.textContent = "Error al procesar audio";
-                            }
-                        } catch (err) {
-                            statusLabel.textContent = "Error de enlace LAN con el PC";
-                        }
-                    };
-
-                    mediaRecorder.start();
-                    isRecording = true;
-                    btnMic.classList.add('recording');
-                    statusLabel.textContent = "🔴 Grabando voz... Toca para detener";
-                    statusLabel.className = "status-pill recording";
-
-                } catch (err) {
-                    statusLabel.textContent = "Acceso al micrófono denegado";
-                    alert("Por favor permite el acceso al micrófono en tu navegador móvil.");
-                }
-            } else {
-                mediaRecorder.stop();
-                isRecording = false;
-                btnMic.classList.remove('recording');
-            }
-        });
-
-        function switchTab(tab) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
-
-            if (tab === 'mic') {
-                document.getElementById('tabMic').classList.add('active');
-                document.getElementById('navMic').classList.add('active');
-            } else if (tab === 'photos') {
-                document.getElementById('tabPhotos').classList.add('active');
-                document.getElementById('navPhotos').classList.add('active');
-                cargarPacientesSelect();
-            } else {
-                document.getElementById('tabPatients').classList.add('active');
-                document.getElementById('navPatients').classList.add('active');
-                cargarPacientes();
-            }
-        }
-
-        async function cargarPacientesSelect() {
-            const sel = document.getElementById('selectPhotoPatient');
-            try {
-                const res = await fetch('/api/pacientes');
-                const pacs = await res.json();
-                if (!pacs.length) {
-                    sel.innerHTML = '<option value="">No hay pacientes registrados</option>';
-                    return;
-                }
-                sel.innerHTML = pacs.map(p => `<option value="${p.id}">${p.nombre} (${p.edad || 'N/E'}a - ID:${p.id})</option>`).join('');
-                cargarFotosPacienteSeleccionado();
-            } catch (err) {
-                sel.innerHTML = '<option value="">Error al cargar pacientes</option>';
-            }
-        }
-
-        let archivoFotoSeleccionado = null;
-
-        function previewSelectedPhoto(input) {
-            if (input.files && input.files[0]) {
-                archivoFotoSeleccionado = input.files[0];
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('imgPreview').src = e.target.result;
-                    document.getElementById('lblPreviewInfo').innerText = archivoFotoSeleccionado.name + ' (' + Math.round(archivoFotoSeleccionado.size / 1024) + ' KB)';
-                    document.getElementById('previewContainer').style.display = 'block';
-                    document.getElementById('uploadStatus').innerText = '';
-                };
-                reader.readAsDataURL(archivoFotoSeleccionado);
-            }
-        }
-
-        async function subirFotoClinica() {
-            if (!archivoFotoSeleccionado) {
-                alert('Por favor selecciona o toma una fotografía primero.');
-                return;
-            }
-            const pacId = document.getElementById('selectPhotoPatient').value;
-            if (!pacId) {
-                alert('Por favor selecciona un paciente.');
-                return;
-            }
-            const cat = document.getElementById('selectPhotoCategory').value;
-            const btn = document.getElementById('btnUploadPhoto');
-            const statusDiv = document.getElementById('uploadStatus');
-
-            btn.disabled = true;
-            btn.innerText = '⏳ Subiendo y adjuntando al PDF...';
-            statusDiv.innerText = 'Procesando imagen clínica...';
-
-            const formData = new FormData();
-            formData.append('file', archivoFotoSeleccionado);
-            formData.append('paciente_id', pacId);
-            formData.append('categoria', cat);
-
-            try {
-                const res = await fetch('/api/upload-foto', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
-                if (data.ok) {
-                    statusDiv.innerText = '✅ ¡Estudio adjuntado exitosamente al expediente!';
-                    statusDiv.style.color = '#00F5D4';
-                    document.getElementById('previewContainer').style.display = 'none';
-                    archivoFotoSeleccionado = null;
-                    document.getElementById('inputPhotoFile').value = '';
-                    cargarFotosPacienteSeleccionado();
-                } else {
-                    statusDiv.innerText = '❌ ' + (data.error || 'Error al subir imagen');
-                    statusDiv.style.color = '#ef4444';
-                }
-            } catch (err) {
-                statusDiv.innerText = '❌ Error de conexión con el servidor BIMO.';
-                statusDiv.style.color = '#ef4444';
-            } finally {
-                btn.disabled = false;
-                btn.innerText = '📤 Subir y Adjuntar a Historia Clínica';
-            }
-        }
-
-        async function cargarFotosPacienteSeleccionado() {
-            const pacId = document.getElementById('selectPhotoPatient').value;
-            const grid = document.getElementById('patientPhotosGrid');
-            if (!pacId) {
-                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#64748b;font-size:12px;">Selecciona un paciente.</div>';
-                return;
-            }
-            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#94a3b8;font-size:11px;">Cargando fotos...</div>';
-            try {
-                const res = await fetch('/api/fotos/' + pacId);
-                const fotos = await res.json();
-                if (!fotos.length) {
-                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#64748b;font-size:12px;">No hay radiografías ni fotos adjuntadas aún.</div>';
-                    return;
-                }
-                grid.innerHTML = fotos.map(f => `
-                    <div style="background:#0b0f19;border:1px solid #24324a;border-radius:8px;padding:8px;text-align:center;">
-                        <a href="${f.url}" target="_blank">
-                            <img src="${f.url}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;border:1px solid #1e293b;" />
-                        </a>
-                        <div style="font-size:10px;font-weight:bold;color:#70d6ff;margin-top:4px;">${f.categoria.replace('_', ' ').toUpperCase()}</div>
-                        <div style="font-size:9px;color:#94a3b8;">${f.fecha_subida.split(' ')[0]}</div>
-                    </div>
-                `).join('');
-            } catch (err) {
-                grid.innerHTML = '<div style="grid-column:1/-1;color:#ef4444;font-size:11px;text-align:center;">Error al cargar fotos.</div>';
-            }
-        }
-
-        async function cargarPacientes(query = '') {
-            const container = document.getElementById('patientsContainer');
-            try {
-                const res = await fetch('/api/pacientes?q=' + encodeURIComponent(query));
-                const pacientes = await res.json();
-
-                if (!pacientes.length) {
-                    container.innerHTML = '<div style="text-align:center;color:#64748b;margin-top:30px;">No hay pacientes registrados.</div>';
-                    return;
-                }
-
-                container.innerHTML = pacientes.map(p => `
-                    <div class="patient-card">
-                        <div class="patient-name">${p.nombre}</div>
-                        <div class="patient-meta">Cédula: ${p.documento || 'N/E'} | Edad: ${p.edad || 'N/E'} años</div>
-                        <div class="patient-meta" style="color: #38bdf8; margin-top: 3px;">📞 Teléfono: ${p.telefono && p.telefono !== 'No especificado' ? p.telefono : 'Sin registrar'}</div>
-                        <div style="display: flex; gap: 8px; margin-top: 8px;">
-                            <button class="btn-view-history" style="flex: 1;" onclick="toggleConsultas(${p.id})">📂 Ver Consultas (${p.total_consultas || 0})</button>
-                            <button class="btn-view-history" style="flex: 1; background: #0f766e; border-color: #14b8a6;" onclick="modificarTelefonoMovil(${p.id}, '${p.telefono || ''}')">📞 Modificar Teléfono</button>
-                        </div>
-                        <div id="consultas_${p.id}" class="consultations-list" style="display:none;"></div>
-                    </div>
-                `).join('');
-            } catch (err) {
-                container.innerHTML = '<div style="color:#ef4444;text-align:center;">Error al cargar directorio.</div>';
-            }
-        }
-
-        async function modificarTelefonoMovil(pacienteId, currentTel) {
-            const cleanTel = (!currentTel || currentTel === 'No especificado') ? '' : currentTel;
-            const nuevo = prompt('Ingrese el nuevo número de teléfono o celular para este paciente:', cleanTel || '09');
-            if (nuevo === null) return;
-            const telTrim = nuevo.trim();
-            if (!telTrim) return;
-            try {
-                const res = await fetch('/api/paciente/telefono', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ paciente_id: pacienteId, telefono: telTrim })
-                });
-                const data = await res.json();
-                if (data.status === 'ok') {
-                    alert('✅ Teléfono actualizado correctamente');
-                    cargarPacientes(document.getElementById('inputSearch').value);
-                } else {
-                    alert('❌ ' + (data.message || data.error || 'Error al actualizar teléfono'));
-                }
-            } catch (err) {
-                alert('❌ Error de comunicación con el servidor');
-            }
-        }
-
-        document.getElementById('inputSearch').addEventListener('input', (e) => {
-            cargarPacientes(e.target.value);
-        });
-
-        async function toggleConsultas(pacienteId) {
-            const listDiv = document.getElementById('consultas_' + pacienteId);
-            if (listDiv.style.display === 'none') {
-                listDiv.innerHTML = '<div style="font-size:11px;color:#94a3b8;">Cargando consultas...</div>';
-                listDiv.style.display = 'block';
-                try {
-                    const res = await fetch('/api/consultas/' + pacienteId);
-                    const consultas = await res.json();
-                    if (!consultas.length) {
-                        listDiv.innerHTML = '<div style="font-size:11px;color:#64748b;">Sin consultas registradas.</div>';
-                        return;
-                    }
-                    listDiv.innerHTML = consultas.map(c => `
-                        <div class="consultation-item">
-                            <div class="cons-date">🗓️ ${c.fecha_hora.split(' ')[0]}</div>
-                            <div style="display:flex;gap:6px;">
-                                ${c.ruta_pdf ? `
-                                    <a class="btn-open-pdf" href="/api/pdf/${c.id}" target="_blank">📄 Ver</a>
-                                    <a class="btn-open-pdf" href="/api/pdf/${c.id}" download style="background:#2563eb;color:#ffffff;">📥 Descargar</a>
-                                ` : '<span style="font-size:10px;color:#64748b;">Sin PDF</span>'}
-                            </div>
-                        </div>
-                    `).join('');
-                } catch (err) {
-                    listDiv.innerHTML = '<div style="color:#ef4444;font-size:11px;">Error al cargar consultas.</div>';
-                }
-            } else {
-                listDiv.style.display = 'none';
-            }
-        }
-    </script>
-</body>
-</html>
-"""
 
 @app.get("/", response_class=HTMLResponse)
 @app.get("/mobile", response_class=HTMLResponse)
-async def serve_mobile_app():
-    from config import obtener_tema_activo_dict
-    t = obtener_tema_activo_dict()
-    logo_cols = t.get("logo_colors", [t.get("aqua", "#00F5D4"), t.get("azul_pastel", "#70D6FF"), t.get("fucsia", "#FF006E"), t.get("amarillo", "#FFBE0B")])
-    css_override = f"""
-    <style id="theme-override">
-        :root {{
-            --bg-app: {t['bg_dark']};
-            --card-app: {t['card_dark']};
-            --accent-app: {t['aqua']};
-            --border-app: {t['border']};
-            --btn-app: {t['azul_acero']};
-            --txt-app: {t['text_primary']};
-            --txt-muted: {t['text_muted']};
-            --logo-b: {logo_cols[0]};
-            --logo-i: {logo_cols[1]};
-            --logo-m: {logo_cols[2]};
-            --logo-o: {logo_cols[3]};
-        }}
-        .brand .b {{ color: var(--logo-b) !important; }}
-        .brand .i {{ color: var(--logo-i) !important; }}
-        .brand .m {{ color: var(--logo-m) !important; }}
-        .brand .o {{ color: var(--logo-o) !important; }}
-    </style>
-    """
-    html_custom = HTML_MOVIL.replace("</head>", f"{css_override}\n</head>")
-    return HTMLResponse(content=html_custom)
+async def serve_mobile_app(request: Request, t: str = ""):
+    token_esperado = obtener_o_crear_movil_token()
+    if t:
+        if hmac.compare_digest(str(t).strip(), str(token_esperado).strip()):
+            # Mostrar la app en esta misma respuesta (sin redirección) y guardar el emparejamiento.
+            # SameSite=Lax: con "strict" el navegador no enviaba la cookie en la redirección cuando el
+            # enlace venía de la cámara / lector de QR, y la primera vez salía "Celular no emparejado".
+            from config import obtener_tema_guardado
+            resp = HTMLResponse(content=_pagina_movil(obtener_tema_guardado()))
+            resp.set_cookie(key="bimo_t", value=str(t).strip(), httponly=True, secure=True, samesite="lax", max_age=86400 * 30)
+            return resp
+        else:
+            return _pagina_aviso(
+                "Código no válido",
+                "El código de emparejamiento es inválido o expiró. Escanea de nuevo el código QR desde BIMO en tu computadora.",
+            )
+
+    cookie_t = request.cookies.get("bimo_t", "")
+    if not cookie_t or not hmac.compare_digest(str(cookie_t).strip(), str(token_esperado).strip()):
+        return _pagina_aviso(
+            "Celular no emparejado",
+            "Para dictar y consultar pacientes desde tu celular, abre BIMO en tu computadora, ve a Celular y escanea el código QR.",
+        )
+
+    # El celular usa el mismo tema que la PC (Claro / Oscuro / Rosa)
+    from config import obtener_tema_guardado
+    return HTMLResponse(content=_pagina_movil(obtener_tema_guardado()))
 
 @app.post("/api/upload-audio")
-async def upload_audio(file: UploadFile = File(...)):
+@app.post("/api/procesar_audio")
+async def procesar_audio_o_texto(request: Request):
+    temp_path = None
     try:
-        contents = await file.read()
-        with open(_ULTIMO_AUDIO_RUTA, "wb") as f:
-            f.write(contents)
+        content_type = request.headers.get("content-type", "")
+        texto = None
+        uploaded_file = None
 
-        if _CALLBACK_AUDIO:
-            threading.Thread(target=_CALLBACK_AUDIO, args=(_ULTIMO_AUDIO_RUTA,)).start()
+        if "application/json" in content_type:
+            try:
+                data = await request.json()
+                if isinstance(data, dict):
+                    texto = data.get("texto") or data.get("text")
+            except Exception:
+                pass
+        elif "multipart/form-data" in content_type:
+            form = await request.form()
+            uploaded_file = form.get("file") or form.get("audio")
+            texto = form.get("texto") or form.get("text")
 
-        return JSONResponse({"ok": True, "message": "Audio recibido en Bimo PC."})
+        if texto and str(texto).strip():
+            texto_limpio = str(texto).strip()
+            resultado = None
+            if _CALLBACK_TEXTO:
+                try:
+                    resultado = _CALLBACK_TEXTO(texto_limpio)
+                except Exception as e_cb:
+                    print(f"[MOBILE SERVER ERROR] callback_texto: {e_cb}")
+                    return JSONResponse({"ok": False, "error": str(e_cb)}, status_code=500)
+            return JSONResponse({"ok": True, "message": "Texto recibido y procesado en Bimo PC.", "resultado": resultado})
+
+        if uploaded_file and hasattr(uploaded_file, "read"):
+            contents = await uploaded_file.read()
+            if len(contents) > MAX_UPLOAD_BYTES:
+                return JSONResponse({"ok": False, "error": "El archivo de audio excede el límite permitido de 25 MB."}, status_code=400)
+
+            ext_audio = os.path.splitext(getattr(uploaded_file, "filename", "") or "")[1].lower()
+            if ext_audio not in EXTS_AUDIO:
+                ext_audio = ".webm"
+            fd, temp_path = tempfile.mkstemp(prefix="bimo_mobile_", suffix=ext_audio)
+            with os.fdopen(fd, "wb") as f_out:
+                f_out.write(contents)
+
+            if _CALLBACK_AUDIO:
+                threading.Thread(target=_CALLBACK_AUDIO, args=(temp_path,), daemon=True).start()
+            elif _CALLBACK_TEXTO:
+                def _transcribir_y_procesar(path_audio):
+                    try:
+                        from ai_engine import transcribir_audio
+                        txt = transcribir_audio(path_audio)
+                        if txt and txt.strip():
+                            _CALLBACK_TEXTO(txt)
+                    except Exception as e_tx:
+                        print(f"[MOBILE SERVER ERROR] transcribir: {e_tx}")
+                    finally:
+                        if path_audio and os.path.exists(path_audio):
+                            try:
+                                os.remove(path_audio)
+                            except Exception:
+                                pass
+                threading.Thread(target=_transcribir_y_procesar, args=(temp_path,), daemon=True).start()
+
+            return JSONResponse({"ok": True, "message": "Audio recibido en Bimo PC."})
+
+        return JSONResponse({"ok": False, "error": "No se recibió archivo de audio ni texto válido."}, status_code=400)
     except Exception as e:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 @app.get("/api/pacientes")
@@ -714,6 +284,60 @@ async def api_actualizar_telefono_paciente(request: Request):
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
+@app.get("/api/paciente/{paciente_id}/contacto")
+async def api_contacto_paciente(paciente_id: int):
+    """Datos para escribirle o llamar al paciente desde el celular: WhatsApp con recordatorio listo y llamada."""
+    import urllib.parse
+    from database import obtener_paciente_por_id, get_connection
+    from config import cargar_datos_clinica
+    from whatsapp_service import normalizar_numero_whatsapp, generar_mensaje_recordatorio, formatear_fecha_espanol
+
+    paciente = obtener_paciente_por_id(paciente_id)
+    if not paciente:
+        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    conf = cargar_datos_clinica()
+    cod_pais = str((conf.get("whatsapp") or {}).get("codigo_pais") or "593")
+
+    # Próxima cita del paciente (para que el mensaje sea el recordatorio)
+    cita = None
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute(
+            """SELECT * FROM citas_agenda
+               WHERE estado != 'cancelada' AND fecha_hora_inicio >= ?
+                 AND (paciente_id = ? OR (paciente_id IS NULL AND nombre_paciente = ?))
+               ORDER BY fecha_hora_inicio ASC LIMIT 1""",
+            (datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), paciente_id, paciente.get("nombre", "")),
+        )
+        fila = c.fetchone()
+        cita = dict(fila) if fila else None
+
+    telefono = str(paciente.get("telefono") or "").strip()
+    if (not telefono or telefono.lower() == "no especificado") and cita:
+        telefono = str(cita.get("telefono") or "").strip()
+    if telefono.lower() == "no especificado":
+        telefono = ""
+
+    if cita:
+        mensaje = generar_mensaje_recordatorio(cita, conf)
+        fecha_legible, hora_legible = formatear_fecha_espanol(cita.get("fecha_hora_inicio") or "")
+        cita_info = {"fecha": fecha_legible, "hora": hora_legible, "motivo": cita.get("descripcion") or "Consulta odontológica"}
+    else:
+        clinica = conf.get("nombre_clinica") or "Clínica Dental BIMO"
+        mensaje = f"¡Hola {paciente.get('nombre', '')}! Le saludamos cordialmente de *{clinica}*."
+        cita_info = None
+
+    numero = normalizar_numero_whatsapp(telefono, cod_pais) if telefono else ""
+    return {
+        "nombre": paciente.get("nombre", ""),
+        "telefono": telefono,
+        "whatsapp_url": f"https://wa.me/{numero}?text={urllib.parse.quote(mensaje)}" if numero else "",
+        "llamar_url": f"tel:+{numero}" if numero else "",
+        "mensaje": mensaje,
+        "cita": cita_info,
+    }
+
+
 @app.get("/api/consultas/{paciente_id}")
 async def api_consultas_paciente(paciente_id: int):
     return listar_consultas_paciente(paciente_id)
@@ -725,13 +349,16 @@ async def api_obtener_pdf_consulta(consulta_id: int):
         raise HTTPException(status_code=404, detail="Historia clínica no encontrada")
     
     ruta_pdf = consulta["ruta_pdf"]
-    if not os.path.exists(ruta_pdf):
-        raise HTTPException(status_code=404, detail="Archivo físico PDF no encontrado en el servidor")
+    real_pdf = os.path.realpath(str(ruta_pdf))
+    from config import RUTA_PACIENTES
+    real_pac = os.path.realpath(str(RUTA_PACIENTES))
+    if not os.path.exists(real_pdf) or not (real_pdf.startswith(real_pac + os.sep) or real_pdf == real_pac):
+        raise HTTPException(status_code=404, detail="Archivo físico PDF no encontrado o no accesible")
 
     return FileResponse(
-        ruta_pdf,
+        real_pdf,
         media_type="application/pdf",
-        filename=os.path.basename(ruta_pdf)
+        filename=os.path.basename(real_pdf)
     )
 
 @app.post("/api/upload-foto")
@@ -747,6 +374,22 @@ async def upload_foto_clinica(
         from generador_pdf import crear_historia_clinica
         import json
 
+        # 1. Sanitizar y validar categoría
+        cat_clean = re.sub(r'[^a-zA-Z0-9_]', '', str(categoria).lower().strip())
+        if cat_clean not in CATEGORIAS_PERMITIDAS:
+            cat_clean = "otro"
+
+        # 2. Validar extensión permitida
+        nom_orig = file.filename or "archivo.jpg"
+        ext = os.path.splitext(nom_orig)[1].lower()
+        if ext not in EXTS_PERMITIDAS:
+            return JSONResponse({"ok": False, "error": f"Extensión '{ext}' no permitida. Formatos válidos: {', '.join(EXTS_PERMITIDAS)}"}, status_code=400)
+
+        # 3. Validar tamaño de archivo
+        contents = await file.read()
+        if len(contents) > MAX_UPLOAD_BYTES:
+            return JSONResponse({"ok": False, "error": "El archivo excede el tamaño máximo permitido de 25 MB."}, status_code=400)
+
         paciente = obtener_paciente_por_id(paciente_id)
         if not paciente:
             raise HTTPException(status_code=404, detail="Paciente no encontrado")
@@ -760,22 +403,33 @@ async def upload_foto_clinica(
             f"{nom_limpio}_{edad_num}_anos_ID{paciente_id}",
             "Fotos_Radiografias"
         )
+
+        # 4. Blindaje contra Path Traversal: asegurar que carpeta_paciente está dentro de RUTA_PACIENTES
+        real_base = os.path.realpath(str(RUTA_PACIENTES))
+        real_dir = os.path.realpath(carpeta_paciente)
+        if not (real_dir.startswith(real_base + os.sep) or real_dir == real_base):
+            return JSONResponse({"ok": False, "error": "Ruta de almacenamiento inválida."}, status_code=400)
+
         os.makedirs(carpeta_paciente, exist_ok=True)
 
-        ext = os.path.splitext(file.filename)[1] or ".jpg"
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        nom_archivo = f"{categoria}_{ts}{ext}"
+        nom_archivo = f"{cat_clean}_{ts}{ext}"
         ruta_destino = os.path.join(carpeta_paciente, nom_archivo)
 
-        contents = await file.read()
+        real_dest = os.path.realpath(ruta_destino)
+        if not real_dest.startswith(real_dir + os.sep):
+            return JSONResponse({"ok": False, "error": "Intento de escritura fuera de la carpeta del paciente."}, status_code=400)
+
         with open(ruta_destino, "wb") as f_out:
             f_out.write(contents)
+
+        desc_clean = str(descripcion or "").strip()[:500]
 
         foto_id = guardar_foto_paciente_db(
             paciente_id=paciente_id,
             ruta_archivo=ruta_destino,
-            categoria=categoria,
-            descripcion=descripcion
+            categoria=cat_clean,
+            descripcion=desc_clean
         )
 
         # Regenerar automáticamente el PDF de hoy para incrustar la nueva foto en la Página 3
@@ -795,6 +449,8 @@ async def upload_foto_clinica(
             "mensaje": "Estudio fotográfico / radiográfico adjuntado con éxito al expediente.",
             "ruta": ruta_destino
         })
+    except HTTPException:
+        raise
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -816,21 +472,28 @@ async def api_fotos_paciente(paciente_id: int):
 @app.get("/api/foto-archivo/{foto_id}")
 async def api_obtener_archivo_foto(foto_id: int):
     from database import get_connection
+    from config import RUTA_PACIENTES
     with get_connection() as conn:
         c = conn.cursor()
         c.execute("SELECT ruta_archivo FROM fotos_pacientes WHERE id = ?", (foto_id,))
         row = c.fetchone()
-        if not row or not os.path.exists(row["ruta_archivo"]):
+        if not row:
             raise HTTPException(status_code=404, detail="Archivo fotográfico no encontrado")
-        return FileResponse(row["ruta_archivo"])
+        real_foto = os.path.realpath(str(row["ruta_archivo"]))
+        real_pac = os.path.realpath(str(RUTA_PACIENTES))
+        if not os.path.exists(real_foto) or not (real_foto.startswith(real_pac + os.sep) or real_foto == real_pac):
+            raise HTTPException(status_code=404, detail="Archivo fotográfico no encontrado o no accesible")
+        return FileResponse(real_foto)
 
-def iniciar_servidor_movil(callback_audio=None):
-    global _CALLBACK_AUDIO, _SERVIDOR_HILO
+def iniciar_servidor_movil(callback_audio=None, callback_texto=None):
+    global _CALLBACK_AUDIO, _CALLBACK_TEXTO, _SERVIDOR_HILO
     _CALLBACK_AUDIO = callback_audio
+    _CALLBACK_TEXTO = callback_texto
 
     _asegurar_certificados_ssl()
     ip = obtener_ip_local()
-    url_movil = f"https://{ip}:{MOBILE_SERVER_PORT}"
+    tok = obtener_o_crear_movil_token()
+    url_movil = f"https://{ip}:{MOBILE_SERVER_PORT}/?t={tok}"
 
     if _SERVIDOR_HILO is None or not _SERVIDOR_HILO.is_alive():
         def run():
@@ -845,6 +508,6 @@ def iniciar_servidor_movil(callback_audio=None):
         
         _SERVIDOR_HILO = threading.Thread(target=run, daemon=True)
         _SERVIDOR_HILO.start()
-        print(f"[MOBILE BRIDGE] Servidor HTTPS seguro iniciado en LAN: {url_movil}")
+        print(f"[MOBILE BRIDGE] Servidor HTTPS seguro iniciado en LAN con emparejamiento: {url_movil}")
 
     return url_movil

@@ -8,28 +8,52 @@ from license_manager import obtener_hwid_equipo
 
 import sys
 
-# Directorio raíz del proyecto y directorio de datos clínicos persistentes
-dev_project_dir = Path.home() / "Desktop" / "Bimo_Project"
+# Directorio raíz del proyecto y directorio de datos clínicos persistentes (L-A)
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys.executable).resolve().parent
-    # Si se ejecuta dentro de dist/ o en la máquina de Mateo, sincronizar con la fuente de datos real
-    if (BASE_DIR.parent.parent / "bimo.db").exists() and (BASE_DIR.parent.parent / "Pacientes").exists():
+    env_data = os.environ.get("BIMO_DATA_DIR")
+    if env_data and Path(env_data).exists():
+        DATA_DIR = Path(env_data).resolve()
+    elif (BASE_DIR.parent.parent / "main.py").exists():
+        # Modo desarrollo (ej. dist/BIMO_Pro dentro del árbol del proyecto fuente)
         DATA_DIR = BASE_DIR.parent.parent
-    elif dev_project_dir.exists() and (dev_project_dir / "bimo.db").exists():
-        DATA_DIR = dev_project_dir
     else:
         DATA_DIR = BASE_DIR
 else:
     BASE_DIR = Path(__file__).resolve().parent
-    DATA_DIR = BASE_DIR
+    env_data = os.environ.get("BIMO_DATA_DIR")
+    if env_data and Path(env_data).exists():
+        DATA_DIR = Path(env_data).resolve()
+    else:
+        DATA_DIR = BASE_DIR
+
+# Comprobación de permisos de escritura en DATA_DIR
+def _verificar_y_asegurar_data_dir(d_dir: Path) -> Path:
+    try:
+        d_dir.mkdir(parents=True, exist_ok=True)
+        test_file = d_dir / f".bimo_write_test_{os.getpid()}"
+        with open(test_file, "w") as tf:
+            tf.write("ok")
+        test_file.unlink()
+        return d_dir
+    except Exception:
+        local_app = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        fallback = Path(local_app) / "BIMO_Pro" / "data"
+        try:
+            fallback.mkdir(parents=True, exist_ok=True)
+            print(f"[DATA DIR WARN] '{d_dir}' no es escribible. Redirigiendo datos a '{fallback}'")
+            return fallback
+        except Exception:
+            return d_dir
+
+DATA_DIR = _verificar_y_asegurar_data_dir(DATA_DIR)
 
 # Cargar variables de entorno desde .env buscando en todas las ubicaciones posibles
 _candidatos_env = [
     BASE_DIR / ".env",
     BASE_DIR / "_internal" / ".env",
     DATA_DIR / ".env",
-    Path(getattr(sys, '_MEIPASS', BASE_DIR)) / ".env",
-    dev_project_dir / ".env"
+    Path(getattr(sys, '_MEIPASS', BASE_DIR)) / ".env"
 ]
 for _cand_env in _candidatos_env:
     if _cand_env.exists():
@@ -48,7 +72,7 @@ for _cand_env in _candidatos_env:
 
 # Archivos del sistema y persistencia clínica
 def _resolver_archivo(nombre_archivo):
-    for d in [BASE_DIR, BASE_DIR / "_internal", DATA_DIR, dev_project_dir, Path(getattr(sys, '_MEIPASS', BASE_DIR))]:
+    for d in [BASE_DIR, BASE_DIR / "_internal", DATA_DIR, Path(getattr(sys, '_MEIPASS', BASE_DIR))]:
         p = d / nombre_archivo
         if p.exists():
             return p
@@ -331,8 +355,103 @@ TEMAS_BIMO = {
         "logo_colors": ["#7C3AED", "#EC4899", "#8B5CF6", "#00F5D4"],
         "corner_radius": 30,
         "corner_btn": 25,
-    }
+    },
+    # Temas de la interfaz moderna (web_ui/temas.css). Los usa el widget de escritorio.
+    # Extras para el widget: on_accent (texto sobre botón principal), pill_bg, btn_secondary(_hover),
+    # hover, scroll(_hover), hi (canto de cristal) y key (color transparente de las esquinas).
+    "claro": {
+        "mode": "light",
+        "bg_dark": "#F2F3F6",
+        "card_dark": "#FFFFFF",
+        "card_inner": "#FFFFFF",
+        "sidebar": "#F4F4F5",
+        "border": "#E2E3E8",
+        "text_primary": "#0A0A0A",
+        "text_muted": "#71717A",
+        "input_bg": "#FFFFFF",
+        "input_border": "#E4E4E7",
+        "card_hover": "#F4F4F5",
+        "aqua": "#18181B",
+        "azul_acero": "#111113",
+        "azul_pastel": "#3F3F46",
+        "amarillo": "#71717A",
+        "fucsia": "#E11D48",
+        "logo_colors": ["#0A0A0A", "#3F3F46", "#71717A", "#A1A1AA"],
+        "corner_radius": 18,
+        "corner_btn": 10,
+        "on_accent": "#FFFFFF",
+        "pill_bg": "#EBECEF",
+        "btn_secondary": "#EBECEF",
+        "btn_secondary_hover": "#E2E3E8",
+        "hover": "#EBECEF",
+        "scroll": "#D4D4D8",
+        "scroll_hover": "#A1A1AA",
+        "hi": "#FFFFFF",
+        "key": "#010203",
+    },
+    "oscuro": {
+        "mode": "dark",
+        "bg_dark": "#121214",
+        "card_dark": "#1B1B1E",
+        "card_inner": "#1B1B1E",
+        "sidebar": "#121214",
+        "border": "#2C2C31",
+        "text_primary": "#FAFAFA",
+        "text_muted": "#A1A1AA",
+        "input_bg": "#1B1B1E",
+        "input_border": "#2C2C31",
+        "card_hover": "#26262A",
+        "aqua": "#FFFFFF",
+        "azul_acero": "#F4F4F5",
+        "azul_pastel": "#FFFFFF",
+        "amarillo": "#A1A1AA",
+        "fucsia": "#FB7185",
+        "logo_colors": ["#FFFFFF", "#D4D4D8", "#A1A1AA", "#71717A"],
+        "corner_radius": 18,
+        "corner_btn": 10,
+        "on_accent": "#0A0A0A",
+        "pill_bg": "#26262A",
+        "btn_secondary": "#26262A",
+        "btn_secondary_hover": "#313136",
+        "hover": "#26262A",
+        "scroll": "#3F3F46",
+        "scroll_hover": "#52525B",
+        "hi": "#4A4A52",
+        "key": "#010203",
+    },
+    "rosa": {
+        "mode": "light",
+        "bg_dark": "#FCEEF5",
+        "card_dark": "#FFFFFF",
+        "card_inner": "#FFFFFF",
+        "sidebar": "#FDF2F8",
+        "border": "#F5D3E3",
+        "text_primary": "#3A1F2B",
+        "text_muted": "#8F6B78",
+        "input_bg": "#FFFFFF",
+        "input_border": "#F5D3E3",
+        "card_hover": "#FDF2F8",
+        "aqua": "#DB2777",
+        "azul_acero": "#EC4899",
+        "azul_pastel": "#DB2777",
+        "amarillo": "#8F6B78",
+        "fucsia": "#E11D48",
+        "logo_colors": ["#EC4899", "#DB2777", "#C4B5FD", "#FDBA74"],
+        "corner_radius": 18,
+        "corner_btn": 10,
+        "on_accent": "#FFFFFF",
+        "pill_bg": "#FCE7F3",
+        "btn_secondary": "#FCE7F3",
+        "btn_secondary_hover": "#FBCFE8",
+        "hover": "#FCE7F3",
+        "scroll": "#F9A8D4",
+        "scroll_hover": "#F472B6",
+        "hi": "#FFFFFF",
+        "key": "#010203",
+    },
 }
+
+TEMAS_INTERFAZ = ("claro", "oscuro", "rosa")
 
 # Tipografía Ejecutiva de Agencia
 FONT_FAMILY = "Segoe UI"
@@ -348,6 +467,11 @@ def obtener_tema_guardado() -> str:
         if os.path.exists(RUTA_CLINICA_CONF):
             with open(RUTA_CLINICA_CONF, "r", encoding="utf-8") as f:
                 d = json.load(f)
+                # El tema elegido en la interfaz moderna (Claro/Oscuro/Rosa) manda sobre el antiguo
+                if d.get("tema_activo") in TEMAS_INTERFAZ:
+                    return d["tema_activo"]
+                if d.get("tema_activo") in ("violet", "cyan", "emerald", "amber"):
+                    return "claro"
                 return d.get("tema_visual", "Obsidian Violet")
     except Exception:
         pass
@@ -423,8 +547,8 @@ def aplicar_tema_config(nombre_tema: str) -> dict:
 # Impide que la API Key o los modelos queden expuestos en texto plano
 _VAULT_SALT = b"BIMO_VAULT_ENCRYPTED_PARAM_SALT_2026"
 
-def _get_vault_fernet() -> Fernet:
-    hwid = obtener_hwid_equipo()
+def _get_vault_fernet(hwid_override=None) -> Fernet:
+    hwid = hwid_override or obtener_hwid_equipo()
     key = base64.urlsafe_b64encode(hashlib.pbkdf2_hmac("sha256", hwid.encode(), _VAULT_SALT, 30_000))
     return Fernet(key)
 
@@ -449,7 +573,13 @@ def guardar_parametro_boveda(clave: str, valor: str) -> bool:
         if os.path.exists(RUTA_VAULT):
             try:
                 with open(RUTA_VAULT, "rb") as f:
-                    params = json.loads(fernet.decrypt(f.read()).decode("utf-8"))
+                    raw_v = f.read()
+                try:
+                    params = json.loads(fernet.decrypt(raw_v).decode("utf-8"))
+                except Exception:
+                    from license_manager import obtener_hwid_legado
+                    fernet_leg = _get_vault_fernet(hwid_override=obtener_hwid_legado())
+                    params = json.loads(fernet_leg.decrypt(raw_v).decode("utf-8"))
             except Exception:
                 params = {}
         params[clave] = valor
@@ -467,7 +597,23 @@ def obtener_parametro_boveda(clave: str, default=""):
             inicializar_boveda_si_no_existe()
         fernet = _get_vault_fernet()
         with open(RUTA_VAULT, "rb") as f:
-            data = fernet.decrypt(f.read())
+            raw_vault = f.read()
+
+        try:
+            data = fernet.decrypt(raw_vault)
+        except Exception:
+            # Intento de migración desde HWID legado (con MAC) hacia HWID MachineGuid puro (L-C)
+            from license_manager import obtener_hwid_legado
+            hwid_legado = obtener_hwid_legado()
+            fernet_legado = _get_vault_fernet(hwid_override=hwid_legado)
+            data = fernet_legado.decrypt(raw_vault)
+            # Re-cifrar inmediatamente con el HWID nuevo
+            params_migrados = json.loads(data.decode("utf-8"))
+            re_enc = fernet.encrypt(json.dumps(params_migrados).encode("utf-8"))
+            with open(RUTA_VAULT, "wb") as f_re:
+                f_re.write(re_enc)
+            print("[VAULT MIGRATION] Bóveda migrada exitosamente desde HWID legado a MachineGuid.")
+
         params = json.loads(data.decode("utf-8"))
         val = params.get(clave, default)
         if not val and clave == "groq_api_key":
@@ -477,8 +623,33 @@ def obtener_parametro_boveda(clave: str, default=""):
         return val
     except Exception:
         # Si el HWID cambió (máquina distinta) o el archivo está corrupto,
-        # re-inicializar la bóveda para este hardware nuevo sin bloquear la ejecución.
+        # respaldar el archivo existente antes de re-inicializar para preservar datos previos (R1)
         try:
+            if os.path.exists(RUTA_VAULT):
+                import datetime
+                import glob
+                sello = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                bak_path = f"{RUTA_VAULT}.bak-{sello}"
+                try:
+                    os.rename(RUTA_VAULT, bak_path)
+                    print(f"[VAULT BACKUP] Bóveda previa respaldada en: {bak_path}")
+                except Exception as e_ren:
+                    print(f"[VAULT BACKUP WARN] No se pudo renombrar bóveda previa: {e_ren}")
+
+                # Rotación de respaldos de bóveda: conservar máximo 5 copias
+                try:
+                    vault_dir = os.path.dirname(os.path.abspath(RUTA_VAULT))
+                    patron = os.path.join(vault_dir, f"{os.path.basename(RUTA_VAULT)}.bak-*")
+                    existentes = sorted(glob.glob(patron), key=os.path.getmtime)
+                    while len(existentes) > 5:
+                        antiguo = existentes.pop(0)
+                        try:
+                            os.remove(antiguo)
+                        except Exception:
+                            pass
+                except Exception as e_rot:
+                    print(f"[VAULT ROTATION WARN] {e_rot}")
+
             inicializar_boveda_si_no_existe()
             fernet = _get_vault_fernet()
             with open(RUTA_VAULT, "rb") as f:
@@ -512,15 +683,30 @@ def cargar_datos_clinica() -> dict:
                 return json.load(f)
         except Exception:
             pass
+
+    # Si no existe clinica.json, verificar si existe clinica.default.json como plantilla (L-E)
+    ruta_default = DATA_DIR / "clinica.default.json"
+    if not ruta_default.exists():
+        ruta_default = BASE_DIR / "clinica.default.json"
+    if ruta_default.exists():
+        try:
+            with open(ruta_default, "r", encoding="utf-8") as f_def:
+                data_def = json.load(f_def)
+            with open(RUTA_CLINICA_CONF, "w", encoding="utf-8") as f_out:
+                json.dump(data_def, f_out, ensure_ascii=False, indent=2)
+            return data_def
+        except Exception:
+            pass
+
     return {
         "nombre_clinica": "BIMO Dental Clinic",
-        "nombre_doctor": "Dr. Mateo",
-        "registro_profesional": "RP-ODONT-2026",
-        "telefono_contacto": "+57 300 123 4567",
+        "nombre_doctor": "Dr. Odontólogo",
+        "registro_profesional": "",
+        "telefono_contacto": "",
         "modo_bajo_rendimiento": False,
         "onboarding_completado": False,
         "email_google": "",
-        "pin_rapido": "1234"
+        "pin_rapido": ""
     }
 
 def guardar_datos_clinica(datos: dict):
@@ -577,7 +763,7 @@ def set_onboarding_completado(completado: bool = True):
 
 def obtener_pin_doctor() -> str:
     d = cargar_datos_clinica()
-    return str(d.get("pin_rapido", "1234")).strip()
+    return str(d.get("pin_rapido", "")).strip()
 
 def guardar_pin_doctor(pin: str):
     d = cargar_datos_clinica()

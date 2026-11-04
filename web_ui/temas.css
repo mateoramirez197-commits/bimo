@@ -1,0 +1,536 @@
+/* BIMO - Temas Claro / Oscuro / Rosa. Cada tema define rampas RGB que Tailwind lee via tailwind.config (index.html). */
+:root, [data-theme="oscuro"] {
+  color-scheme: dark;
+  --n-50: 250 250 250;
+  --n-100: 244 244 245;
+  --n-200: 228 228 231;
+  --n-300: 212 212 216;
+  --n-400: 161 161 170;
+  --n-500: 113 113 122;
+  --n-600: 82 82 91;
+  --n-700: 63 63 70;
+  --n-800: 39 39 42;
+  --n-900: 24 24 27;
+  --n-950: 9 9 11;
+  --a-50: 250 250 250;
+  --a-100: 244 244 245;
+  --a-200: 244 244 245;
+  --a-300: 228 228 231;
+  --a-400: 244 244 245;
+  --a-500: 255 255 255;
+  --a-600: 244 244 245;
+  --a-700: 228 228 231;
+  --a-800: 39 39 42;
+  --a-900: 24 24 27;
+  --a-950: 10 10 10;
+  --emerald-50: 236 253 245;
+  --emerald-100: 209 250 229;
+  --emerald-200: 167 243 208;
+  --emerald-300: 110 231 183;
+  --emerald-400: 52 211 153;
+  --emerald-500: 16 185 129;
+  --emerald-600: 5 150 105;
+  --emerald-700: 4 120 87;
+  --emerald-800: 6 95 70;
+  --emerald-900: 6 78 59;
+  --emerald-950: 2 44 34;
+  --green-50: 240 253 244;
+  --green-100: 220 252 231;
+  --green-200: 187 247 208;
+  --green-300: 134 239 172;
+  --green-400: 74 222 128;
+  --green-500: 34 197 94;
+  --green-600: 22 163 74;
+  --green-700: 21 128 61;
+  --green-800: 22 101 52;
+  --green-900: 20 83 45;
+  --green-950: 5 46 22;
+  --amber-50: 255 251 235;
+  --amber-100: 254 243 199;
+  --amber-200: 253 230 138;
+  --amber-300: 252 211 77;
+  --amber-400: 251 191 36;
+  --amber-500: 245 158 11;
+  --amber-600: 217 119 6;
+  --amber-700: 180 83 9;
+  --amber-800: 146 64 14;
+  --amber-900: 120 53 15;
+  --amber-950: 69 26 3;
+  --yellow-50: 254 252 232;
+  --yellow-100: 254 249 195;
+  --yellow-200: 254 240 138;
+  --yellow-300: 253 224 71;
+  --yellow-400: 250 204 21;
+  --yellow-500: 234 179 8;
+  --yellow-600: 202 138 4;
+  --yellow-700: 161 98 7;
+  --yellow-800: 133 77 14;
+  --yellow-900: 113 63 18;
+  --yellow-950: 66 32 6;
+  --orange-50: 255 247 237;
+  --orange-100: 255 237 213;
+  --orange-200: 254 215 170;
+  --orange-300: 253 186 116;
+  --orange-400: 251 146 60;
+  --orange-500: 249 115 22;
+  --orange-600: 234 88 12;
+  --orange-700: 194 65 12;
+  --orange-800: 154 52 18;
+  --orange-900: 124 45 18;
+  --orange-950: 67 20 7;
+  --rose-50: 255 241 242;
+  --rose-100: 255 228 230;
+  --rose-200: 254 205 211;
+  --rose-300: 253 164 175;
+  --rose-400: 251 113 133;
+  --rose-500: 244 63 94;
+  --rose-600: 225 29 72;
+  --rose-700: 190 18 60;
+  --rose-800: 159 18 57;
+  --rose-900: 136 19 55;
+  --rose-950: 76 5 25;
+  --red-50: 254 242 242;
+  --red-100: 254 226 226;
+  --red-200: 254 202 202;
+  --red-300: 252 165 165;
+  --red-400: 248 113 113;
+  --red-500: 239 68 68;
+  --red-600: 220 38 38;
+  --red-700: 185 28 28;
+  --red-800: 153 27 27;
+  --red-900: 127 29 29;
+  --red-950: 69 10 10;
+  --c-white: 255 255 255;
+  --c-black: 0 0 0;
+  --on-accent: 10 10 10;
+  --page-bg: 9 9 11;
+}
+[data-theme="claro"] {
+  color-scheme: light;
+  --n-50: 9 9 11;
+  --n-100: 24 24 27;
+  --n-200: 39 39 42;
+  --n-300: 63 63 70;
+  --n-400: 82 82 91;
+  --n-500: 113 113 122;
+  --n-600: 161 161 170;
+  --n-700: 212 212 216;
+  --n-800: 228 228 231;
+  --n-900: 244 244 245;
+  --n-950: 255 255 255;
+  --a-50: 113 113 122;
+  --a-100: 82 82 91;
+  --a-200: 63 63 70;
+  --a-300: 39 39 42;
+  --a-400: 24 24 27;
+  --a-500: 39 39 42;
+  --a-600: 24 24 27;
+  --a-700: 0 0 0;
+  --a-800: 228 228 231;
+  --a-900: 244 244 245;
+  --a-950: 250 250 250;
+  --emerald-50: 2 44 34;
+  --emerald-100: 6 78 59;
+  --emerald-200: 6 95 70;
+  --emerald-300: 4 120 87;
+  --emerald-400: 5 150 105;
+  --emerald-500: 16 185 129;
+  --emerald-600: 52 211 153;
+  --emerald-700: 110 231 183;
+  --emerald-800: 167 243 208;
+  --emerald-900: 209 250 229;
+  --emerald-950: 236 253 245;
+  --green-50: 5 46 22;
+  --green-100: 20 83 45;
+  --green-200: 22 101 52;
+  --green-300: 21 128 61;
+  --green-400: 22 163 74;
+  --green-500: 34 197 94;
+  --green-600: 74 222 128;
+  --green-700: 134 239 172;
+  --green-800: 187 247 208;
+  --green-900: 220 252 231;
+  --green-950: 240 253 244;
+  --amber-50: 69 26 3;
+  --amber-100: 120 53 15;
+  --amber-200: 146 64 14;
+  --amber-300: 180 83 9;
+  --amber-400: 217 119 6;
+  --amber-500: 245 158 11;
+  --amber-600: 251 191 36;
+  --amber-700: 252 211 77;
+  --amber-800: 253 230 138;
+  --amber-900: 254 243 199;
+  --amber-950: 255 251 235;
+  --yellow-50: 66 32 6;
+  --yellow-100: 113 63 18;
+  --yellow-200: 133 77 14;
+  --yellow-300: 161 98 7;
+  --yellow-400: 202 138 4;
+  --yellow-500: 234 179 8;
+  --yellow-600: 250 204 21;
+  --yellow-700: 253 224 71;
+  --yellow-800: 254 240 138;
+  --yellow-900: 254 249 195;
+  --yellow-950: 254 252 232;
+  --orange-50: 67 20 7;
+  --orange-100: 124 45 18;
+  --orange-200: 154 52 18;
+  --orange-300: 194 65 12;
+  --orange-400: 234 88 12;
+  --orange-500: 249 115 22;
+  --orange-600: 251 146 60;
+  --orange-700: 253 186 116;
+  --orange-800: 254 215 170;
+  --orange-900: 255 237 213;
+  --orange-950: 255 247 237;
+  --rose-50: 76 5 25;
+  --rose-100: 136 19 55;
+  --rose-200: 159 18 57;
+  --rose-300: 190 18 60;
+  --rose-400: 225 29 72;
+  --rose-500: 244 63 94;
+  --rose-600: 251 113 133;
+  --rose-700: 253 164 175;
+  --rose-800: 254 205 211;
+  --rose-900: 255 228 230;
+  --rose-950: 255 241 242;
+  --red-50: 69 10 10;
+  --red-100: 127 29 29;
+  --red-200: 153 27 27;
+  --red-300: 185 28 28;
+  --red-400: 220 38 38;
+  --red-500: 239 68 68;
+  --red-600: 248 113 113;
+  --red-700: 252 165 165;
+  --red-800: 254 202 202;
+  --red-900: 254 226 226;
+  --red-950: 254 242 242;
+  --c-white: 10 10 10;
+  --c-black: 255 255 255;
+  --on-accent: 255 255 255;
+  --page-bg: 255 255 255;
+}
+[data-theme="rosa"] {
+  color-scheme: light;
+  --n-50: 42 26 34;
+  --n-100: 58 37 48;
+  --n-200: 79 53 64;
+  --n-300: 107 74 87;
+  --n-400: 143 107 120;
+  --n-500: 180 141 156;
+  --n-600: 233 203 215;
+  --n-700: 245 219 229;
+  --n-800: 251 232 239;
+  --n-900: 255 241 246;
+  --n-950: 255 250 252;
+  --a-50: 80 7 36;
+  --a-100: 131 24 67;
+  --a-200: 157 23 77;
+  --a-300: 190 24 93;
+  --a-400: 219 39 119;
+  --a-500: 236 72 153;
+  --a-600: 229 80 143;
+  --a-700: 214 61 127;
+  --a-800: 251 207 232;
+  --a-900: 252 231 243;
+  --a-950: 253 242 248;
+  --emerald-50: 2 44 34;
+  --emerald-100: 6 78 59;
+  --emerald-200: 6 95 70;
+  --emerald-300: 4 120 87;
+  --emerald-400: 5 150 105;
+  --emerald-500: 16 185 129;
+  --emerald-600: 52 211 153;
+  --emerald-700: 110 231 183;
+  --emerald-800: 167 243 208;
+  --emerald-900: 209 250 229;
+  --emerald-950: 236 253 245;
+  --green-50: 5 46 22;
+  --green-100: 20 83 45;
+  --green-200: 22 101 52;
+  --green-300: 21 128 61;
+  --green-400: 22 163 74;
+  --green-500: 34 197 94;
+  --green-600: 74 222 128;
+  --green-700: 134 239 172;
+  --green-800: 187 247 208;
+  --green-900: 220 252 231;
+  --green-950: 240 253 244;
+  --amber-50: 69 26 3;
+  --amber-100: 120 53 15;
+  --amber-200: 146 64 14;
+  --amber-300: 180 83 9;
+  --amber-400: 217 119 6;
+  --amber-500: 245 158 11;
+  --amber-600: 251 191 36;
+  --amber-700: 252 211 77;
+  --amber-800: 253 230 138;
+  --amber-900: 254 243 199;
+  --amber-950: 255 251 235;
+  --yellow-50: 66 32 6;
+  --yellow-100: 113 63 18;
+  --yellow-200: 133 77 14;
+  --yellow-300: 161 98 7;
+  --yellow-400: 202 138 4;
+  --yellow-500: 234 179 8;
+  --yellow-600: 250 204 21;
+  --yellow-700: 253 224 71;
+  --yellow-800: 254 240 138;
+  --yellow-900: 254 249 195;
+  --yellow-950: 254 252 232;
+  --orange-50: 67 20 7;
+  --orange-100: 124 45 18;
+  --orange-200: 154 52 18;
+  --orange-300: 194 65 12;
+  --orange-400: 234 88 12;
+  --orange-500: 249 115 22;
+  --orange-600: 251 146 60;
+  --orange-700: 253 186 116;
+  --orange-800: 254 215 170;
+  --orange-900: 255 237 213;
+  --orange-950: 255 247 237;
+  --rose-50: 76 5 25;
+  --rose-100: 136 19 55;
+  --rose-200: 159 18 57;
+  --rose-300: 190 18 60;
+  --rose-400: 225 29 72;
+  --rose-500: 244 63 94;
+  --rose-600: 251 113 133;
+  --rose-700: 253 164 175;
+  --rose-800: 254 205 211;
+  --rose-900: 255 228 230;
+  --rose-950: 255 241 242;
+  --red-50: 69 10 10;
+  --red-100: 127 29 29;
+  --red-200: 153 27 27;
+  --red-300: 185 28 28;
+  --red-400: 220 38 38;
+  --red-500: 239 68 68;
+  --red-600: 248 113 113;
+  --red-700: 252 165 165;
+  --red-800: 254 202 202;
+  --red-900: 254 226 226;
+  --red-950: 254 242 242;
+  --c-white: 58 31 43;
+  --c-black: 255 255 255;
+  --on-accent: 255 255 255;
+  --page-bg: 255 250 252;
+}
+
+/* Texto sobre botones de acento (negro en Claro, rosa en Rosa, blanco en Oscuro) */
+.on-accent, .on-accent .text-white { color: rgb(var(--on-accent)) !important; }
+
+/* Temas claros: sombras suaves en lugar de brillos neón */
+[data-theme="claro"] .shadow-2xl, [data-theme="rosa"] .shadow-2xl,
+[data-theme="claro"] .shadow-xl, [data-theme="rosa"] .shadow-xl { box-shadow: 0 8px 24px rgb(0 0 0 / 0.08) !important; }
+
+
+.on-accent-hover:hover, .on-accent-hover:hover .text-white { color: rgb(var(--on-accent)) !important; }
+
+/* =====================================================================
+   LIQUID GLASS (estilo iOS)
+   El color lo pone el "fondo de pantalla" (luces grandes que derivan lento);
+   los paneles son vidrio muy translúcido con desenfoque fuerte, brillo superior
+   y canto de luz en las esquinas. Las clases lg-* las asigna index.html.
+   ===================================================================== */
+:root, [data-theme="oscuro"] {
+  --lg-page: #06070c;
+  --lg-blob-1: rgb(64 102 255 / 0.42);
+  --lg-blob-2: rgb(150 82 255 / 0.36);
+  --lg-blob-3: rgb(255 72 160 / 0.20);
+  --lg-blob-4: rgb(40 160 255 / 0.22);
+  --lg-blob-5: rgb(120 70 220 / 0.25);
+  --lg-panel: rgb(20 22 32 / 0.40);
+  --lg-tile: rgb(255 255 255 / 0.05);
+  --lg-control: rgb(255 255 255 / 0.08);
+  --lg-control-hover: rgb(255 255 255 / 0.15);
+  --lg-edge: rgb(255 255 255 / 0.10);
+  --lg-rim-strong: rgb(255 255 255 / 0.60);
+  --lg-rim-soft: rgb(255 255 255 / 0.07);
+  --lg-hi: rgb(255 255 255 / 0.16);
+  --lg-gloss: rgb(255 255 255 / 0.07);
+  --lg-glow: rgb(255 255 255 / 0.04);
+  --lg-shadow: 0 24px 70px rgb(0 0 0 / 0.55);
+  --lg-veil: rgb(4 5 10 / 0.35);
+  --lg-accent-gloss: rgb(255 255 255 / 0.55);
+}
+[data-theme="claro"] {
+  --lg-page: #e8edf7;
+  --lg-blob-1: rgb(120 170 255 / 0.62);
+  --lg-blob-2: rgb(196 160 255 / 0.55);
+  --lg-blob-3: rgb(255 190 160 / 0.55);
+  --lg-blob-4: rgb(140 210 255 / 0.45);
+  --lg-blob-5: rgb(255 170 210 / 0.35);
+  --lg-panel: rgb(255 255 255 / 0.26);
+  --lg-tile: rgb(255 255 255 / 0.30);
+  --lg-control: rgb(255 255 255 / 0.48);
+  --lg-control-hover: rgb(255 255 255 / 0.75);
+  --lg-edge: rgb(255 255 255 / 0.55);
+  --lg-rim-strong: rgb(255 255 255 / 1);
+  --lg-rim-soft: rgb(255 255 255 / 0.22);
+  --lg-hi: rgb(255 255 255 / 0.95);
+  --lg-gloss: rgb(255 255 255 / 0.38);
+  --lg-glow: rgb(255 255 255 / 0.30);
+  --lg-shadow: 0 24px 70px rgb(40 55 100 / 0.18);
+  --lg-veil: rgb(232 237 247 / 0.30);
+  --lg-accent-gloss: rgb(255 255 255 / 0.22);
+}
+[data-theme="rosa"] {
+  --lg-page: #fbe9f2;
+  --lg-blob-1: rgb(255 120 190 / 0.55);
+  --lg-blob-2: rgb(190 160 255 / 0.55);
+  --lg-blob-3: rgb(255 175 140 / 0.48);
+  --lg-blob-4: rgb(255 160 220 / 0.45);
+  --lg-blob-5: rgb(160 190 255 / 0.30);
+  --lg-panel: rgb(255 255 255 / 0.26);
+  --lg-tile: rgb(255 255 255 / 0.30);
+  --lg-control: rgb(255 255 255 / 0.48);
+  --lg-control-hover: rgb(255 255 255 / 0.75);
+  --lg-edge: rgb(255 255 255 / 0.55);
+  --lg-rim-strong: rgb(255 255 255 / 1);
+  --lg-rim-soft: rgb(255 255 255 / 0.22);
+  --lg-hi: rgb(255 255 255 / 0.95);
+  --lg-gloss: rgb(255 255 255 / 0.38);
+  --lg-glow: rgb(255 255 255 / 0.30);
+  --lg-shadow: 0 24px 70px rgb(170 30 100 / 0.16);
+  --lg-veil: rgb(251 233 242 / 0.28);
+  --lg-accent-gloss: rgb(255 255 255 / 0.30);
+}
+
+/* Tipografía: Inter con el espaciado ajustado de iOS */
+#themeBody { font-family: "Inter Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-feature-settings: "cv11", "ss01"; }
+h1, h2, h3, .text-2xl, .text-3xl, .text-4xl { letter-spacing: -0.022em; }
+
+/* Fondo de pantalla: luces grandes de color que derivan muy lento */
+#themeBody { background-color: var(--lg-page) !important; }
+#ambientBackground { overflow: hidden; }
+#ambientGlowLayer {
+  display: block;
+  position: absolute;
+  inset: -15%;
+  width: auto !important;
+  height: auto !important;
+  background:
+    radial-gradient(34% 42% at 12% 16%, var(--lg-blob-1) 0%, transparent 72%),
+    radial-gradient(32% 40% at 88% 22%, var(--lg-blob-2) 0%, transparent 72%),
+    radial-gradient(38% 44% at 62% 92%, var(--lg-blob-3) 0%, transparent 72%),
+    radial-gradient(28% 34% at 28% 74%, var(--lg-blob-4) 0%, transparent 72%),
+    radial-gradient(26% 32% at 55% 40%, var(--lg-blob-5) 0%, transparent 72%) !important;
+  filter: saturate(1.15);
+  animation: lg-deriva 46s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes lg-deriva {
+  0%   { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  50%  { transform: translate3d(3%, -2.5%, 0) scale(1.06) rotate(2deg); }
+  100% { transform: translate3d(-3%, 2%, 0) scale(1.03) rotate(-1.5deg); }
+}
+@media (prefers-reduced-motion: reduce) { #ambientGlowLayer { animation: none; } }
+
+/* Vidrio con desenfoque real (solo capas grandes, por rendimiento) */
+.lg-panel, .lg-bar {
+  -webkit-backdrop-filter: blur(40px) saturate(210%) brightness(1.04);
+  backdrop-filter: blur(40px) saturate(210%) brightness(1.04);
+}
+.lg-tile, .lg-control { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+.lg-panel {
+  background-color: var(--lg-panel) !important;
+  background-image: linear-gradient(180deg, var(--lg-gloss) 0%, transparent 34%) !important;
+  border: 1px solid var(--lg-edge) !important;
+  box-shadow:
+    inset 0 1px 0 var(--lg-hi),
+    inset 0 0 30px var(--lg-glow),
+    var(--lg-shadow) !important;
+}
+/* Canto de cristal: luz que brilla en las esquinas y se desvanece en los lados */
+.lg-panel:not(.absolute):not(.fixed), .lg-tile:not(.absolute):not(.fixed), aside.lg-bar { position: relative; }
+.lg-panel::before, .lg-tile::before, aside.lg-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(135deg,
+    var(--lg-rim-strong) 0%, var(--lg-rim-soft) 20%, transparent 42%,
+    transparent 60%, var(--lg-rim-soft) 80%, var(--lg-rim-strong) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+.lg-tile::before { padding: 1px; opacity: 0.7; }
+
+.lg-tile {
+  background-color: var(--lg-tile) !important;
+  background-image: linear-gradient(180deg, var(--lg-gloss) 0%, transparent 50%);
+  border-color: var(--lg-edge) !important;
+  box-shadow: inset 0 1px 0 var(--lg-hi) !important;
+}
+.lg-control {
+  background-color: var(--lg-control) !important;
+  border-color: var(--lg-edge) !important;
+  box-shadow: inset 0 1px 0 var(--lg-hi), 0 2px 8px rgb(0 0 0 / 0.05);
+}
+.lg-control:hover { background-color: var(--lg-control-hover) !important; }
+.lg-bar {
+  background-color: var(--lg-panel) !important;
+  border-color: var(--lg-edge) !important;
+}
+/* Menú lateral flotante, como el sidebar de iPad */
+aside.lg-bar {
+  margin: 10px 0 10px 10px;
+  border-radius: 28px;
+  border: 1px solid var(--lg-edge) !important;
+  background-image: linear-gradient(180deg, var(--lg-gloss) 0%, transparent 30%) !important;
+  box-shadow: inset 0 1px 0 var(--lg-hi), var(--lg-shadow);
+  overflow: hidden;
+}
+aside.lg-bar .border-t { border-color: var(--lg-edge) !important; }
+/* Elemento activo del menú: píldora de vidrio */
+.nav-btn.nav-active {
+  background-color: var(--lg-control-hover) !important;
+  box-shadow: inset 0 1px 0 var(--lg-hi), 0 4px 16px rgb(0 0 0 / 0.08);
+}
+.lg-veil {
+  background-color: var(--lg-veil) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+}
+/* Pantalla de bloqueo: fondo propio opaco (no deja ver datos de pacientes detrás) */
+.lg-lock {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background:
+    radial-gradient(36% 46% at 16% 20%, var(--lg-blob-1) 0%, transparent 72%),
+    radial-gradient(34% 44% at 86% 26%, var(--lg-blob-2) 0%, transparent 72%),
+    radial-gradient(40% 46% at 60% 92%, var(--lg-blob-3) 0%, transparent 72%),
+    radial-gradient(28% 34% at 30% 76%, var(--lg-blob-4) 0%, transparent 72%),
+    var(--lg-page) !important;
+}
+
+/* Botones principales: vidrio sólido con brillo superior */
+/* El brillo va como sombra interior: varios botones usan un degradado de fondo que no se debe tapar */
+.on-accent {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.40),
+    inset 0 14px 18px -10px var(--lg-accent-gloss),
+    inset 0 -8px 16px rgb(0 0 0 / 0.14),
+    0 10px 26px rgb(0 0 0 / 0.16) !important;
+}
+
+/* Íconos Phosphor: alineados como texto */
+.ph, .ph-light { line-height: 1; }
+
+/* Durante el cambio de tema no se animan colores (ver setTheme) */
+.tema-cambiando, .tema-cambiando *, .tema-cambiando *::before, .tema-cambiando *::after { transition: none !important; }
+
+/* Listas desplegables (<select>): Windows dibuja la lista con su propio fondo; con el fondo de vidrio
+   translúcido el texto de las opciones quedaba invisible hasta pasar el mouse. Colores sólidos del tema. */
+select option, select optgroup {
+  background-color: rgb(var(--n-900)) !important;
+  color: rgb(var(--c-white)) !important;
+}
+select option:checked { background-color: rgb(var(--n-800)) !important; }

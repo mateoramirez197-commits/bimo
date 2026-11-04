@@ -9,13 +9,34 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 from database import crear_cita_db, listar_citas_db
-from config import BASE_DIR
+from config import BASE_DIR, DATA_DIR
 
-SCOPES = ['https://www.googleapis.com/auth/calendar']
+import json
+import shutil
+
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/drive.file',
+]
 _CALENDAR_SERVICE = None
 _DOCTOR_EMAIL = None
+_GOOGLE_CREDS = None
 
-import shutil
+
+def _token_tiene_todos_los_scopes(token_path):
+    try:
+        with open(token_path, encoding='utf-8') as f:
+            otorgados = set(json.load(f).get('scopes') or [])
+        return set(SCOPES).issubset(otorgados)
+    except Exception:
+        return False
+
+
+def obtener_credenciales_google():
+    """Credenciales vigentes con scope de Drive, o None."""
+    if _GOOGLE_CREDS and _GOOGLE_CREDS.valid and 'https://www.googleapis.com/auth/drive.file' in (_GOOGLE_CREDS.scopes or []):
+        return _GOOGLE_CREDS
+    return None
 
 def buscar_y_copiar_credentials():
     """
@@ -38,7 +59,7 @@ def buscar_y_copiar_credentials():
     return False
 
 def init_google_calendar(email_doctor=None):
-    global _CALENDAR_SERVICE, _DOCTOR_EMAIL
+    global _CALENDAR_SERVICE, _DOCTOR_EMAIL, _GOOGLE_CREDS
     if not email_doctor:
         try:
             from config import cargar_datos_clinica
@@ -52,12 +73,30 @@ def init_google_calendar(email_doctor=None):
     buscar_y_copiar_credentials()
 
     creds = None
-    token_path = os.path.join(BASE_DIR, 'token.json')
+    token_path = os.path.join(str(DATA_DIR), 'token.json')
+    token_legacy = os.path.join(str(BASE_DIR), 'token.json')
+    if os.path.exists(token_legacy) and not os.path.exists(token_path):
+        try:
+            shutil.copy2(token_legacy, token_path)
+        except Exception:
+            pass
+
+    token_activo = token_path if os.path.exists(token_path) else token_legacy
     cred_path = os.path.join(BASE_DIR, 'credentials.json')
 
-    if os.path.exists(token_path):
+    # El token.json actual solo tiene scope de Calendar: sin esto Drive dará 403 para siempre.
+    # Se fuerza UNA re-autorización, pero solo si hay credentials.json para poder hacerla.
+    if os.path.exists(token_activo) and os.path.exists(cred_path) and not _token_tiene_todos_los_scopes(token_activo):
         try:
-            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+            os.remove(token_activo)
+            if os.path.exists(token_legacy) and token_legacy != token_activo:
+                os.remove(token_legacy)
+        except Exception:
+            pass
+
+    if os.path.exists(token_activo):
+        try:
+            creds = Credentials.from_authorized_user_file(token_activo, SCOPES)
         except Exception:
             creds = None
 
@@ -82,6 +121,7 @@ def init_google_calendar(email_doctor=None):
 
     if creds and creds.valid:
         try:
+            _GOOGLE_CREDS = creds
             _CALENDAR_SERVICE = build('calendar', 'v3', credentials=creds)
             print(f"[CALENDAR] Sincronización oficial activa con Google Calendar de {_DOCTOR_EMAIL or 'doctor'}.")
             return True
@@ -207,16 +247,20 @@ def agendar_cita(nombre_paciente="", telefono="", fecha_hora_inicio="", fecha_ho
         except Exception:
             dt_fin = dt_inicio + datetime.timedelta(minutes=duracion_minutos or 30)
 
-    # 1. Guardar en SQLite
-    cita_id = crear_cita_db(
-        nombre_paciente=nombre_paciente,
-        telefono=telefono,
-        fecha_hora_inicio=fecha_hora_inicio,
-        fecha_hora_fin=fecha_hora_fin,
-        descripcion=descripcion,
-        paciente_id=paciente_id,
-        google_event_id=None
-    )
+    # 1. Guardar en SQLite (o reutilizar cita_id si ya fue actualizada)
+    cita_id_existente = kwargs.get("cita_id_existente")
+    if cita_id_existente:
+        cita_id = cita_id_existente
+    else:
+        cita_id = crear_cita_db(
+            nombre_paciente=nombre_paciente,
+            telefono=telefono,
+            fecha_hora_inicio=fecha_hora_inicio,
+            fecha_hora_fin=fecha_hora_fin,
+            descripcion=descripcion,
+            paciente_id=paciente_id,
+            google_event_id=None
+        )
 
     # Si telefono vino vacio, recuperar el telefono heredado por la base de datos
     if not telefono and cita_id:
@@ -264,6 +308,17 @@ def agendar_cita(nombre_paciente="", telefono="", fecha_hora_inicio="", fecha_ho
             }
             evento_creado = _CALENDAR_SERVICE.events().insert(calendarId='primary', body=evento).execute()
             google_event_id = evento_creado.get('id')
+            if google_event_id and cita_id:
+                try:
+                    from database import get_connection
+                    with get_connection() as conn:
+                        conn.cursor().execute(
+                            "UPDATE citas_agenda SET google_event_id = ? WHERE id = ?",
+                            (google_event_id, cita_id)
+                        )
+                        conn.commit()
+                except Exception:
+                    pass
             print(f"[CALENDAR] Cita sincronizada silenciosamente vía API en Google Calendar: {google_event_id}")
         except Exception as e:
             print(f"[CALENDAR] Error sincronizando con Google Calendar API: {e}")
@@ -341,27 +396,35 @@ def reprogramar_cita(nombre_paciente, nueva_fecha_hora_inicio, nueva_fecha_hora_
 def obtener_citas(limite=50):
     return listar_citas_db(limite=limite)
 
-def forzar_sincronizacion_calendar():
-    """Limpia tokens locales corruptos y reinicia el flujo de autenticación OAuth2."""
-    global _CALENDAR_SERVICE
-    for f in ['token.json', 'token.pickle']:
+def _limpiar_archivos_token():
+    rutas = [
+        os.path.join(str(DATA_DIR), 'token.json'),
+        os.path.join(str(DATA_DIR), 'token.pickle'),
+        os.path.join(str(BASE_DIR), 'token.json'),
+        os.path.join(str(BASE_DIR), 'token.pickle'),
+        'token.json',
+        'token.pickle',
+    ]
+    for f in rutas:
         if os.path.exists(f):
             try:
                 os.remove(f)
             except Exception:
                 pass
+
+def forzar_sincronizacion_calendar():
+    """Limpia tokens locales corruptos y reinicia el flujo de autenticación OAuth2."""
+    global _CALENDAR_SERVICE, _GOOGLE_CREDS
+    _limpiar_archivos_token()
     _CALENDAR_SERVICE = None
+    _GOOGLE_CREDS = None
     return init_google_calendar()
 
 def desvincular_calendar():
     """Elimina tokens de Google Calendar para operar exclusivamente en agenda local."""
-    global _CALENDAR_SERVICE
-    for f in ['token.json', 'token.pickle']:
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except Exception:
-                pass
+    global _CALENDAR_SERVICE, _GOOGLE_CREDS
+    _limpiar_archivos_token()
     _CALENDAR_SERVICE = None
+    _GOOGLE_CREDS = None
     print("[CALENDAR] Google Calendar desvinculado con éxito. Operando en agenda local.")
     return True

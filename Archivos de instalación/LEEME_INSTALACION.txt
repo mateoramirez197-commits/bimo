@@ -1,0 +1,29 @@
+﻿================================================================================
+          BIMO PRO - GUIA DE INSTALACION OFICIAL PARA OTRA COMPUTADORA (USB)
+================================================================================
+
+Para instalar BIMO Pro en cualquier computadora con Windows:
+
+1. COPIAR EN USB:
+   Copie esta carpeta completa ("Archivos de instalacion") a su memoria USB.
+
+2. EJECUTAR EL INSTALADOR:
+   En la otra computadora, abra la carpeta desde la USB y haga doble clic en:
+      -> Setup_BIMO_Pro.exe
+   (o en BIMO_Installer_Wizard.exe)
+
+3. ASISTENTE PASO A PASO ("Siguiente, Siguiente, Siguiente"):
+   - Paso 1: Bienvenida al sistema BIMO Pro. Haga clic en "Siguiente".
+   - Paso 2: Acuerdos y Compromisos de Usuario Clinico. Marque la casilla de
+             aceptacion de terminos y haga clic en "Siguiente".
+   - Paso 3: Directorio de Instalacion. Por defecto se instalara en su carpeta de
+             programas de usuario y creara un acceso directo en el Escritorio con
+             el icono oficial de BIMO Bot.
+   - Paso 4: Credenciales del Medico. Ingrese su Nombre, Correo/Usuario, Contrasena
+             y PIN rapido (4 a 6 digitos numericos para desbloqueo agil en consulta).
+   - Paso 5: Instalacion automatica. El instalador extraera los archivos del sistema,
+             inicializara la base de datos local y registrara el desinstalador de Windows.
+   - Paso 6: Finalizacion. Marque "Iniciar BIMO Pro ahora" y haga clic en "Finalizar".
+
+Listo! La aplicacion queda 100% instalada y funcional con acceso directo en el Escritorio.
+================================================================================

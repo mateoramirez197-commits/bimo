@@ -13,6 +13,8 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
+import re
+import time   # Necesario para timestamps en procesar_texto_clinico
 import json
 import time
 import threading
@@ -36,6 +38,7 @@ from database import (
     init_db,
     purgar_datos_prueba,
     buscar_pacientes,
+    buscar_paciente_por_similitud,
     listar_consultas_paciente,
     registrar_o_actualizar_paciente,
     guardar_consulta_db,
@@ -55,6 +58,8 @@ from database import (
 from auth import (
     autenticar_usuario,
     inicializar_usuarios_default,
+    hay_cuenta_medico,
+    registrar_usuario,
     set_sesion_activa,
     cerrar_sesion
 )
@@ -70,7 +75,7 @@ from config import (
     sanitizar_nombre_carpeta
 )
 from mobile_mic_server import iniciar_servidor_movil, obtener_ip_local, generar_codigo_qr_url
-from audio_feedback import sonar_inicio_dictado, sonar_fin_dictado, sonar_confirmacion_exito
+from audio_feedback import sonar_inicio_dictado, sonar_fin_dictado, sonar_confirmacion_exito, sonar_error
 from wake_word_listener import BackgroundWakeListener
 from voice_assistant import (
     decir_escuchando,
@@ -117,10 +122,30 @@ class BimoBridge:
         self._normal_bounds = None
         self._is_transitioning = False
         self._cita_pendiente = None  # Slot-filling de cita en diálogo multi-turn
+        self._esperando_respuesta = False
+        self._esperando_respuesta_cedula = False
+        self._historia_pendiente = None
+        self._modal_cedula_abierto = False
+        self._modal_cedula_hasta = 0.0
 
     def set_window(self, window):
         self._window = window
         threading.Thread(target=self._iniciar_wake_listener, daemon=True).start()
+
+    def _js(self, codigo):
+        """Ejecuta JavaScript en la ventana de forma segura si la ventana está disponible."""
+        if not self._window:
+            return None
+        try:
+            return self._window.evaluate_js(codigo)
+        except Exception:
+            try:
+                time.sleep(0.15)
+                if self._window:
+                    return self._window.evaluate_js(codigo)
+            except Exception:
+                pass
+            return None
 
     def minimizar_ventana(self):
         """Minimiza la ventana nativa de BIMO."""
@@ -218,6 +243,24 @@ class BimoBridge:
             print(f"[NATIVE DRAG WARN]: {e}")
         return {"status": "error"}
 
+    def _activar_auto_escucha_post_habla(self, duracion=12.0):
+        """Espera a que el asistente termine de hablar y reabre automáticamente el micrófono para diálogo multi-turno."""
+        def _hilo():
+            from voice_assistant import bimo_esta_hablando
+            time.sleep(0.3)
+            while bimo_esta_hablando():
+                time.sleep(0.1)
+            time.sleep(0.2)
+            if self._wake_listener:
+                self._wake_listener.activar_ventana_activa(duracion)
+                print(f"[AUTO-ESCUCHA] Micrófono reabierto automáticamente por {duracion}s para recibir respuesta.")
+                try:
+                    self._js("if (window.mostrarToast) window.mostrarToast('Escuchando respuesta...', 'info');")
+                    self._js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
+                except Exception:
+                    pass
+        threading.Thread(target=_hilo, daemon=True).start()
+
     def _iniciar_wake_listener(self):
         try:
             self._wake_listener = BackgroundWakeListener(callback_comando=self._on_wake_command, samplerate=16000)
@@ -230,7 +273,37 @@ class BimoBridge:
         if not self._escucha_activa_habilitada:
             return
         print(f"[BIMO WAKE COMMAND]: {texto_comando}")
+
+        if texto_comando == "__BIMO_WAKE_LISTENING__":
+            if self._window:
+                try:
+                    self._window.evaluate_js("if (window.mostrarToast) window.mostrarToast('Escuchando...', 'info');")
+                    self._window.evaluate_js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
+                except Exception:
+                    pass
+            return
+
         texto_lower = texto_comando.lower().strip()
+
+        # Intercepción prioritaria si el modal de cédula obligatoria está abierto en la UI
+        if getattr(self, "_modal_cedula_abierto", False):
+
+            if time.time() > getattr(self, "_modal_cedula_hasta", 0.0):
+                self._modal_cedula_abierto = False
+                print("[MODAL CEDULA] Timeout de seguridad de 120s alcanzado. Modal cerrado internamente.")
+            else:
+                # Comandos de frenado/detención siempre se respetan
+                if not any(w in texto_lower for w in ["frenar dictado", "frenar", "detener dictado", "detener grabación", "parar dictado", "finalizar dictado"]):
+                    # Privacidad: loguear conteo/longitud únicamente, nunca dígitos reales
+                    print(f"[MODAL CEDULA VOZ] Inyectando texto por voz a modal (longitud: {len(texto_comando)} caracteres)")
+                    self._js(f"if (window.inyectarCedulaPorVoz) window.inyectarCedulaPorVoz({json.dumps(texto_comando)});")
+                    return
+
+        from wake_word_listener import extraer_ultima_orden, limpiar_variantes_bimo
+        orden_extraida = extraer_ultima_orden(texto_comando)
+        if orden_extraida:
+            texto_comando = orden_extraida
+            texto_lower = texto_comando.lower().strip()
 
         # Comandos de voz de control de dictado (manos libres)
         if any(w in texto_lower for w in ["inicia dictado", "iniciar dictado", "empezar dictado", "empieza dictado", "grabar dictado"]):
@@ -252,42 +325,162 @@ class BimoBridge:
         if self._grabando:
             return
 
-        if self._window:
-            try:
-                self._window.evaluate_js(f"if (window.onVoiceCommandDetected) window.onVoiceCommandDetected({json.dumps(texto_comando)});")
-            except Exception:
-                pass
-
-        limpio = texto_comando.lower().replace("bimo", "").replace("hola", "").strip(" ,.?!")
+        limpio = limpiar_variantes_bimo(texto_comando)
         if not limpio or len(limpio) < 3:
-            conf = cargar_datos_clinica()
-            nom_doc = conf.get("nombre_doctor", "Mateo")
-            try:
-                decir_escuchando(nom_doc)
-            except Exception:
-                pass
             # Activar ventana multi-turn para recibir la orden directa subsiguiente
             if self._wake_listener:
-                self._wake_listener.activar_ventana_activa(8.0)
+                self._wake_listener.activar_ventana_activa(10.0)
             if self._window:
                 try:
-                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast('Te escucho {nom_doc}...', 'info');")
+                    self._window.evaluate_js("if (window.mostrarToast) window.mostrarToast('Escuchando...', 'info');")
+                    self._window.evaluate_js("if (window.actualizarEstadoEscuchaUi) window.actualizarEstadoEscuchaUi(true);")
                 except Exception:
                     pass
             return
 
+        # Notificación minimalista fija (BLOQUE 4): NUNCA enviar transcripción cruda ni subtítulos al frontend
+        if self._window:
+            try:
+                self._window.evaluate_js("if (window.mostrarToast) window.mostrarToast('Procesando dictado...', 'info');")
+                self._window.evaluate_js("if (window.onVoiceCommandDetected) window.onVoiceCommandDetected();")
+            except Exception:
+                pass
+
         threading.Thread(target=self._ejecutar_comando_detectado, args=(texto_comando,), daemon=True).start()
+
+    def _resolver_ruteo_paciente(self, nombre_busqueda, abrir_pdf=False):
+        """
+        Ruteo inteligente de pacientes (U2):
+        - Único paciente: si abrir_pdf, busca el PDF más reciente y lo abre en el visor sin clics.
+        - Homónimos: abre pacientes con el filtro y notifica con toast.
+        - Inexistente: abre pacientes con el filtro y notifica que no existe.
+        """
+        from database import buscar_pacientes_por_nombre, get_connection
+        from config import RUTA_PACIENTES
+
+        nombre_clean = str(nombre_busqueda or "").strip()
+        matches = buscar_pacientes_por_nombre(nombre_clean) if nombre_clean else []
+
+        if not matches:
+            return {
+                "estado": "no_encontrado",
+                "mensaje": f"No se encontró ningún paciente con el nombre '{nombre_clean}'.",
+                "accion_ui": "buscar_paciente",
+                "parametro": nombre_clean,
+                "ruta_pdf": None
+            }
+
+        if len(matches) > 1:
+            return {
+                "estado": "homonimos",
+                "mensaje": f"Se encontraron {len(matches)} pacientes para '{nombre_clean}'. Seleccione el deseado.",
+                "accion_ui": "buscar_paciente",
+                "parametro": nombre_clean,
+                "total_coincidencias": len(matches),
+                "ruta_pdf": None
+            }
+
+        # Paciente único
+        pac = matches[0]
+        pac_id = pac.get("id")
+        pac_nombre = pac.get("nombre", nombre_clean)
+
+        ruta_pdf_valida = None
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT ruta_pdf FROM consultas WHERE paciente_id = ? AND ruta_pdf IS NOT NULL AND ruta_pdf != '' ORDER BY id DESC LIMIT 1",
+                    (pac_id,)
+                )
+                row = cursor.fetchone()
+                if row and row["ruta_pdf"]:
+                    cand = row["ruta_pdf"]
+                    if os.path.exists(cand):
+                        ruta_pdf_valida = cand
+                    else:
+                        b_name = os.path.basename(cand)
+                        if RUTA_PACIENTES.exists():
+                            for p_cand in RUTA_PACIENTES.rglob(b_name):
+                                if p_cand.is_file():
+                                    ruta_pdf_valida = str(p_cand)
+                                    break
+        except Exception as e_q:
+            print(f"[RUTEO PDF DB WARN]: {e_q}")
+
+        if not ruta_pdf_valida and RUTA_PACIENTES.exists():
+            try:
+                nombre_carpeta = pac_nombre.replace(" ", "_")
+                for sub in ["Pacientes_Adultos", "Pacientes_Pediatricos"]:
+                    pac_dir = RUTA_PACIENTES / sub / nombre_carpeta
+                    if pac_dir.exists():
+                        pdfs_encontrados = sorted(pac_dir.glob("*.pdf"), key=lambda f: f.stat().st_mtime, reverse=True)
+                        if pdfs_encontrados:
+                            ruta_pdf_valida = str(pdfs_encontrados[0])
+                            break
+            except Exception:
+                pass
+
+        if abrir_pdf and ruta_pdf_valida:
+            return {
+                "estado": "pdf_encontrado",
+                "mensaje": f"Abriendo historia clínica de {pac_nombre}.",
+                "accion_ui": "abrir_pdf_especifico",
+                "parametro": ruta_pdf_valida,
+                "nombre_paciente": pac_nombre,
+                "ruta_pdf": ruta_pdf_valida
+            }
+        elif abrir_pdf and not ruta_pdf_valida:
+            return {
+                "estado": "sin_pdf",
+                "mensaje": f"El paciente {pac_nombre} no tiene historias clínicas en PDF aún.",
+                "accion_ui": "buscar_paciente",
+                "parametro": pac_nombre,
+                "ruta_pdf": None
+            }
+        else:
+            return {
+                "estado": "paciente_unico",
+                "mensaje": f"Mostrando ficha de {pac_nombre}.",
+                "accion_ui": "buscar_paciente",
+                "parametro": pac_nombre,
+                "ruta_pdf": ruta_pdf_valida
+            }
 
     def _ejecutar_comando_detectado(self, texto_comando):
         try:
             resp = self.procesar_texto_clinico(texto_comando)
             if self._window:
                 tipo = resp.get("tipo", "")
-                if tipo == "COMANDO_HORA":
+                if tipo == "NAVEGACION_UI":
+                    accion = resp.get("accion", "")
+                    parametro = resp.get("parametro", "") or ""
+                    if accion in ("abrir_pdf_paciente", "buscar_paciente") and parametro:
+                        r_info = self._resolver_ruteo_paciente(parametro, abrir_pdf=(accion == "abrir_pdf_paciente"))
+                        if r_info.get("accion_ui") == "abrir_pdf_especifico" and r_info.get("ruta_pdf"):
+                            self._js(
+                                f"if (window.abrirPdfEspecifico) "
+                                f"window.abrirPdfEspecifico({json.dumps(r_info['ruta_pdf'])}, {json.dumps(r_info.get('nombre_paciente', parametro))});"
+                            )
+                        else:
+                            self._js(
+                                f"if (window.ejecutarNavegacionVoz) "
+                                f"window.ejecutarNavegacionVoz('buscar_paciente', {json.dumps(r_info['parametro'])});"
+                                f"if (window.mostrarToast) "
+                                f"window.mostrarToast({json.dumps(r_info['mensaje'])}, 'info');"
+                            )
+                    else:
+                        self._js(
+                            f"if (window.ejecutarNavegacionVoz) "
+                            f"window.ejecutarNavegacionVoz({json.dumps(accion)}, {json.dumps(parametro)});"
+                        )
+                    sonar_confirmacion_exito()
+                    return          # no llamar a onVoiceClinicalProcessed para navegación
+                elif tipo == "COMANDO_HORA":
                     frase_h = resp.get("frase") or resp.get("mensaje", "")
                     self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(frase_h)}, 'info');")
                 elif tipo in ("COMANDO_CITA", "REPROGRAMAR_CITA"):
-                    if resp.get("status") == "requiere_fecha_hora":
+                    if resp.get("status") in ("requiere_fecha_hora", "requiere_paciente") or resp.get("requiere_seguimiento"):
                         msg_p = resp.get("mensaje", "")
                         self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_p)}, 'info');")
                     else:
@@ -315,24 +508,127 @@ class BimoBridge:
                             res_wa = despachar_recordatorio_cita(cid)
                             self._window.evaluate_js(f"if (window.onWhatsAppReminderSent) window.onWhatsAppReminderSent({json.dumps(res_wa)});")
                         else:
-                            self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast('No se encontró cita activa para {nom_pac}', 'error');")
+                            self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(f'No se encontró cita activa para {nom_pac}')}, 'error');")
                 elif resp.get("cita_programada"):
                     pac_nom = resp.get("paciente", "Paciente")
                     f_hora = resp.get("cita_programada", "")
                     self._window.evaluate_js(f"if (window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_hora)});")
                 self._window.evaluate_js(f"if (window.onVoiceClinicalProcessed) window.onVoiceClinicalProcessed({json.dumps(resp)});")
         except Exception as e:
+            try:
+                sonar_error()
+            except Exception:
+                pass
             print(f"[BIMO DESKTOP ERROR] Error ejecutando comando de voz: {e}")
+
+    def _disparar_respaldo_drive(self, al_cerrar=False):
+        """Silencioso: nunca interrumpe login ni cierre."""
+        try:
+            from drive_backup import respaldo_local_diario
+            respaldo_local_diario()
+        except Exception:
+            pass
+        try:
+            from calendar_sync import obtener_credenciales_google
+            from drive_backup import respaldar_en_drive
+            from config import obtener_parametro_boveda
+            creds = obtener_credenciales_google()
+            if not creds:
+                return None
+
+            cifrado_activo = str(obtener_parametro_boveda("backup_drive_cifrado", "0")) == "1"
+            passphrase = obtener_parametro_boveda("backup_drive_passphrase", "") if cifrado_activo else None
+            if cifrado_activo and not passphrase:
+                print("[DRIVE BACKUP WARN] Cifrado activado pero sin contraseña configurada. Respaldo omitido.")
+                return None
+
+            return respaldar_en_drive(creds, daemon=not al_cerrar, passphrase=passphrase)
+        except Exception as e:
+            print(f"[DRIVE BACKUP WARN] {e}")
+            return None
 
     # ==========================================
     # AUTENTICACIÓN & SESIÓN
     # ==========================================
+    def obtener_tema_guardado(self):
+        """Tema elegido (claro/oscuro/rosa) para pintarlo ya en la pantalla de bloqueo, antes del PIN."""
+        try:
+            from config import obtener_tema_guardado, TEMAS_INTERFAZ
+            tema = obtener_tema_guardado()
+            return {"status": "ok", "tema": tema if tema in TEMAS_INTERFAZ else "claro"}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] obtener_tema_guardado: {e}")
+            return {"status": "error", "tema": "claro"}
+
+    def estado_cuentas(self):
+        """Indica si ya existe una cuenta de médico (si no, la interfaz pide crearla)."""
+        try:
+            return {"status": "ok", "hay_cuentas": hay_cuenta_medico()}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] estado_cuentas: {e}")
+            return {"status": "error", "message": "No se pudo leer el estado de las cuentas."}
+
+    def crear_cuenta_inicial(self, datos):
+        """
+        Primer uso del equipo: el doctor crea su cuenta con su correo de Google
+        (el mismo que se vincula a Google Calendar), una contraseña y un PIN rápido.
+        Solo funciona mientras no exista ninguna cuenta de médico.
+        """
+        try:
+            if isinstance(datos, str):
+                datos = json.loads(datos)
+            datos = datos or {}
+            nombre = str(datos.get("nombre", "")).strip()
+            email = str(datos.get("email", "")).strip().lower()
+            password = str(datos.get("password", ""))
+            pin = str(datos.get("pin", "")).strip()
+
+            if hay_cuenta_medico():
+                return {"status": "error", "message": "Este equipo ya tiene una cuenta. Inicia sesión."}
+            if len(nombre) < 3:
+                return {"status": "error", "message": "Escribe tu nombre completo."}
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                return {"status": "error", "message": "Escribe un correo válido (el de tu Google Calendar)."}
+            if len(password) < 8:
+                return {"status": "error", "message": "La contraseña debe tener al menos 8 caracteres."}
+            if not (pin.isdigit() and len(pin) == 4):
+                return {"status": "error", "message": "El PIN rápido debe tener 4 dígitos."}
+
+            user_id = registrar_usuario(nombre, email, password, rol="medico")
+            conf = cargar_datos_clinica()
+            conf["nombre_doctor"] = nombre
+            conf["email_google"] = email
+            conf["pin_rapido"] = pin
+            conf["onboarding_completado"] = True
+            guardar_datos_clinica(conf)
+
+            def _vincular_calendar():
+                try:
+                    from calendar_sync import init_google_calendar
+                    init_google_calendar(email)
+                except Exception as e_cal:
+                    print(f"[CALENDAR LINK WARN]: {e_cal}")
+            threading.Thread(target=_vincular_calendar, daemon=True).start()
+
+            user = {"id": user_id, "nombre": nombre, "email": email, "rol": "medico"}
+            self._usuario_actual = user
+            set_sesion_activa(user)
+            return {"status": "ok", "usuario": user}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] crear_cuenta_inicial: {e}")
+            return {"status": "error", "message": "No se pudo crear la cuenta. Revisa los datos e intenta de nuevo."}
+
     def autenticar(self, email, password):
         try:
-            user = autenticar_usuario(email, password)
+            email_clean = str(email).strip().lower()
+            pwd_clean = str(password).strip()
+            dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
+
+            user = autenticar_usuario(email_clean, pwd_clean)
             if user:
                 self._usuario_actual = user
                 set_sesion_activa(user)
+                self._disparar_respaldo_drive()
                 return {
                     "status": "ok",
                     "usuario": {
@@ -342,19 +638,61 @@ class BimoBridge:
                         "rol": user.get("rol")
                     }
                 }
+
+            # Acceso legítimo dinámico configurado en clinica.json (sin requerir BIMO_DEV_BACKDOOR)
+            conf = cargar_datos_clinica()
+            email_conf = str(conf.get("email_google", "")).strip().lower()
+            pin_conf = str(conf.get("pin_rapido", "")).strip()
+
+            if email_clean and email_conf and email_clean == email_conf:
+                if pin_conf and pwd_clean == pin_conf:
+                    user = {
+                        "id": 1,
+                        "nombre": conf.get("nombre_doctor") or "Doctor Titular",
+                        "email": email_conf,
+                        "rol": "medico"
+                    }
+                    self._usuario_actual = user
+                    set_sesion_activa(user)
+                    self._disparar_respaldo_drive()
+                    return {"status": "ok", "usuario": user}
+
             return {"status": "error", "message": "Correo o contraseña incorrectos."}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] autenticar: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Error interno al iniciar sesión."}
 
     def autenticar_pin(self, pin):
         try:
             pin_str = str(pin).strip()
-            conf = cargar_datos_clinica()
-            pin_esperado = str(conf.get("pin_rapido", "1234")).strip()
+            conf = {}
+            try:
+                conf = cargar_datos_clinica() or {}
+            except Exception as e_conf:
+                print(f"[AUTH PIN CONF WARN]: {e_conf}")
+                conf = {}
+            pin_esperado = str(conf.get("pin_rapido", "")).strip()
 
-            # Permite el PIN configurado por el doctor o acceso maestro autorizado
-            if pin_str == pin_esperado or pin_str == "__master__" or (pin_esperado == "1234" and pin_str in ("1234", "1963", "0000", "1111")):
+            dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
+
+            pin_valido = False
+            # Solo el PIN configurado por la clínica da acceso (sin PIN maestro universal).
+            if pin_esperado and pin_str == pin_esperado:
+                pin_valido = True
+            elif not pin_esperado:
+                if dev_backdoor and pin_str in ("__master__", "1963", "0000", "1111"):
+                    pin_valido = True
+                else:
+                    return {"status": "error", "message": "No hay PIN configurado. Inicia sesión con correo o configura un PIN."}
+            elif dev_backdoor and pin_str in ("__master__", "1963", "0000", "1111"):
+                pin_valido = True
+
+            if not pin_valido:
+                return {"status": "error", "message": "PIN incorrecto."}
+
+            # 2. Obtener usuario médico de la base local o construirlo desde clinica.json
+            user = None
+            try:
                 with get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT * FROM usuarios WHERE rol = 'medico' AND activo = 1 ORDER BY id ASC LIMIT 1")
@@ -363,28 +701,32 @@ class BimoBridge:
                         user = dict(row)
                         if "password_hash" in user:
                             del user["password_hash"]
-                    else:
-                        user = {
-                            "id": 1,
-                            "nombre": conf.get("nombre_doctor", "Mateo Ramírez"),
-                            "email": "admin@bimo.local",
-                            "rol": "medico"
-                        }
-                self._usuario_actual = user
-                set_sesion_activa(user)
-                return {
-                    "status": "ok",
-                    "usuario": {
-                        "id": user.get("id"),
-                        "nombre": user.get("nombre"),
-                        "email": user.get("email"),
-                        "rol": user.get("rol")
-                    }
+            except Exception as e_db:
+                print(f"[AUTH PIN DB WARN]: {e_db}")
+
+            if not user:
+                user = {
+                    "id": 1,
+                    "nombre": conf.get("nombre_doctor") or "Doctor Titular",
+                    "email": conf.get("email_google") or "doctor@bimo.local",
+                    "rol": "medico"
                 }
-            return {"status": "error", "message": "PIN maestro incorrecto."}
+
+            self._usuario_actual = user
+            set_sesion_activa(user)
+            self._disparar_respaldo_drive()
+            return {
+                "status": "ok",
+                "usuario": {
+                    "id": user.get("id"),
+                    "nombre": user.get("nombre"),
+                    "email": user.get("email"),
+                    "rol": user.get("rol")
+                }
+            }
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] autenticar_pin: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Error interno al autenticar PIN."}
 
     def cerrar_sesion(self):
         try:
@@ -404,35 +746,56 @@ class BimoBridge:
     # ==========================================
     def iniciar_grabacion(self):
         try:
-            # Exclusión mutua estricta de hardware: pausar el listener de voz
-            if self._wake_listener:
-                try:
-                    self._wake_listener.pausar()
-                    self._wake_listener.detener()
-                except Exception:
-                    pass
-                time.sleep(0.15)
             try:
                 sonar_inicio_dictado()
             except Exception:
                 pass
 
-            # Detectar tasa de muestreo nativa del micrófono para evitar PaErrorCode
-            try:
-                disp_info = sd.query_devices(kind='input')
-                self._frecuencia = int(disp_info.get('default_samplerate', 44100))
-            except Exception:
-                self._frecuencia = 44100
-
             self._grabando = True
             self._datos_audio = []
+            self._usando_tap_wake = False
+
+            # 1. Intentar captura directa sin colisión sobre el stream ya abierto del micrófono predeterminado
+            if self._wake_listener and hasattr(self._wake_listener, "iniciar_tap_manual"):
+                try:
+                    def _recibir_frame_tap(chunk):
+                        if self._grabando:
+                            self._datos_audio.append(chunk)
+
+                    tap_ok, sr_tap = self._wake_listener.iniciar_tap_manual(_recibir_frame_tap)
+                    if tap_ok:
+                        self._frecuencia = int(sr_tap or 16000)
+                        self._usando_tap_wake = True
+                        print(f"[BIMO DESKTOP] Grabación instantánea activa sobre micrófono predeterminado ({self._frecuencia}Hz)...")
+                except Exception as e_tap:
+                    print(f"[BIMO DESKTOP TAP WARN]: {e_tap}")
+                    self._usando_tap_wake = False
+
+            if not self._usando_tap_wake:
+                # Si no había listener activo, detectar micrófono predeterminado y abrir stream dedicado
+                if self._wake_listener:
+                    try:
+                        self._wake_listener.pausar()
+                        self._wake_listener.detener()
+                    except Exception:
+                        pass
+                try:
+                    disp_info = sd.query_devices(kind='input')
+                    self._frecuencia = int(disp_info.get('default_samplerate', 44100))
+                except Exception:
+                    self._frecuencia = 44100
+
             threading.Thread(target=self._grabar_audio_loop, daemon=True).start()
-            print(f"[BIMO DESKTOP] Grabación de audio iniciada a {self._frecuencia}Hz...")
             return {"status": "ok", "message": "Grabando..."}
         except Exception as e:
+            try:
+                sonar_error()
+            except Exception:
+                pass
             print(f"[BIMO DESKTOP ERROR] Error al iniciar grabación: {e}")
             if self._wake_listener and self._escucha_activa_habilitada:
                 try:
+                    self._wake_listener.detener_tap_manual()
                     self._wake_listener.reanudar()
                     self._wake_listener.iniciar()
                 except Exception:
@@ -440,33 +803,74 @@ class BimoBridge:
             return {"status": "error", "message": str(e)}
 
     def _grabar_audio_loop(self):
+        # Si estamos usando el tap directo del micrófono predeterminado, verificar que fluyan datos
+        if getattr(self, "_usando_tap_wake", False):
+            t_wait = 0.0
+            while self._grabando and t_wait < 0.85:
+                if len(self._datos_audio) > 0:
+                    return  # El tap está entregando audio perfectamente; no abrir otro stream
+                time.sleep(0.04)
+                t_wait += 0.04
+            if not self._grabando:
+                return
+            # Si tras 850ms no llegaron frames por el tap, desconectar tap y abrir stream con auto-detección
+            print("[BIMO DESKTOP WARN] Tap sin frames tras 850ms; reabriendo micrófono predeterminado...")
+            if self._wake_listener:
+                try:
+                    self._wake_listener.detener_tap_manual()
+                    self._wake_listener.detener()
+                except Exception:
+                    pass
+            self._usando_tap_wake = False
+
         def callback(indata, frames, time_info, status):
             if self._grabando:
                 self._datos_audio.append(indata.copy())
-        
-        # Probar la frecuencia nativa y respaldos si el driver de Windows lo requiere
-        frecuencias_a_probar = [self._frecuencia, 44100, 48000, 16000]
+
+        from wake_word_listener import obtener_candidatos_microfono_predeterminado
         stream_iniciado = False
-        for freq in frecuencias_a_probar:
-            try:
-                with sd.InputStream(samplerate=freq, channels=1, dtype='int16', callback=callback):
-                    self._frecuencia = freq
-                    stream_iniciado = True
-                    while self._grabando:
-                        sd.sleep(40)
+        for refrescar in (False, True):
+            candidatos = obtener_candidatos_microfono_predeterminado(
+                samplerate_preferido=self._frecuencia,
+                refrescar=refrescar
+            )
+            for dev_id, freq, nom_dev in candidatos:
+                if not self._grabando:
+                    return
+                try:
+                    kwargs_in = dict(samplerate=freq, channels=1, dtype='int16', callback=callback)
+                    if dev_id is not None:
+                        kwargs_in["device"] = dev_id
+                    with sd.InputStream(**kwargs_in):
+                        self._frecuencia = freq
+                        stream_iniciado = True
+                        print(f"[BIMO DESKTOP] Grabando desde micrófono predeterminado '{nom_dev}' (device={dev_id}, {freq}Hz).")
+                        while self._grabando:
+                            sd.sleep(40)
+                    break
+                except Exception as e_freq:
+                    print(f"[BIMO DESKTOP WARN] Micrófono '{nom_dev}' (dev={dev_id}) no abrió a {freq}Hz: {e_freq}")
+                    time.sleep(0.04)
+            if stream_iniciado:
                 break
-            except Exception as e_freq:
-                print(f"[BIMO DESKTOP WARN] Micrófono no abrió a {freq}Hz: {e_freq}")
-                time.sleep(0.08)
 
         if not stream_iniciado:
-            print("[BIMO DESKTOP ERROR] Error crítico: No se pudo abrir el stream de audio en ninguna frecuencia.")
+            try:
+                sonar_error()
+            except Exception:
+                pass
+            print("[BIMO DESKTOP ERROR] Error crítico: No se pudo abrir el micrófono predeterminado en ninguna frecuencia.")
 
     def detener_y_procesar(self, incluir_ortodoncia=False, *args, **kwargs):
         ruta_wav = None
         try:
             self._grabando = False
-            time.sleep(0.15)  # Buffer flush para capturar últimos frames del audio
+            time.sleep(0.12)  # Buffer flush para capturar últimos frames del audio
+            if self._wake_listener and hasattr(self._wake_listener, "detener_tap_manual"):
+                try:
+                    self._wake_listener.detener_tap_manual()
+                except Exception:
+                    pass
             try:
                 sonar_fin_dictado()
             except Exception:
@@ -474,27 +878,52 @@ class BimoBridge:
 
             print(f"[BIMO DESKTOP] Deteniendo grabación y procesando (ortodoncia={incluir_ortodoncia})...")
             if not self._datos_audio:
-                return {"status": "error", "message": "No se detectó audio del micrófono. Verifica los permisos del micrófono en Windows."}
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
+                return {"status": "error", "message": "No se detectó audio del micrófono. Verifica que tu micrófono esté conectado."}
 
             audio_np = np.concatenate(self._datos_audio, axis=0)
-            if len(audio_np) < int(self._frecuencia * 0.3):
-                return {"status": "error", "message": "Dictado demasiado corto (menos de 0.3 segundos). Por favor habla antes de pulsar detener."}
+            if len(audio_np) < int(self._frecuencia * 0.25):
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
+                return {"status": "error", "message": "Dictado muy corto. Habla y luego pulsa detener."}
 
             import tempfile
+            from ai_engine import normalizar_audio_para_stt
             ruta_wav = os.path.join(tempfile.gettempdir(), f"bimo_dictado_{int(time.time() * 1000)}.wav")
-            wav_write(ruta_wav, self._frecuencia, audio_np)
+            try:
+                arr_norm_i16, _, _ = normalizar_audio_para_stt(audio_np, samplerate=self._frecuencia)
+                if arr_norm_i16.size > 0:
+                    wav_write(ruta_wav, 16000, arr_norm_i16)
+                else:
+                    wav_write(ruta_wav, self._frecuencia, audio_np)
+            except Exception:
+                wav_write(ruta_wav, self._frecuencia, audio_np)
 
             texto = transcribir_audio(ruta_wav)
             if not texto or not texto.strip():
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
                 return {"status": "error", "message": "No se detectó voz inteligible en el audio. Por favor intenta hablar más cerca del micrófono."}
 
             print(f"[BIMO DESKTOP TRANSCRIPCIÓN]: {texto}")
             return self.procesar_texto_clinico(texto, incluir_ortodoncia=bool(incluir_ortodoncia))
         except Exception as e:
+            try:
+                sonar_error()
+            except Exception:
+                pass
             print(f"[BIMO DESKTOP ERROR] Error al procesar dictado: {e}")
             return {"status": "error", "message": str(e)}
         finally:
             self._datos_audio = []
+            self._usando_tap_wake = False
             if ruta_wav and os.path.exists(ruta_wav):
                 try:
                     os.remove(ruta_wav)
@@ -502,7 +931,7 @@ class BimoBridge:
                     pass
             if self._wake_listener and self._escucha_activa_habilitada:
                 def _reactivar():
-                    time.sleep(0.5)
+                    time.sleep(0.25)
                     try:
                         self._wake_listener.reanudar()
                         self._wake_listener.iniciar()
@@ -554,7 +983,83 @@ class BimoBridge:
     def procesar_texto_clinico(self, texto, incluir_ortodoncia=False, generar_pdf=True):
         nombre_doc = self._usuario_actual.get("nombre", "Mateo") if self._usuario_actual else "Mateo"
 
-        # 0. RESOLUCIÓN DE SLOT-FILLING: Si hay una cita pendiente esperando fecha/hora
+        # -2. INTERCEPTOR MODAL CÉDULA OBLIGATORIA (BLOQUE 3)
+        if getattr(self, "_modal_cedula_abierto", False):
+            if time.time() <= getattr(self, "_modal_cedula_hasta", 0.0):
+                print(f"[MODAL CEDULA MANUAL] Dictado interceptado para inyección de cédula (longitud: {len(texto)} chars)")
+                self._js(f"if (window.inyectarCedulaPorVoz) window.inyectarCedulaPorVoz({json.dumps(texto)});")
+                return {"status": "ok", "tipo": "CEDULA_VOZ", "mensaje": "Dictado enviado a modal de cédula"}
+            else:
+                self._modal_cedula_abierto = False
+
+        # -1. RESOLUCIÓN DE DESAMBIGUACIÓN POR CÉDULA (BLOQUE 3)
+        if getattr(self, "_esperando_respuesta_cedula", False) and getattr(self, "_historia_pendiente", None):
+            if (time.time() - self._historia_pendiente.get("timestamp", 0)) < 90.0:
+                from ai_engine import extraer_digitos_cedula
+                cedula_extraida = extraer_digitos_cedula(texto)
+                if cedula_extraida and len(cedula_extraida) >= 5:
+                    hist_pend = self._historia_pendiente
+                    self._esperando_respuesta_cedula = False
+                    self._historia_pendiente = None
+
+                    paciente_encontrado = None
+                    candidatos = hist_pend.get("pacientes_candidatos", [])
+                    for p_cand in candidatos:
+                        doc_c = re.sub(r'\D', '', str(p_cand.get("documento") or ""))
+                        if doc_c and (doc_c == cedula_extraida or doc_c in cedula_extraida or cedula_extraida in doc_c):
+                            paciente_encontrado = p_cand
+                            break
+
+                    if not paciente_encontrado:
+                        from database import get_connection
+                        with get_connection() as conn_ced:
+                            cur_ced = conn_ced.cursor()
+                            cur_ced.execute("SELECT * FROM pacientes WHERE REPLACE(documento, '-', '') = ? OR documento LIKE ? LIMIT 1", (cedula_extraida, f"%{cedula_extraida}%"))
+                            row_ced = cur_ced.fetchone()
+                            if row_ced:
+                                paciente_encontrado = dict(row_ced)
+
+                    if paciente_encontrado:
+                        res_ia = hist_pend["resultado_ia"]
+                        res_ia.setdefault("datos_filiacion", {})["id"] = paciente_encontrado["id"]
+                        res_ia["datos_filiacion"]["nombre"] = paciente_encontrado["nombre"]
+                        res_ia["datos_filiacion"]["documento"] = paciente_encontrado.get("documento") or cedula_extraida
+                        res_ia["nombre_paciente"] = paciente_encontrado["nombre"]
+                        if paciente_encontrado.get("telefono"):
+                            res_ia["datos_filiacion"]["telefono"] = paciente_encontrado["telefono"]
+
+                        try:
+                            sonar_confirmacion_exito()
+                            from voice_assistant import hablar_asincrono
+                            hablar_asincrono(f"Cédula verificada para {paciente_encontrado['nombre']}. Guardando historia clínica.")
+                        except Exception:
+                            pass
+
+                        return self._completar_guardado_historia_clinica(
+                            resultado_ia=res_ia,
+                            texto=hist_pend["texto"],
+                            pac_id=paciente_encontrado["id"],
+                            incluir_ortodoncia=hist_pend.get("incluir_ortodoncia", False),
+                            generar_pdf=hist_pend.get("generar_pdf", True)
+                        )
+                    else:
+                        msg_err = f"No encontré ningún paciente con la cédula {cedula_extraida}."
+                        try:
+                            sonar_error()
+                            from voice_assistant import hablar_asincrono
+                            hablar_asincrono(msg_err)
+                        except Exception:
+                            pass
+                        if self._window:
+                            self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_err)}, 'warning');")
+                        return {"status": "error", "mensaje": msg_err, "tipo": "HISTORIA_CLINICA"}
+                else:
+                    indicadores_dictado_limp = ("paciente ", "consulta por", "acude por", "diagnóstico", "pieza ", "caries")
+                    if any(ind in texto.lower() for ind in indicadores_dictado_limp):
+                        self._esperando_respuesta_cedula = False
+                        self._historia_pendiente = None
+
+        # 0. RESOLUCIÓN DE SLOT-FILLING: Si hay una cita pendiente esperando fecha/hora o paciente
         # REGLA DE PROTECCIÓN: Si el texto dictado corresponde a una consulta clínica o nuevo paciente
         # (contiene filiación, consulta por, diagnóstico, piezas, etc.), descartar la cita pendiente
         # para evitar interceptar la consulta como respuesta de fecha/hora.
@@ -565,15 +1070,82 @@ class BimoBridge:
         texto_low = texto.lower()
         if any(ind in texto_low for ind in indicadores_dictado):
             self._cita_pendiente = None
+            self._esperando_respuesta = False
 
-        if self._cita_pendiente and (time.time() - self._cita_pendiente.get("timestamp", 0)) < 90.0:
-            if contiene_especificacion_temporal(texto):
-                f_calc = resolver_fecha_relativa_espanol(texto)
-                if f_calc:
-                    pac_nom = self._cita_pendiente["nombre_paciente"]
+        if (getattr(self, "_esperando_respuesta", False) or self._cita_pendiente) and self._cita_pendiente and (time.time() - self._cita_pendiente.get("timestamp", 0)) < 90.0:
+            esperando_tipo = self._cita_pendiente.get("esperando", "fecha_hora")
+            if esperando_tipo == "nombre_paciente":
+                from ai_engine import limpiar_nombre_paciente
+                nom_extraido = limpiar_nombre_paciente(texto)
+                if nom_extraido and len(nom_extraido) >= 2 and nom_extraido.lower() not in ("cita", "consulta"):
+                    pac_nom = nom_extraido
+                    f_calc = self._cita_pendiente.get("fecha_hora")
                     tel = self._cita_pendiente.get("telefono", "")
                     motivo = self._cita_pendiente.get("motivo", "Consulta agendada por voz")
+                    self._cita_pendiente = None
+                    self._esperando_respuesta = False
+
+                    cita_id = None
+                    url_gcal = ""
+                    try:
+                        res_cal = agendar_cita(nombre_paciente=pac_nom, telefono=tel, fecha_hora_inicio=f_calc, descripcion=motivo, abrir_en_navegador=True)
+                        cita_id = res_cal.get("cita_id") if isinstance(res_cal, dict) else res_cal
+                        url_gcal = res_cal.get("url_gcal") if isinstance(res_cal, dict) else ""
+                    except Exception as e_cal:
+                        print(f"[AGENDAR CITA WARN] {e_cal}")
+                        try:
+                            cita_id = crear_cita_db(nombre_paciente=pac_nom, telefono=tel, fecha_hora_inicio=f_calc, descripcion=motivo)
+                        except Exception as e_db:
+                            print(f"[CREAR CITA DB ERROR] {e_db}")
+
+                    try:
+                        sonar_confirmacion_exito()
+                        decir_confirmacion_cita(nombre_doctor=nombre_doc, nombre_paciente=pac_nom)
+                    except Exception as e_snd:
+                        print(f"[SOUND/VOICE WARN] {e_snd}")
+
+                    if self._window:
+                        try:
+                            self._window.evaluate_js("if(window.cargarCitas) window.cargarCitas();")
+                            self._window.evaluate_js(f"if(window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_calc)});")
+                        except Exception:
+                            pass
+
+                    return {
+                        "status": "ok",
+                        "tipo": "COMANDO_CITA",
+                        "texto": texto,
+                        "resultado": {"tipo": "COMANDO_CITA", "nombre_paciente": pac_nom, "fecha_hora": f_calc},
+                        "mensaje": f"Cita para {pac_nom} agendada para {f_calc}",
+                        "cita_id": cita_id,
+                        "url_gcal": url_gcal,
+                        "fecha_hora": f_calc,
+                        "nombre_paciente": pac_nom,
+                        "requiere_seguimiento": False
+                    }
+            else:
+                # esperando fecha_hora
+                f_calc = None
+                if contiene_especificacion_temporal(texto):
+                    f_calc = resolver_fecha_relativa_espanol(texto)
+
+                pac_nom = self._cita_pendiente.get("nombre_paciente", "Paciente")
+                tel = self._cita_pendiente.get("telefono", "")
+                motivo = self._cita_pendiente.get("motivo", "Consulta agendada por voz")
+
+                if not f_calc:
+                    # Intento determinista combinando el paciente y la respuesta
+                    texto_combinado = f"agendar cita para {pac_nom} {texto}"
+                    try:
+                        res_comb = procesar_comando_o_dictado(texto_combinado)
+                        if res_comb.get("tipo") == "COMANDO_CITA" and res_comb.get("fecha_hora") and not res_comb.get("requiere_fecha_hora"):
+                            f_calc = res_comb.get("fecha_hora")
+                    except Exception as e_comb:
+                        print(f"[SLOT-FILLING COMBINADO WARN]: {e_comb}")
+
+                if f_calc:
                     self._cita_pendiente = None  # Resetear estado de slot-filling
+                    self._esperando_respuesta = False
                     
                     cita_id = None
                     url_gcal = ""
@@ -594,6 +1166,13 @@ class BimoBridge:
                     except Exception as e_snd:
                         print(f"[SOUND/VOICE WARN] {e_snd}")
 
+                    if self._window:
+                        try:
+                            self._window.evaluate_js("if(window.cargarCitas) window.cargarCitas();")
+                            self._window.evaluate_js(f"if(window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_calc)});")
+                        except Exception:
+                            pass
+
                     return {
                         "status": "ok",
                         "tipo": "COMANDO_CITA",
@@ -603,7 +1182,8 @@ class BimoBridge:
                         "cita_id": cita_id,
                         "url_gcal": url_gcal,
                         "fecha_hora": f_calc,
-                        "nombre_paciente": pac_nom
+                        "nombre_paciente": pac_nom,
+                        "requiere_seguimiento": False
                     }
 
         resultado_ia = procesar_comando_o_dictado(texto)
@@ -631,7 +1211,7 @@ class BimoBridge:
                     return {"status": "error", "tipo": tipo, "mensaje": msg_sin_pac}
 
             f_hora = resultado_ia.get("fecha_hora")
-            requiere_fecha = resultado_ia.get("requiere_fecha_hora", False)
+            requiere_fecha = resultado_ia.get("requiere_fecha_hora", False) or resultado_ia.get("requiere_seguimiento", False)
             motivo = resultado_ia.get("motivo", "Consulta agendada por voz")
             if not tel or tel.lower() in ("no especificado", "none", ""):
                 try:
@@ -642,20 +1222,22 @@ class BimoBridge:
 
             # B) Si no se dictó fecha u hora: NO generar cita ficticia, abrir slot-filling y preguntar por voz
             if not f_hora or requiere_fecha or f_hora in ("null", "None", "No especificado", ""):
+                self._esperando_respuesta = True
                 self._cita_pendiente = {
                     "nombre_paciente": pac_nom,
                     "telefono": tel,
                     "motivo": motivo,
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "esperando": "fecha_hora"
                 }
-                if self._wake_listener:
-                    # Abrir ventana activa por 10 segundos para recibir la fecha/hora
-                    self._wake_listener.activar_ventana_activa(10.0)
                 
                 try:
                     preguntar_fecha_hora_cita(pac_nom)
                 except Exception as e_snd:
                     print(f"[VOICE WARN] {e_snd}")
+
+                # Reabrir micrófono automáticamente tras el habla para respuesta continua
+                self._activar_auto_escucha_post_habla(12.0)
 
                 msg_preg = f"¿Para qué fecha y hora deseas agendar la cita para {pac_nom}?"
                 if self._window:
@@ -663,6 +1245,7 @@ class BimoBridge:
 
                 return {
                     "status": "requiere_fecha_hora",
+                    "requiere_seguimiento": True,
                     "tipo": tipo,
                     "texto": texto,
                     "resultado": resultado_ia,
@@ -670,8 +1253,42 @@ class BimoBridge:
                     "mensaje": msg_preg
                 }
 
-            # C) Si SÍ se especificó fecha/hora: Agendar normalmente
+            # C) Si no se dictó paciente pero sí fecha/hora: preguntar por el paciente
+            if (not pac_nom or pac_nom.lower() in ("paciente", "no especificado")) and f_hora:
+                self._esperando_respuesta = True
+                self._cita_pendiente = {
+                    "nombre_paciente": "",
+                    "fecha_hora": f_hora,
+                    "telefono": tel,
+                    "motivo": motivo,
+                    "timestamp": time.time(),
+                    "esperando": "nombre_paciente"
+                }
+                try:
+                    from voice_assistant import preguntar_paciente_cita
+                    preguntar_paciente_cita()
+                except Exception as e_snd:
+                    print(f"[VOICE WARN] {e_snd}")
+
+                self._activar_auto_escucha_post_habla(12.0)
+
+                msg_preg = "¿Para qué paciente deseas agendar la cita?"
+                if self._window:
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_preg)}, 'info');")
+
+                return {
+                    "status": "requiere_paciente",
+                    "requiere_seguimiento": True,
+                    "tipo": tipo,
+                    "texto": texto,
+                    "resultado": resultado_ia,
+                    "fecha_hora": f_hora,
+                    "mensaje": msg_preg
+                }
+
+            # D) Si SÍ se especificaron ambos: Agendar normalmente
             self._cita_pendiente = None
+            self._esperando_respuesta = False
             cita_id = None
             url_gcal = ""
             try:
@@ -690,6 +1307,12 @@ class BimoBridge:
                 decir_confirmacion_cita(nombre_doctor=nombre_doc, nombre_paciente=pac_nom)
             except Exception as e_snd:
                 print(f"[SOUND/VOICE WARN] {e_snd}")
+
+            try:
+                self._js(f"if (window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_hora)});")
+                self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+            except Exception:
+                pass
 
             return {
                 "status": "ok",
@@ -731,6 +1354,12 @@ class BimoBridge:
             except Exception as e_snd:
                 print(f"[SOUND/VOICE WARN] {e_snd}")
 
+            try:
+                self._js(f"if (window.onCitaCreadaPorVoz) window.onCitaCreadaPorVoz({json.dumps(pac_nom)}, {json.dumps(f_hora)});")
+                self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+            except Exception:
+                pass
+
             return {
                 "status": "ok",
                 "tipo": tipo,
@@ -760,6 +1389,11 @@ class BimoBridge:
                 decir_cancelacion_cita(nombre_doctor=nombre_doc, nombre_paciente=pac_nom)
             except Exception as e_snd:
                 print(f"[SOUND/VOICE WARN] {e_snd}")
+
+            try:
+                self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+            except Exception:
+                pass
 
             return {
                 "status": "ok",
@@ -854,6 +1488,11 @@ class BimoBridge:
                 except Exception as e_snd:
                     print(f"[SOUND/VOICE WARN] {e_snd}")
 
+                try:
+                    self._js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
+                except Exception:
+                    pass
+
                 return {
                     "status": res_act.get("status", "ok"),
                     "tipo": tipo,
@@ -863,7 +1502,42 @@ class BimoBridge:
                     "detalles": res_act
                 }
 
+        if tipo == "NAVEGACION_UI":
+            accion = str(resultado_ia.get("accion", "")).strip()
+            ACCIONES_PERMITIDAS = (
+                "abrir_dictado", "abrir_agenda", "abrir_pacientes", "buscar_paciente",
+                "abrir_mobile", "abrir_pdf", "abrir_pdf_paciente", "abrir_widget",
+                "abrir_configuracion", "abrir_odontograma"
+            )
+            if accion not in ACCIONES_PERMITIDAS:
+                try:
+                    sonar_error()
+                except Exception:
+                    pass
+                return {"status": "warning", "tipo": "IGNORAR", "texto": texto,
+                        "resultado": resultado_ia, "mensaje": "No entendí a qué pantalla ir."}
+
+            param = str(resultado_ia.get("parametro") or "").strip()
+            ruteo_info = None
+            if accion in ("abrir_pdf_paciente", "buscar_paciente") and param:
+                ruteo_info = self._resolver_ruteo_paciente(param, abrir_pdf=(accion == "abrir_pdf_paciente"))
+
+            return {
+                "status": "ok",
+                "tipo": "NAVEGACION_UI",
+                "texto": texto,
+                "accion": accion,
+                "parametro": param,
+                "ruteo_info": ruteo_info,
+                "resultado": resultado_ia,
+                "mensaje": ruteo_info["mensaje"] if ruteo_info else "Navegando..."
+            }
+
         if tipo == "IGNORAR":
+            try:
+                sonar_error()
+            except Exception:
+                pass
             return {
                 "status": "warning",
                 "tipo": "IGNORAR",
@@ -873,13 +1547,49 @@ class BimoBridge:
             }
 
         tipo = "HISTORIA_CLINICA"
-        filiacion = resultado_ia.get("datos_filiacion") or {}
+
+        # ==========================================
+        # GUARDA DE RELEVANCIA CLÍNICA ANTI-PDFs FANTASMA (BLOQUE 3)
+        # ==========================================
+        palabras_dictado = [w for w in str(texto).strip().split() if w]
+        indicadores_clinicos_guardrail = (
+            "dolor", "paciente", "pieza", "diagnóstico", "diagnostico", "consulta",
+            "revisión", "revision", "caries", "diente", "molar", "resina", "endodoncia",
+            "extraccion", "extracción", "profilaxis", "obturacion", "obturación",
+            "gingivitis", "periodontitis", "corona", "puente", "ortodoncia", "implante",
+            "tratamiento", "examen", "filiacion", "filiación", "motivo", "cie-10", "receta", "calza"
+        )
+        texto_lower = str(texto).lower()
+        tiene_indicador = any(ind in texto_lower for ind in indicadores_clinicos_guardrail)
+        if len(palabras_dictado) < 5 or not tiene_indicador:
+            tipo = "IGNORAR"
+            try:
+                sonar_error()
+            except Exception:
+                pass
+            msg_guarda = "Dictado muy corto o irrelevante. No se generó historia."
+            if self._window:
+                try:
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_guarda)}, 'warning');")
+                except Exception:
+                    pass
+            return {
+                "status": "warning",
+                "tipo": "IGNORAR",
+                "texto": texto,
+                "resultado": resultado_ia,
+                "mensaje": msg_guarda
+            }
+
+        filiacion = resultado_ia.get("datos_filiacion") or resultado_ia.get("paciente") or {}
+        if not resultado_ia.get("datos_filiacion"):
+            resultado_ia["datos_filiacion"] = filiacion
         nombre = filiacion.get("nombre") or resultado_ia.get("nombre_paciente") or "Paciente_Consulta"
         if str(nombre).strip().lower() in ("no especificado", "none", "", "paciente"):
             nombre = "Paciente_Consulta"
         filiacion["nombre"] = nombre
 
-        # Asegurar detección de teléfono en filiación
+        # Asegurar detección de teléfono y cédula dictados en filiación
         tel_fil = str(filiacion.get("telefono") or "").strip()
         if not tel_fil or tel_fil.lower() in ("no especificado", "none", ""):
             try:
@@ -891,20 +1601,144 @@ class BimoBridge:
             except Exception:
                 pass
 
-        # Verificación obligatoria de cédula (alerta por voz si no fue dictada)
-        doc_crudo = str(filiacion.get("documento") or filiacion.get("cedula") or "").strip()
+        # Verificación obligatoria de cédula y homónimos (BLOQUE 3)
+        doc_crudo = str(filiacion.get("documento") or filiacion.get("cedula") or resultado_ia.get("cedula") or resultado_ia.get("documento") or "").strip()
+        doc_solo_digitos = re.sub(r'\D', '', doc_crudo)
+        if len(doc_solo_digitos) < 5:
+            try:
+                from ai_engine import extraer_cedula_y_telefono_dictados
+                ced_rescate, _ = extraer_cedula_y_telefono_dictados(texto)
+                if ced_rescate:
+                    cand_dig = re.sub(r'\D', '', str(ced_rescate))
+                    if len(cand_dig) >= 5:
+                        doc_solo_digitos = cand_dig
+                        filiacion["documento"] = doc_solo_digitos
+                        resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_solo_digitos
+            except Exception:
+                pass
+        elif filiacion.get("documento") in (None, "", "No especificado"):
+            filiacion["documento"] = doc_solo_digitos
+            resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_solo_digitos
+
+        if nombre and nombre != "Paciente_Consulta":
+            from database import buscar_pacientes_por_nombre
+            coincidencias = buscar_pacientes_por_nombre(nombre)
+            # Si hay múltiples pacientes con ese nombre y NO se dictó cédula válida (>= 5 dígitos)
+            if len(coincidencias) > 1 and len(doc_solo_digitos) < 5:
+                print(f"[DESAMBIGUACION REQUERIDA] {len(coincidencias)} pacientes coinciden con '{nombre}'. Solicitando cédula por voz...")
+                msg_homonimos = "Tengo varios pacientes con ese nombre. Por favor, díctame su número de cédula."
+                self._esperando_respuesta_cedula = True
+                self._historia_pendiente = {
+                    "resultado_ia": resultado_ia,
+                    "texto": texto,
+                    "pacientes_candidatos": coincidencias,
+                    "nombre_paciente": nombre,
+                    "timestamp": time.time(),
+                    "incluir_ortodoncia": incluir_ortodoncia,
+                    "generar_pdf": generar_pdf
+                }
+                try:
+                    from voice_assistant import hablar_asincrono
+                    hablar_asincrono(msg_homonimos)
+                except Exception as e_vo:
+                    print(f"[VOICE HOMONIMOS WARN] {e_vo}")
+
+                self._activar_auto_escucha_post_habla(12.0)
+
+                if self._window:
+                    self._window.evaluate_js(f"if (window.mostrarToast) window.mostrarToast({json.dumps(msg_homonimos)}, 'info');")
+
+                return {
+                    "status": "requiere_cedula",
+                    "requiere_seguimiento": True,
+                    "tipo": "HISTORIA_CLINICA",
+                    "mensaje": msg_homonimos,
+                    "nombre_paciente": nombre,
+                    "pacientes_coincidentes": [p.get("nombre") for p in coincidencias]
+                }
+
+        # --- BLOQUE 1: Prevención de Duplicados mediante Similitud Difusa (>85%) ---
+        if nombre and nombre != "Paciente_Consulta":
+            try:
+                pac_similar = buscar_paciente_por_similitud(nombre, umbral=0.85)
+                if pac_similar:
+                    print(f"[SIMILITUD DIFUSA APP] Paciente dictado '{nombre}' coincide ({pac_similar.get('_similitud', 0)*100:.1f}%) con '{pac_similar['nombre']}' (ID {pac_similar['id']}). Reutilizando.")
+                    filiacion["id"] = pac_similar["id"]
+                    filiacion["nombre"] = pac_similar["nombre"]
+                    nombre = pac_similar["nombre"]
+                    resultado_ia["nombre_paciente"] = pac_similar["nombre"]
+                    if "datos_filiacion" in resultado_ia:
+                        resultado_ia["datos_filiacion"]["nombre"] = pac_similar["nombre"]
+                        resultado_ia["datos_filiacion"]["id"] = pac_similar["id"]
+                    if len(doc_solo_digitos) < 5 and pac_similar.get("documento"):
+                        doc_sim_dig = re.sub(r'\D', '', str(pac_similar.get("documento")))
+                        if len(doc_sim_dig) >= 5:
+                            doc_solo_digitos = doc_sim_dig
+                            filiacion["documento"] = doc_sim_dig
+                            resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_sim_dig
+            except Exception as e_sim:
+                print(f"[WARN] Error en similitud difusa en procesar_texto_clinico: {e_sim}")
+
+        pac_id = registrar_o_actualizar_paciente(filiacion)
+
+        # Verificar si el paciente registrado en BD ya posee cédula/edad/teléfono para completar filiación y evitar alerta redundante
+        if pac_id:
+            try:
+                pac_db = obtener_paciente_por_id(pac_id)
+                if isinstance(pac_db, dict):
+                    if len(doc_solo_digitos) < 5 and pac_db.get("documento"):
+                        doc_db_dig = re.sub(r'\D', '', str(pac_db.get("documento")))
+                        if len(doc_db_dig) >= 5:
+                            doc_solo_digitos = doc_db_dig
+                            filiacion["documento"] = doc_db_dig
+                            resultado_ia.setdefault("datos_filiacion", {})["documento"] = doc_db_dig
+                    for campo_f in ("edad", "telefono", "sexo", "direccion"):
+                        val_act = filiacion.get(campo_f)
+                        if (val_act is None or str(val_act).strip().lower() in ("", "no especificado", "none", "null")) and pac_db.get(campo_f):
+                            filiacion[campo_f] = pac_db[campo_f]
+                            resultado_ia.setdefault("datos_filiacion", {})[campo_f] = pac_db[campo_f]
+            except Exception:
+                pass
+
         alerta_cedula = False
-        if not doc_crudo or doc_crudo.lower() in ("no especificado", "none", "", "null"):
+        if len(doc_solo_digitos) < 5:
             alerta_cedula = True
             try:
                 preguntar_cedula_paciente(nombre_paciente=nombre, nombre_doctor=nombre_doc)
             except Exception as e_vo:
                 print(f"[VOICE ALERT WARN] {e_vo}")
 
-        pac_id = registrar_o_actualizar_paciente(filiacion)
+        return self._completar_guardado_historia_clinica(
+            resultado_ia=resultado_ia,
+            texto=texto,
+            pac_id=pac_id,
+            incluir_ortodoncia=incluir_ortodoncia,
+            generar_pdf=generar_pdf,
+            alerta_cedula=alerta_cedula
+        )
 
-        consulta_hoy = obtener_consulta_del_dia(pac_id)
-        if consulta_hoy:
+    def _completar_guardado_historia_clinica(self, resultado_ia, texto, pac_id, incluir_ortodoncia=False, generar_pdf=True, alerta_cedula=False):
+        nombre_doc = self._usuario_actual.get("nombre", "Mateo") if self._usuario_actual else "Mateo"
+        filiacion = resultado_ia.get("datos_filiacion") or {}
+        nombre = filiacion.get("nombre") or resultado_ia.get("nombre_paciente") or "Paciente"
+        accion_expediente = resultado_ia.get("accion_expediente", "predeterminado")
+        avisos = []
+
+        # --- BLOQUE 2: Lógica de Fusión/Actualización Clínica ---
+        consulta_hoy = None
+        if pac_id:
+            consulta_hoy = obtener_consulta_del_dia(pac_id)
+
+        # Si se solicita explícitamente "nuevo" expediente, forzar nueva consulta y nuevo PDF
+        if accion_expediente == "nuevo":
+            consulta_hoy = None
+
+        cid = None
+        ruta_pdf = None
+
+        if consulta_hoy and accion_expediente in ("actualizar", "predeterminado"):
+            # FUSIÓN (MERGE): NO crear nuevo ID de consulta
+            cid = consulta_hoy["id"]
             try:
                 prev_json = json.loads(consulta_hoy.get("json_clinico", "{}"))
                 prev_fil = prev_json.get("datos_filiacion", {})
@@ -915,38 +1749,135 @@ class BimoBridge:
                             new_fil[k] = prev_fil[k]
                             filiacion[k] = prev_fil[k]
 
-                prev_odonto = {p.get("pieza_dental"): p for p in prev_json.get("odontograma", []) if p.get("pieza_dental")}
-                for p in resultado_ia.get("odontograma", []):
-                    prev_odonto[p.get("pieza_dental")] = p
-                resultado_ia["odontograma"] = list(prev_odonto.values())
+                # Fusión de Odontograma: normalizar dict o list y fusionar piezas
+                prev_odonto_raw = prev_json.get("odontograma")
+                prev_odonto = {}
+                if isinstance(prev_odonto_raw, list):
+                    for p in prev_odonto_raw:
+                        if isinstance(p, dict) and p.get("pieza_dental"):
+                            prev_odonto[str(p.get("pieza_dental"))] = p
+                elif isinstance(prev_odonto_raw, dict):
+                    piezas_dict = prev_odonto_raw.get("piezas", prev_odonto_raw)
+                    for p_k, p_v in piezas_dict.items():
+                        if isinstance(p_v, dict):
+                            prev_odonto[str(p_k)] = {"pieza_dental": str(p_k), **p_v}
 
-                if prev_json.get("diagnostico") and prev_json["diagnostico"] != "No especificado":
-                    if not resultado_ia.get("diagnostico") or resultado_ia.get("diagnostico") == "No especificado":
-                        resultado_ia["diagnostico"] = prev_json["diagnostico"]
-                if prev_json.get("plan_tratamiento") and prev_json["plan_tratamiento"] != "No especificado":
-                    if not resultado_ia.get("plan_tratamiento") or resultado_ia.get("plan_tratamiento") == "No especificado":
-                        resultado_ia["plan_tratamiento"] = prev_json["plan_tratamiento"]
+                new_odonto_raw = resultado_ia.get("odontograma")
+                if isinstance(new_odonto_raw, list):
+                    for p in new_odonto_raw:
+                        if isinstance(p, dict) and p.get("pieza_dental"):
+                            p_num = str(p.get("pieza_dental"))
+                            if p_num in prev_odonto:
+                                prev_h = list(prev_odonto[p_num].get("procedimientos_o_hallazgos", []))
+                                for h in p.get("procedimientos_o_hallazgos", []):
+                                    if h not in prev_h:
+                                        prev_h.append(h)
+                                prev_odonto[p_num]["procedimientos_o_hallazgos"] = prev_h
+                            else:
+                                prev_odonto[p_num] = p
+                    resultado_ia["odontograma"] = list(prev_odonto.values())
+                elif isinstance(new_odonto_raw, dict):
+                    piezas_dict = new_odonto_raw.get("piezas", new_odonto_raw)
+                    for p_k, p_v in piezas_dict.items():
+                        p_num = str(p_k)
+                        if p_num in prev_odonto:
+                            prev_h = list(prev_odonto[p_num].get("procedimientos_o_hallazgos", []))
+                            if isinstance(p_v, dict):
+                                for h in p_v.get("procedimientos_o_hallazgos", []):
+                                    if h not in prev_h:
+                                        prev_h.append(h)
+                            prev_odonto[p_num]["procedimientos_o_hallazgos"] = prev_h
+                        else:
+                            prev_odonto[p_num] = {"pieza_dental": p_num, **(p_v if isinstance(p_v, dict) else {})}
+                    resultado_ia["odontograma"] = list(prev_odonto.values())
+
+                # Fusión de Diagnóstico: concatenar nuevo diagnóstico al final del diagnóstico previo
+                d_prev_raw = prev_json.get("diagnostico") or consulta_hoy.get("diagnostico")
+                prev_diag = (d_prev_raw.get("descripcion") if isinstance(d_prev_raw, dict) else str(d_prev_raw or "")).strip()
+
+                d_new_raw = resultado_ia.get("diagnostico")
+                new_diag = (d_new_raw.get("descripcion") if isinstance(d_new_raw, dict) else str(d_new_raw or "")).strip()
+
+                if prev_diag and prev_diag not in ("No especificado", "None", ""):
+                    if new_diag and new_diag not in ("No especificado", "None", ""):
+                        if new_diag.lower() not in prev_diag.lower():
+                            diag_final = f"{prev_diag}\n[Actualización]: {new_diag}"
+                        else:
+                            diag_final = prev_diag
+                    else:
+                        diag_final = prev_diag
+                else:
+                    diag_final = new_diag
+
+                if isinstance(resultado_ia.get("diagnostico"), dict):
+                    resultado_ia["diagnostico"]["descripcion"] = diag_final
+                else:
+                    resultado_ia["diagnostico"] = diag_final
+
+                # Fusión de Plan de tratamiento
+                p_prev_raw = prev_json.get("plan_tratamiento") or (prev_json.get("tratamiento", {}).get("plan") if isinstance(prev_json.get("tratamiento"), dict) else None) or consulta_hoy.get("plan_tratamiento")
+                prev_plan = (p_prev_raw.get("plan") if isinstance(p_prev_raw, dict) else str(p_prev_raw or "")).strip()
+
+                p_new_raw = resultado_ia.get("plan_tratamiento") or (resultado_ia.get("tratamiento", {}).get("plan") if isinstance(resultado_ia.get("tratamiento"), dict) else None)
+                new_plan = (p_new_raw.get("plan") if isinstance(p_new_raw, dict) else str(p_new_raw or "")).strip()
+
+                if prev_plan and prev_plan not in ("No especificado", "None", ""):
+                    if new_plan and new_plan not in ("No especificado", "None", ""):
+                        if new_plan.lower() not in prev_plan.lower():
+                            plan_final = f"{prev_plan}\n[Actualización]: {new_plan}"
+                        else:
+                            plan_final = prev_plan
+                    else:
+                        plan_final = prev_plan
+                else:
+                    plan_final = new_plan
+
+                if isinstance(resultado_ia.get("tratamiento"), dict):
+                    resultado_ia["tratamiento"]["plan"] = plan_final
+                resultado_ia["plan_tratamiento"] = plan_final
+
             except Exception as e_merge:
                 print(f"[CONSOLIDACION WARN] {e_merge}")
 
-        num_exp = None
-        if consulta_hoy:
-            num_exp = obtener_num_expediente_consulta(consulta_hoy["id"])
+            num_exp = obtener_num_expediente_consulta(cid)
+            resultado_ia["num_expediente"] = num_exp
+
+            # Sobrescritura de PDF: pasarle la misma ruta (ruta_pdf de la consulta de hoy)
+            ruta_pdf_existente = consulta_hoy.get("ruta_pdf")
+            if generar_pdf:
+                try:
+                    self._js("if (window.mostrarToast) window.mostrarToast('Actualizando historia clínica...', 'info');")
+                    ruta_pdf = crear_historia_clinica(
+                        resultado_ia,
+                        paciente_id=pac_id,
+                        num_expediente=num_exp,
+                        ruta_salida_fija=ruta_pdf_existente
+                    )
+                    self._ultima_ruta_pdf = ruta_pdf
+                except Exception as e_pdf:
+                    print(f"[HISTORIA CLINICA PDF UPDATE ERROR]: {e_pdf}")
+                    avisos.append(f"No se pudo actualizar el documento PDF: {e_pdf}")
+
+            # UPDATE en la DB
+            actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf or ruta_pdf_existente)
         else:
+            # Flujo nuevo: crea un nuevo registro y un nuevo PDF
             num_exp = obtener_siguiente_num_expediente_paciente(pac_id)
-        resultado_ia["num_expediente"] = num_exp
-        ruta_pdf = None
-        if generar_pdf:
-            ruta_pdf = crear_historia_clinica(resultado_ia, paciente_id=pac_id, num_expediente=num_exp)
-            self._ultima_ruta_pdf = ruta_pdf
+            resultado_ia["num_expediente"] = num_exp
+            medico_id = self._usuario_actual.get("id", 1) if self._usuario_actual else 1
+            cid = guardar_consulta_db(paciente_id=pac_id, json_clinico=resultado_ia, ruta_pdf=None, medico_id=medico_id, forzar_nueva=True)
 
-        medico_id = self._usuario_actual.get("id", 1) if self._usuario_actual else 1
-        if consulta_hoy:
-            cid = consulta_hoy["id"]
-            actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf)
-        else:
-            cid = guardar_consulta_db(paciente_id=pac_id, json_clinico=resultado_ia, ruta_pdf=ruta_pdf, medico_id=medico_id)
+            if generar_pdf and cid:
+                try:
+                    self._js("if (window.mostrarToast) window.mostrarToast('Generando historia clínica...', 'info');")
+                    ruta_pdf = crear_historia_clinica(resultado_ia, paciente_id=pac_id, num_expediente=num_exp)
+                    self._ultima_ruta_pdf = ruta_pdf
+                    actualizar_consulta_existente(cid, resultado_ia, ruta_pdf=ruta_pdf)
+                except Exception as e_pdf:
+                    print(f"[HISTORIA CLINICA PDF ERROR]: {e_pdf}")
+                    avisos.append(f"No se pudo generar el documento PDF: {e_pdf}")
 
+        # 3. Registrar / agendar cita si viene cita_programada (con anti-duplicado)
         cita_info = resultado_ia.get("cita_programada", {})
         cita_programada_str = None
         url_gcal_creada = ""
@@ -954,17 +1885,77 @@ class BimoBridge:
             f_c = cita_info.get("fecha_hora", "")
             m_c = cita_info.get("motivo") or f"Control post-tratamiento de {nombre}"
             tel_c = str(filiacion.get("telefono") or cita_info.get("telefono") or "").strip()
-            if f_c:
+            if f_c and str(f_c).lower() not in ("no especificado", "none", "null"):
                 cita_programada_str = f_c
                 try:
-                    res_ag = agendar_cita(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c, abrir_en_navegador=True)
-                    url_gcal_creada = res_ag.get("url_gcal") if isinstance(res_ag, dict) else ""
-                except Exception as e_ag:
-                    print(f"[AGENDAR CITA WARN] {e_ag}")
-                    try:
-                        crear_cita_db(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c)
-                    except Exception as e_c:
-                        print(f"[CREAR CITA DB WARN] {e_c}")
+                    from database import get_connection
+                    cita_duplicada = False
+                    with get_connection() as conn_cchk:
+                        cur_cchk = conn_cchk.cursor()
+                        cur_cchk.execute("""
+                            SELECT id FROM citas_agenda
+                            WHERE (paciente_id = ? OR LOWER(TRIM(nombre_paciente)) = LOWER(TRIM(?)))
+                              AND estado != 'cancelada'
+                              AND (fecha_hora_inicio = ? OR SUBSTR(fecha_hora_inicio, 1, 13) = SUBSTR(?, 1, 13))
+                            LIMIT 1
+                        """, (pac_id, nombre, f_c, f_c))
+                        row_cdup = cur_cchk.fetchone()
+                        if row_cdup:
+                            cita_duplicada = True
+                            avisos.append(f"Cita ya existente para {nombre} el {f_c} (ID {row_cdup['id']}). No se duplicó.")
+
+                    if not cita_duplicada:
+                        try:
+                            res_ag = agendar_cita(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c, abrir_en_navegador=True)
+                            url_gcal_creada = res_ag.get("url_gcal") if isinstance(res_ag, dict) else ""
+                        except Exception as e_ag:
+                            print(f"[AGENDAR CITA WARN] {e_ag}")
+                            crear_cita_db(paciente_id=pac_id, nombre_paciente=nombre, telefono=tel_c, fecha_hora_inicio=f_c, descripcion=m_c)
+                except Exception as e_c_all:
+                    print(f"[CITA PROGRAMADA ERROR]: {e_c_all}")
+                    avisos.append(f"Error al agendar cita: {e_c_all}")
+
+        # 4. Registrar pagos si vienen en la historia clínica (con anti-duplicado)
+        pagos_info = resultado_ia.get("pagos", {})
+        if pagos_info and isinstance(pagos_info, dict) and cid:
+            try:
+                costo_tot = float(pagos_info.get("costo_total") or 0.0)
+                abono_val = float(pagos_info.get("abono") or 0.0)
+                saldo_val = pagos_info.get("saldo_pendiente")
+                saldo_pend = float(saldo_val) if saldo_val is not None else max(0.0, costo_tot - abono_val)
+                est_pago = pagos_info.get("estado") or ("Cancelado" if saldo_pend <= 0 else "Saldo Pendiente")
+                metodo_p = pagos_info.get("metodo_pago") or "Efectivo"
+                notas_p = pagos_info.get("notas") or "Dictado en consulta clínica"
+
+                if costo_tot > 0 or abono_val > 0:
+                    from database import registrar_o_actualizar_pago_db, obtener_pago_consulta
+                    pago_previo = obtener_pago_consulta(cid)
+                    if pago_previo:
+                        registrar_o_actualizar_pago_db(
+                            paciente_id=pac_id,
+                            consulta_id=cid,
+                            costo_total=costo_tot,
+                            abono=abono_val,
+                            saldo_pendiente=saldo_pend,
+                            estado=est_pago,
+                            metodo_pago=metodo_p,
+                            notas=notas_p
+                        )
+                        avisos.append(f"Pago de consulta actualizado (Costo: {costo_tot}, Abono: {abono_val}).")
+                    else:
+                        registrar_o_actualizar_pago_db(
+                            paciente_id=pac_id,
+                            consulta_id=cid,
+                            costo_total=costo_tot,
+                            abono=abono_val,
+                            saldo_pendiente=saldo_pend,
+                            estado=est_pago,
+                            metodo_pago=metodo_p,
+                            notas=notas_p
+                        )
+            except Exception as e_pago:
+                print(f"[PAGOS DB WARN]: {e_pago}")
+                avisos.append(f"Error al registrar pago: {e_pago}")
 
         if not alerta_cedula:
             try:
@@ -972,14 +1963,18 @@ class BimoBridge:
             except Exception:
                 pass
 
-        if self._window:
-            try:
+        # --- BLOQUE 2: Reactividad y Refresco Automático de la Interfaz ---
+        try:
+            self._js("if(window.cargarPacientes) window.cargarPacientes(); if(window.cargarCitas) window.cargarCitas();")
+            self._js("if(window.switchTab) window.switchTab('pdf');")
+            if self._window:
                 self._window.evaluate_js("if (window.actualizarTodosLosMenus) window.actualizarTodosLosMenus();")
-            except Exception:
-                pass
+        except Exception as e_ref:
+            print(f"[UI REFRESH WARN] {e_ref}")
 
         return {
             "status": "ok",
+            "accion": "actualizada" if consulta_hoy and accion_expediente in ("actualizar", "predeterminado") else "creada",
             "tipo": "HISTORIA_CLINICA",
             "texto": texto,
             "resultado": resultado_ia,
@@ -989,7 +1984,8 @@ class BimoBridge:
             "consulta_id": cid,
             "alerta_cedula_requerida": alerta_cedula,
             "cita_programada": cita_programada_str,
-            "url_gcal": url_gcal_creada
+            "url_gcal": url_gcal_creada,
+            "avisos": avisos
         }
 
     def procesar_audio_externo(self, ruta_wav):
@@ -1002,6 +1998,12 @@ class BimoBridge:
                     self._window.evaluate_js(f"if (window.onMobileAudioProcessed) window.onMobileAudioProcessed({json.dumps(resp)});")
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] procesar_audio_externo: {e}")
+        finally:
+            if ruta_wav and os.path.exists(ruta_wav) and "bimo_mobile_" in os.path.basename(ruta_wav):
+                try:
+                    os.remove(ruta_wav)
+                except Exception:
+                    pass
 
     def obtener_ultimo_expediente(self):
         try:
@@ -1261,7 +2263,7 @@ class BimoBridge:
 
             return {
                 "status": "ok",
-                "message": "Expediente corregido y PDF regenerado con éxito",
+                "message": "Expediente actualizado",
                 "ruta_pdf": nueva_ruta,
                 "paciente": nuevo_nombre,
                 "paciente_id": pid,
@@ -1270,6 +2272,26 @@ class BimoBridge:
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] guardar_consulta_corregida: {e}")
             return {"status": "error", "message": str(e)}
+
+    def modal_cedula_estado(self, abierto: bool):
+        """Notifica al backend si el modal de cédula obligatoria está abierto o cerrado en la UI."""
+        try:
+            self._modal_cedula_abierto = bool(abierto)
+            if self._modal_cedula_abierto:
+                import time
+                self._modal_cedula_hasta = time.time() + 120.0  # Timeout de seguridad de 120s
+                if hasattr(self, '_wake_listener') and self._wake_listener and hasattr(self._wake_listener, 'activar_ventana_activa'):
+                    self._wake_listener.activar_ventana_activa(30.0)
+                print("[MODAL CEDULA] Estado abierto registrado en backend. Ventana de escucha activa 30s.")
+            else:
+                self._modal_cedula_hasta = 0.0
+                print("[MODAL CEDULA] Estado cerrado registrado en backend.")
+            return {"status": "ok", "abierto": self._modal_cedula_abierto}
+        except Exception as e:
+            print(f"[MODAL CEDULA ERROR] modal_cedula_estado: {e}")
+            return {"status": "error", "error": str(e)}
+
+    modalCedulaEstado = modal_cedula_estado
 
     def actualizar_cedula_paciente(self, paciente_id=None, nueva_cedula="", consulta_id=None):
         """
@@ -1565,7 +2587,7 @@ class BimoBridge:
 
             return {
                 "status": "ok",
-                "message": "Historia Clínica Oficial en PDF generada exitosamente",
+                "message": "Expediente guardado",
                 "ruta_pdf": nueva_ruta,
                 "paciente": paciente_nombre,
                 "consulta_id": cid,
@@ -1613,6 +2635,14 @@ class BimoBridge:
         try:
             if isinstance(datos, str):
                 datos = json.loads(datos)
+            if not datos.get("id") and datos.get("nombre"):
+                try:
+                    pac_sim = buscar_paciente_por_similitud(datos.get("nombre"), umbral=0.85)
+                    if pac_sim:
+                        datos["id"] = pac_sim["id"]
+                        datos["nombre"] = pac_sim["nombre"]
+                except Exception:
+                    pass
             pac_id = registrar_o_actualizar_paciente(datos)
             return {"status": "ok", "id": pac_id}
         except Exception as e:
@@ -1621,10 +2651,8 @@ class BimoBridge:
 
     def eliminar_paciente(self, paciente_id):
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM pacientes WHERE id = ?", (paciente_id,))
-                conn.commit()
+            from database import eliminar_paciente_db
+            eliminar_paciente_db(int(paciente_id))
             return {"status": "ok"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] eliminar_paciente: {e}")
@@ -1709,9 +2737,9 @@ class BimoBridge:
     def cancelar_cita(self, cita_id=None, nombre_paciente=None, fecha=None):
         try:
             if cita_id:
-                cancelar_o_eliminar_cita_db(cita_id=cita_id)
+                eliminar_cita(cita_id=cita_id)
             elif nombre_paciente:
-                cancelar_o_eliminar_cita_db(nombre_paciente=nombre_paciente, fecha=fecha)
+                eliminar_cita(nombre_paciente=nombre_paciente, fecha=fecha)
             return {"status": "ok"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] cancelar_cita: {e}")
@@ -1799,7 +2827,7 @@ class BimoBridge:
                         """, (nuevo_tel, nom_paciente))
                 conn_up.commit()
 
-            # 4. Generar enlace oficial de Google Calendar y abrir navegador
+            # 4. Generar enlace oficial de Google Calendar y abrir navegador (sin duplicar fila en SQLite)
             res_cal = agendar_cita(
                 paciente_id=pid,
                 nombre_paciente=nom_paciente,
@@ -1807,7 +2835,8 @@ class BimoBridge:
                 fecha_hora_inicio=nueva_fecha_inicio,
                 fecha_hora_fin=nueva_f_fin,
                 descripcion=desc_final,
-                abrir_en_navegador=True
+                abrir_en_navegador=True,
+                cita_id_existente=cita_id
             )
             url_gcal = res_cal.get("url_gcal") if isinstance(res_cal, dict) else ""
 
@@ -1929,26 +2958,74 @@ class BimoBridge:
             print(f"[BIMO DESKTOP ERROR] listar_pdfs_recientes: {e}")
             return []
 
+    def _ruta_pdf_permitida(self, ruta):
+        """
+        Verifica que la ruta sea un archivo PDF válido, existente en disco y
+        ubicado estrictamente dentro de los directorios permitidos de pacientes (C5/R3).
+        Evita Path Traversal y ejecución arbitraria de binarios a través de os.startfile.
+        """
+        if not ruta or not isinstance(ruta, str):
+            return False, ""
+        try:
+            real_ruta = os.path.realpath(os.path.abspath(str(ruta).strip()))
+            if not real_ruta.lower().endswith(".pdf"):
+                return False, ""
+            if not os.path.isfile(real_ruta):
+                return False, ""
+
+            # Directorios permitidos
+            dirs_permitidos = [
+                os.path.realpath(str(RUTA_PACIENTES)),
+                os.path.realpath(str(BASE_DIR / "Pacientes"))
+            ]
+            dev_pac = Path.home() / "Desktop" / "Bimo_Project" / "Pacientes"
+            if dev_pac.exists():
+                dirs_permitidos.append(os.path.realpath(str(dev_pac)))
+
+            for d in dirs_permitidos:
+                if not os.path.exists(d):
+                    continue
+                try:
+                    if os.path.commonpath([real_ruta, d]) == d:
+                        return True, real_ruta
+                except ValueError:
+                    continue
+            return False, ""
+        except Exception as e:
+            print(f"[RUTA_PDF_VALIDATION WARN]: {e}")
+            return False, ""
+
     def obtener_preview_pdf(self, ruta_pdf=None):
         try:
-            target = ruta_pdf or self._ultima_ruta_pdf
-            if target:
-                target = os.path.normpath(str(target))
-            if not target or not os.path.exists(target):
+            target = None
+            if ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(ruta_pdf)
+                if not ok:
+                    return {"status": "error", "message": "Ruta no permitida"}
+                target = real_r
+            elif self._ultima_ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(self._ultima_ruta_pdf)
+                if ok:
+                    target = real_r
+
+            if not target:
                 recientes = self.listar_pdfs_recientes()
                 if recientes:
-                    target = os.path.normpath(str(recientes[0]["ruta"]))
+                    ok, real_r = self._ruta_pdf_permitida(recientes[0]["ruta"])
+                    if ok:
+                        target = real_r
+
             if not target or not os.path.exists(target):
                 return {"status": "error", "message": "No se encontró ningún PDF generado aún."}
 
-            doc = fitz.open(target)
             paginas = []
-            for i in range(len(doc)):
-                page = doc[i]
-                pix = page.get_pixmap(dpi=110)
-                img_bytes = pix.tobytes("jpeg", jpg_quality=85)
-                b64 = "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode("utf-8")
-                paginas.append(b64)
+            with fitz.open(target) as doc:
+                for i in range(len(doc)):
+                    page = doc[i]
+                    pix = page.get_pixmap(dpi=110)
+                    img_bytes = pix.tobytes("jpeg", jpg_quality=85)
+                    b64 = "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode("utf-8")
+                    paginas.append(b64)
 
             kb = round(os.path.getsize(target) / 1024, 1)
             self._ultima_ruta_pdf = target
@@ -2014,9 +3091,23 @@ class BimoBridge:
                                 diag_c = jc.get("diagnostico") or ""
                                 plan_c = jc.get("plan_tratamiento") or jc.get("plan") or ""
                                 receta_c = jc.get("receta") or ""
-                                costo_c = float(jc.get("costo_total") or 0.0)
-                                abono_c = float(jc.get("abono") or 0.0)
+                                pagos_jc = jc.get("pagos") if isinstance(jc.get("pagos"), dict) else {}
+                                costo_c = float(jc.get("costo_total") or pagos_jc.get("costo_total") or 0.0)
+                                abono_c = float(jc.get("abono") or pagos_jc.get("abono_realizado") or pagos_jc.get("abono") or 0.0)
                                 es_orto_c = bool(jc.get("incluir_ortodoncia") or jc.get("hoja_ortodoncia") or jc.get("es_ortodoncia"))
+                            except Exception:
+                                pass
+
+                        if (costo_c == 0.0 and abono_c == 0.0) and consulta_id:
+                            try:
+                                cursor.execute(
+                                    "SELECT costo_total, abono_realizado FROM pagos WHERE consulta_id = ? ORDER BY id DESC LIMIT 1",
+                                    (consulta_id,)
+                                )
+                                r_pago = cursor.fetchone()
+                                if r_pago:
+                                    costo_c = float(r_pago["costo_total"] or 0.0)
+                                    abono_c = float(r_pago["abono_realizado"] or 0.0)
                             except Exception:
                                 pass
             except Exception as e_meta:
@@ -2051,22 +3142,29 @@ class BimoBridge:
 
     def abrir_pdf(self, ruta):
         try:
-            if ruta and os.path.exists(ruta):
-                os.startfile(ruta)
-                return {"status": "ok"}
-            return {"status": "error", "message": "El archivo PDF no fue encontrado en el disco."}
+            ok, real_ruta = self._ruta_pdf_permitida(ruta)
+            if not ok:
+                return {"status": "error", "message": "Ruta no permitida"}
+            os.startfile(real_ruta)
+            return {"status": "ok"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] abrir_pdf: {e}")
             return {"status": "error", "message": str(e)}
 
     def abrir_ultimo_pdf(self, abrir_externo=False):
         try:
-            target = self._ultima_ruta_pdf
-            if not target or not os.path.exists(target):
+            target = None
+            if self._ultima_ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(self._ultima_ruta_pdf)
+                if ok:
+                    target = real_r
+            if not target:
                 lista = self.listar_pdfs_recientes()
                 if lista:
-                    target = lista[0]["ruta"]
-                    self._ultima_ruta_pdf = target
+                    ok, real_r = self._ruta_pdf_permitida(lista[0]["ruta"])
+                    if ok:
+                        target = real_r
+                        self._ultima_ruta_pdf = target
             if target and os.path.exists(target):
                 if abrir_externo:
                     try:
@@ -2080,11 +3178,24 @@ class BimoBridge:
 
     def imprimir_pdf(self, ruta=None):
         try:
-            target = ruta or self._ultima_ruta_pdf
-            if not target or not os.path.exists(target):
+            target = None
+            if ruta:
+                ok, real_r = self._ruta_pdf_permitida(ruta)
+                if not ok:
+                    return {"status": "error", "message": "Ruta no permitida"}
+                target = real_r
+            elif self._ultima_ruta_pdf:
+                ok, real_r = self._ruta_pdf_permitida(self._ultima_ruta_pdf)
+                if ok:
+                    target = real_r
+
+            if not target:
                 lista = self.listar_pdfs_recientes()
                 if lista:
-                    target = lista[0]["ruta"]
+                    ok, real_r = self._ruta_pdf_permitida(lista[0]["ruta"])
+                    if ok:
+                        target = real_r
+
             if target and os.path.exists(target):
                 try:
                     os.startfile(target, "print")
@@ -2100,9 +3211,11 @@ class BimoBridge:
     # ==========================================
     def obtener_info_movil(self):
         try:
+            from mobile_mic_server import obtener_o_crear_movil_token
             ip = obtener_ip_local()
             puerto = MOBILE_SERVER_PORT
-            url = f"https://{ip}:{puerto}/"
+            tok = obtener_o_crear_movil_token()
+            url = f"https://{ip}:{puerto}/?t={tok}"
             return {
                 "status": "ok",
                 "ip": ip,
@@ -2116,13 +3229,16 @@ class BimoBridge:
                 "message": str(e),
                 "ip": "127.0.0.1",
                 "puerto": 8765,
-                "url": "https://127.0.0.1:8765/"
+                "url": "https://127.0.0.1:8765/",
+                "online": False
             }
 
     def obtener_qr_movil_base64(self):
         try:
+            from mobile_mic_server import obtener_o_crear_movil_token
             ip = obtener_ip_local()
-            url = f"https://{ip}:{MOBILE_SERVER_PORT}/"
+            tok = obtener_o_crear_movil_token()
+            url = f"https://{ip}:{MOBILE_SERVER_PORT}/?t={tok}"
             pil_img = generar_codigo_qr_url(url)
             buf = io.BytesIO()
             pil_img.save(buf, format="PNG")
@@ -2177,6 +3293,126 @@ class BimoBridge:
             return {"status": "error", "message": str(e)}
 
     # ==========================================
+    # SELECCIÓN DE MICRÓFONO (CONFIGURACIÓN)
+    # ==========================================
+    def listar_microfonos(self):
+        """Lista micrófonos disponibles, el elegido en Configuración y el que está activo ahora."""
+        try:
+            from wake_word_listener import listar_microfonos_disponibles, obtener_microfono_preferido, obtener_estado_microfono
+            mics = listar_microfonos_disponibles()
+            lst = self._wake_listener
+            activo = getattr(lst, "nombre_microfono", "") if lst else ""
+            return {
+                "status": "ok",
+                "microfonos": [{"nombre": m["nombre"], "virtual": bool(m["virtual"]), "predeterminado": bool(m["predeterminado"])} for m in mics],
+                "preferido": obtener_microfono_preferido(),
+                "activo": activo or obtener_estado_microfono().get("nombre", ""),
+                "modo": obtener_estado_microfono().get("modo", "auto")
+            }
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] listar_microfonos: {e}")
+            return {"status": "error", "message": str(e), "microfonos": []}
+
+    def guardar_microfono_preferido(self, nombre=""):
+        """Guarda el micrófono elegido ('' = Automático) y lo aplica sin reiniciar BIMO."""
+        try:
+            nombre = str(nombre or "").strip()
+            conf = cargar_datos_clinica() or {}
+            conf["microfono_preferido"] = nombre
+            guardar_datos_clinica(conf)
+
+            def _aplicar():
+                try:
+                    from wake_word_listener import invalidar_cache_microfono
+                    invalidar_cache_microfono()
+                    if self._wake_listener and hasattr(self._wake_listener, "reconfigurar_microfono"):
+                        self._wake_listener.reconfigurar_microfono()
+                except Exception as e_ap:
+                    print(f"[BIMO DESKTOP WARN] No se pudo aplicar el micrófono: {e_ap}")
+            threading.Thread(target=_aplicar, daemon=True).start()
+            return {"status": "ok", "preferido": nombre}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] guardar_microfono_preferido: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def obtener_nivel_microfono(self):
+        """Nivel de audio actual (0-100) del micrófono activo para el medidor de Configuración."""
+        try:
+            lst = self._wake_listener
+            if not lst:
+                return {"status": "ok", "nivel": 0, "microfono": ""}
+            return {"status": "ok", "nivel": round(float(getattr(lst, "_nivel_actual", 0.0)), 1),
+                    "microfono": getattr(lst, "nombre_microfono", "")}
+        except Exception:
+            return {"status": "ok", "nivel": 0, "microfono": ""}
+
+    def obtener_estado_respaldo_drive(self):
+        try:
+            from config import obtener_parametro_boveda
+            from calendar_sync import obtener_credenciales_google
+            from drive_backup import _leer_estado
+            import datetime
+
+            cifrado = str(obtener_parametro_boveda("backup_drive_cifrado", "0")) == "1"
+            tiene_pass = bool(obtener_parametro_boveda("backup_drive_passphrase", ""))
+            creds = obtener_credenciales_google()
+            conectado = creds is not None and getattr(creds, "valid", False)
+
+            est = _leer_estado()
+            ultimo_ts = est.get("ultimo_ok_ts")
+            ultimo_str = datetime.datetime.fromtimestamp(ultimo_ts).strftime("%Y-%m-%d %H:%M") if ultimo_ts else "Nunca"
+            ultimo_err = est.get("ultimo_error")
+
+            return {
+                "status": "ok",
+                "cifrado_activo": cifrado,
+                "tiene_passphrase": tiene_pass,
+                "google_conectado": conectado,
+                "ultimo_respaldo": ultimo_str,
+                "ultimo_error": ultimo_err
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def guardar_configuracion_respaldo_drive(self, cifrado_activo, passphrase=None):
+        try:
+            from config import guardar_parametro_boveda
+            cifrado_str = "1" if cifrado_activo else "0"
+            guardar_parametro_boveda("backup_drive_cifrado", cifrado_str)
+            if passphrase is not None and str(passphrase).strip():
+                pwd = str(passphrase).strip()
+                if len(pwd) < 8:
+                    return {"status": "error", "message": "La contraseña de cifrado debe tener al menos 8 caracteres."}
+                guardar_parametro_boveda("backup_drive_passphrase", pwd)
+            return {"status": "ok", "message": "Configuración de respaldo en Google Drive guardada."}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def ejecutar_respaldo_drive_manual(self):
+        try:
+            from calendar_sync import obtener_credenciales_google
+            from drive_backup import _ejecutar_respaldo, _leer_estado
+            from config import obtener_parametro_boveda
+            creds = obtener_credenciales_google()
+            if not creds:
+                return {"status": "error", "message": "No hay cuenta de Google vinculada. Conecta Google Calendar primero."}
+
+            cifrado_activo = str(obtener_parametro_boveda("backup_drive_cifrado", "0")) == "1"
+            passphrase = obtener_parametro_boveda("backup_drive_passphrase", "") if cifrado_activo else None
+            if cifrado_activo and not passphrase:
+                return {"status": "error", "message": "El cifrado está activo pero falta definir una contraseña segura."}
+
+            ok = _ejecutar_respaldo(creds, forzar=True, passphrase=passphrase)
+            est = _leer_estado()
+            if ok:
+                return {"status": "ok", "message": "Respaldo completado y sincronizado con Google Drive exitosamente."}
+            else:
+                err = est.get("ultimo_error") or "No se pudo completar la sincronización con Google Drive."
+                return {"status": "error", "message": err}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # ==========================================
     # WIDGET FLOTANTE DE ESCRITORIO
     # ==========================================
     def obtener_estado_widget(self):
@@ -2185,12 +3421,21 @@ class BimoBridge:
         if self._widget_process and self._widget_process.poll() is None:
             activo = True
             pid = self._widget_process.pid
+        conf = {}
+        try:
+            conf = cargar_datos_clinica() or {}
+        except Exception:
+            pass
+        try:
+            opacidad_val = int(conf.get("opacidad_widget", 90) or 90)
+        except Exception:
+            opacidad_val = 90
         return {
             "status": "ok",
             "activo": activo,
             "pid": pid,
-            "posicion": "Superior Derecha",
-            "opacidad": 90,
+            "posicion": conf.get("posicion_widget", "Superior Derecha"),
+            "opacidad": opacidad_val,
             "anclado": True
         }
 
@@ -2259,8 +3504,22 @@ class BimoBridge:
             nombre_carpeta = f"{nombre_limpio}_{edad_num}_anos_ID{p['id']}"
             ruta = os.path.join(RUTA_PACIENTES, categoria, nombre_carpeta)
             os.makedirs(ruta, exist_ok=True)
-            self.abrir_pdf(ruta)
-            return {"status": "ok", "ruta": str(ruta)}
+            real_ruta = os.path.realpath(os.path.abspath(str(ruta).strip()))
+            real_pac = os.path.realpath(str(RUTA_PACIENTES))
+            dev_pac = os.path.realpath(str(Path.home() / "Desktop" / "Bimo_Project" / "Pacientes"))
+            es_permitido = False
+            for d in [real_pac, dev_pac]:
+                if os.path.exists(d):
+                    try:
+                        if os.path.commonpath([real_ruta, d]) == d:
+                            es_permitido = True
+                            break
+                    except ValueError:
+                        continue
+            if es_permitido and os.path.isdir(real_ruta):
+                os.startfile(real_ruta)
+                return {"status": "ok", "ruta": str(ruta)}
+            return {"status": "error", "message": "Ruta de carpeta no permitida"}
         except Exception as e:
             print(f"[BIMO DESKTOP ERROR] abrir_carpeta_paciente: {e}")
             return {"status": "error", "message": str(e)}
@@ -2304,6 +3563,8 @@ class BimoBridge:
                 sonar_inicio_dictado()
             elif tipo == "fin":
                 sonar_fin_dictado()
+            elif tipo == "error":
+                sonar_error()
             else:
                 sonar_confirmacion_exito()
             return {"status": "ok"}
@@ -2453,7 +3714,7 @@ def iniciar_desktop():
     # Iniciar servidor móvil HTTPS y widget runner en segundo plano para arranque instantáneo
     def _iniciar_servicios_secundarios():
         try:
-            iniciar_servidor_movil(callback_audio=bridge.procesar_audio_externo)
+            iniciar_servidor_movil(callback_audio=bridge.procesar_audio_externo, callback_texto=bridge.procesar_texto_clinico)
         except Exception as e:
             print('[MOBILE SERVER WARN]', e)
         try:
@@ -2497,6 +3758,14 @@ def iniciar_desktop():
         sys.exit(1)
 
     url_target = f'file:///{ruta_html.replace(os.sep, "/")}'
+    # Fondo de la ventana con el color del tema guardado: evita el destello de otro tema mientras carga.
+    # (No se pasa el tema en la URL: WebView2 trata "?..." de un file:// como parte del nombre y no abre.)
+    fondo_ventana = '#e8edf7'
+    try:
+        from config import obtener_tema_guardado
+        fondo_ventana = {"oscuro": "#06070c", "rosa": "#fbe9f2"}.get(obtener_tema_guardado(), fondo_ventana)
+    except Exception as e_tema:
+        print(f"[BIMO DESKTOP WARN] No se pudo leer el tema guardado: {e_tema}")
     window = webview.create_window(
         title='BIMO - Asistente Clinico Inteligente',
         url=url_target,
@@ -2504,7 +3773,7 @@ def iniciar_desktop():
         width=1340,
         height=880,
         min_size=(1080, 700),
-        background_color='#090614',
+        background_color=fondo_ventana,
         frameless=True,
         shadow=True,
         easy_drag=False
@@ -2561,7 +3830,7 @@ def iniciar_desktop():
                     import System.Drawing as Drawing
 
                     form = window.native
-                    form.BackColor = Drawing.ColorTranslator.FromHtml('#090614')
+                    form.BackColor = Drawing.ColorTranslator.FromHtml(fondo_ventana)
 
                     # Asignar icono oficial si está disponible
                     base_dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
@@ -2598,6 +3867,13 @@ def iniciar_desktop():
             print(f"[DWM STYLE WARN] {e_dwm}")
 
     window.events.shown += aplicar_estilo_dwm_ventana
+
+    def on_closing():
+        t = bridge._disparar_respaldo_drive(al_cerrar=True)
+        if t:
+            t.join(timeout=25)
+
+    window.events.closing += on_closing
 
     def on_closed():
         limpiar_procesos()

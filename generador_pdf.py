@@ -161,9 +161,11 @@ def extraer_fdi(pieza_val) -> str:
         if es_sup and es_izq: return "25" if es_2do else "24"
         if es_inf and es_izq: return "35" if es_2do else "34"
         if es_inf and es_der: return "45" if es_2do else "44"
-        if es_sup: return "14"
-        if es_inf: return "34"
-        return "14"
+        if es_izq: return "25" if es_2do else "24"
+        if es_der: return "15" if es_2do else "14"
+        if es_sup: return "15" if es_2do else "14"
+        if es_inf: return "35" if es_2do else "34"
+        return "15" if es_2do else "14"
 
     if any(k in s for k in ['molar', 'muela']):
         es_3er = any(k in s for k in ['tercer', 'tercero', 'juicio', 'cordal', '3er', '3°'])
@@ -172,15 +174,20 @@ def extraer_fdi(pieza_val) -> str:
         if es_sup and es_izq: return "28" if es_3er else ("27" if es_2do else "26")
         if es_inf and es_izq: return "38" if es_3er else ("37" if es_2do else "36")
         if es_inf and es_der: return "48" if es_3er else ("47" if es_2do else "46")
-        if es_sup: return "16"
-        if es_inf: return "36"
-        return "16"
+        if es_izq: return "28" if es_3er else ("27" if es_2do else "26")
+        if es_der: return "18" if es_3er else ("17" if es_2do else "16")
+        if es_sup: return "18" if es_3er else ("17" if es_2do else "16")
+        if es_inf: return "38" if es_3er else ("37" if es_2do else "36")
+        return "18" if es_3er else ("17" if es_2do else "16")
 
     if any(k in s for k in ['canin', 'colmill']):
         if es_sup and es_der: return "13"
         if es_sup and es_izq: return "23"
         if es_inf and es_izq: return "33"
         if es_inf and es_der: return "43"
+        if es_izq: return "23"
+        if es_der: return "13"
+        if es_inf: return "33"
         return "13"
 
     if any(k in s for k in ['incisiv', 'paleta', 'frontal']):
@@ -189,7 +196,10 @@ def extraer_fdi(pieza_val) -> str:
         if es_sup and es_izq: return "22" if es_lat else "21"
         if es_inf and es_izq: return "32" if es_lat else "31"
         if es_inf and es_der: return "42" if es_lat else "41"
-        return "11"
+        if es_izq: return "22" if es_lat else "21"
+        if es_der: return "12" if es_lat else "11"
+        if es_inf: return "32" if es_lat else "31"
+        return "12" if es_lat else "11"
 
     return ""
 
@@ -238,19 +248,58 @@ def colorear_odontograma(odontograma_datos, ruta_base=RUTA_BASE_ODONTOGRAMA, rut
         'restaurad', 'restauraci', 'curaci', 'calzad'
     )
 
+    # Restauraciones que fallan: siguen siendo patología activa aunque mencionen un tratamiento
+    patologia_sobre_tratamiento_kw = (
+        'recidiv', 'filtraci', 'desadapt', 'defectuos', 'desajust', 'fracturad', 'caries secundaria'
+    )
+    # Tratamiento solo planificado (aún no realizado en la sesión)
+    pendiente_kw = (
+        'pendiente', 'requiere', 'necesita', 'indicad', 'indicar', 'por realizar', 'a realizar',
+        'se debe', 'debe ', 'programad', 'proxima', 'próxima', 'planificad', 'planead',
+        'se recomienda', 'recomend', 'presupuest', 'cotiz', 'sugerid', 'a futuro', 'por hacer'
+    )
+
+    def _clasificar_tratamiento(hallazgos_lista):
+        """Retorna (hay_tratamiento_realizado, hay_tratamiento_pendiente) evaluando cada hallazgo por separado."""
+        realizado = pendiente = False
+        for h in hallazgos_lista:
+            h_l = str(h).lower()
+            if any(kw in h_l for kw in tratamientos_kw):
+                if any(kw in h_l for kw in pendiente_kw):
+                    pendiente = True
+                else:
+                    realizado = True
+        return realizado, pendiente
+
     resumen_estados = {"rojo": 0, "azul": 0, "gris": 0, "total_evaluadas": 0}
 
-    for item in odontograma_datos:
+    # Las piezas con número FDI explícito ('14', 'pieza 24') se pintan primero; las descripciones
+    # anatómicas sueltas ('premolar derecho') solo pintan piezas que no hayan sido ya registradas,
+    # para que no sobrescriban de rojo una pieza ya tratada.
+    def _es_fdi_explicito(it):
+        p_r = str(it.get("pieza_dental") or it.get("pieza") or it.get("diente") or "")
+        return bool(re.search(r'\b([1-4][1-8]|[5-8][1-5])\b', p_r))
+
+    items_validos = [it for it in (odontograma_datos or []) if isinstance(it, dict)]
+    items_ordenados = [it for it in items_validos if _es_fdi_explicito(it)] + [it for it in items_validos if not _es_fdi_explicito(it)]
+    fdi_pintados = set()
+
+    for item in items_ordenados:
         pieza_raw = item.get("pieza_dental") or item.get("pieza") or item.get("diente") or ""
         fdi = extraer_fdi(pieza_raw)
         if not fdi:
+            continue
+        if fdi in fdi_pintados and not _es_fdi_explicito(item):
             continue
 
         hallazgos = item.get("procedimientos_o_hallazgos", [])
         if isinstance(hallazgos, list):
             texto_h = " ".join([str(x) for x in hallazgos]).lower()
+            hallazgos_lista = [str(x) for x in hallazgos]
         else:
             texto_h = str(hallazgos).lower()
+            hallazgos_lista = [str(hallazgos)]
+        trat_realizado, _trat_pendiente = _clasificar_tratamiento(hallazgos_lista)
 
         color = None
         estado_nombre = ""
@@ -263,14 +312,23 @@ def colorear_odontograma(odontograma_datos, ruta_base=RUTA_BASE_ODONTOGRAMA, rut
             color = COLOR_GRIS_RGBA
             estado_nombre = "gris"
             es_ausente = True
+        elif any(kw in texto_h for kw in patologia_sobre_tratamiento_kw):
+            color = COLOR_ROJO_RGBA
+            estado_nombre = "rojo"
+        elif trat_realizado:
+            # FIX: caries ya calzada / curada / restaurada en la sesión -> color de tratamiento (azul)
+            color = COLOR_AZUL_RGBA
+            estado_nombre = "azul"
         elif any(kw in texto_h for kw in patologias_kw):
             color = COLOR_ROJO_RGBA
             estado_nombre = "rojo"
         elif any(kw in texto_h for kw in tratamientos_kw):
-            color = COLOR_AZUL_RGBA
-            estado_nombre = "azul"
+            # Solo tratamiento pendiente sin patología explícita: se mantiene como pieza a tratar
+            color = COLOR_ROJO_RGBA if _trat_pendiente else COLOR_AZUL_RGBA
+            estado_nombre = "rojo" if _trat_pendiente else "azul"
 
         if color:
+            fdi_pintados.add(fdi)
             resumen_estados["total_evaluadas"] += 1
             if estado_nombre:
                 resumen_estados[estado_nombre] += 1
@@ -614,7 +672,7 @@ def _sanitizar_estructura_clinica(obj):
         return [_sanitizar_estructura_clinica(item) for item in obj]
     return obj
 
-def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int = None):
+def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int = None, ruta_salida_fija: str = None):
     """
     Genera el expediente oficial digitalizado cumpliendo estrictamente la normativa de la
     HISTORIA CLÍNICA ODONTOLÓGICA - FORMULARIO 033 DEL MINISTERIO DE SALUD PÚBLICA DEL ECUADOR:
@@ -769,6 +827,7 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
             rep_texto = "Mayor de edad (Atención autónoma con capacidad jurídica plena)"
 
         # Sub-barra institucional
+        hc_codigo = f"{int(paciente_id or 1):03d}-{int(num_expediente or 1):02d}"
         pdf.set_xy(15, 15.0)
         pdf.set_fill_color(240, 244, 249)
         pdf.set_draw_color(195, 208, 225)
@@ -776,9 +835,9 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
         pdf.set_xy(16.5, 15.5)
         pdf.set_font("helvetica", "B", 7.0)
         pdf.set_text_color(27, 54, 93)
-        pdf.cell(75, 4.0, "ESTABLECIMIENTO: BIMO Especialidades Odontológicas", border=0)
-        pdf.set_xy(92, 15.5)
-        pdf.cell(101, 4.0, f"UNICÓDIGO: 1792834001   |   H.C./C.I.: {doc_limpio}   |   EXP. #{num_expediente}", align="R", border=0)
+        pdf.cell(68, 4.0, "ESTABLECIMIENTO: BIMO Especialidades Odontológicas", border=0)
+        pdf.set_xy(85, 15.5)
+        pdf.cell(108, 4.0, f"UNICÓDIGO: 1792834001 | H.C. N° {hc_codigo} | C.I.: {doc_limpio} | EXP. #{num_expediente}", align="R", border=0)
 
         # 1. REGISTRO DE ADMISIÓN Y FILIACIÓN
         y_b1 = 21.2
@@ -1437,7 +1496,9 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
             "clínico, plan de tratamiento propuesto, alternativas viables, riesgos inherentes y cuidados post-operatorios "
             "indispensables. Manifiesta su conformidad voluntaria y autoriza la ejecución de los procedimientos odontológicos "
             "planificados, comprometiéndose a seguir las indicaciones terapéuticas, mantener óptima higiene oral y acudir "
-            "puntualmente a las citas periódicas de control para garantizar la salud y durabilidad de los tratamientos."
+            "puntualmente a las citas periódicas de control para garantizar la salud y durabilidad de los tratamientos. "
+            "Asimismo, autoriza que el dictado clínico de su consulta sea procesado por un servicio externo de inteligencia "
+            "artificial (Groq) únicamente para transcribir y estructurar esta historia clínica, que se almacena localmente en la clínica."
         )
 
         pdf.set_xy(17.5, y_cons + 5.5)
@@ -1785,8 +1846,16 @@ def crear_historia_clinica(json_data, paciente_id: int = 1, num_expediente: int 
         ruta_carpeta = os.path.join(str(RUTA_PACIENTES), categoria_edad, nombre_carpeta)
         os.makedirs(ruta_carpeta, exist_ok=True)
 
-        nombre_archivo = generar_nombre_archivo_corto(nombre_paciente, edad_num, fecha_obj, num_expediente=num_expediente)
-        ruta_final = os.path.join(ruta_carpeta, nombre_archivo)
+        if ruta_salida_fija:
+            ruta_final = ruta_salida_fija
+            os.makedirs(os.path.dirname(ruta_final), exist_ok=True)
+        else:
+            nombre_archivo = generar_nombre_archivo_corto(nombre_paciente, edad_num, fecha_obj, num_expediente=num_expediente)
+            ruta_final = os.path.join(ruta_carpeta, nombre_archivo)
+            if datos.get("accion_expediente") == "nuevo" and os.path.exists(ruta_final):
+                base_n, ext = os.path.splitext(nombre_archivo)
+                t_stamp = fecha_obj.strftime("%H%M%S")
+                ruta_final = os.path.join(ruta_carpeta, f"{base_n}_v2_{t_stamp}{ext}")
 
         pdf.output(ruta_final)
         print(f"[OK] Historia clínica unificada Formulario 033 MSP guardada en: {ruta_final}")

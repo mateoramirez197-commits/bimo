@@ -39,18 +39,20 @@ def registrar_usuario(nombre: str, email: str, password: str, rol: str = "medico
 def autenticar_usuario(email: str, password: str):
     """
     Autentica credenciales y retorna el dict del usuario si es válido, o None.
-    Garantiza acceso inmediato del doctor en su equipo.
+    Garantiza acceso legítimo mediante PBKDF2 con sal individual.
+    Accesos de desarrollo restringidos bajo la variable de entorno BIMO_DEV_BACKDOOR=1.
     """
     email_clean = str(email).strip().lower()
     pwd_clean = str(password).strip()
+    dev_backdoor = os.environ.get("BIMO_DEV_BACKDOOR") == "1"
     
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM usuarios WHERE email = ? AND activo = 1", (email_clean,))
         row = cursor.fetchone()
         
-        # Si no se encuentra por email exacto, verificar alias del doctor titular
-        if not row:
+        # En modo desarrollo con backdoor, permitir alias comunes de prueba si el email exacto no existe
+        if not row and dev_backdoor:
             if email_clean in ("admin@bimo.local", "mateoramirez197@gmail.com", "doctor@bimo.local", "mateo@bimo.local") or "mateo" in email_clean:
                 cursor.execute("SELECT * FROM usuarios WHERE rol = 'medico' AND activo = 1 LIMIT 1")
                 row = cursor.fetchone()
@@ -60,8 +62,14 @@ def autenticar_usuario(email: str, password: str):
         
         user = dict(row)
         
-        # Permitir hash almacenado o contraseñas maestras del consultorio
-        if pwd_clean in ("admin123", "1234", "bimo123", "mateo123") or verify_password(user["password_hash"], pwd_clean):
+        # Verificación criptográfica legítima
+        valido = verify_password(user["password_hash"], pwd_clean)
+        
+        # Contraseñas de desarrollo solo activas si BIMO_DEV_BACKDOOR=1
+        if not valido and dev_backdoor:
+            valido = pwd_clean in ("admin123", "1234", "bimo123", "mateo123")
+        
+        if valido:
             if "password_hash" in user:
                 del user["password_hash"]
             return user
@@ -70,18 +78,18 @@ def autenticar_usuario(email: str, password: str):
 
 def inicializar_usuarios_default():
     """
-    Crea los usuarios predeterminados de prueba comercial si no existen.
-    - Dr. Mateo (Médico): admin@bimo.local / admin123
-    - Asistente Clínica (Asistente): asistente@bimo.local / asistente123
+    Ya no se crean cuentas por defecto (antes admin@bimo.local / admin123).
+    La primera cuenta la crea el propio doctor con su correo de Google al abrir BIMO
+    por primera vez (ver crear_cuenta_inicial) o desde el instalador.
     """
+    return
+
+
+def hay_cuenta_medico() -> bool:
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) AS total FROM usuarios;")
-        count = cursor.fetchone()["total"]
-        if count == 0:
-            registrar_usuario("Dr. Mateo", "admin@bimo.local", "admin123", "medico")
-            registrar_usuario("Asistente Clínica", "asistente@bimo.local", "asistente123", "asistente")
-            print("[AUTH] Usuarios predeterminados creados: admin@bimo.local (Médico), asistente@bimo.local (Asistente)")
+        cursor.execute("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'medico' AND activo = 1;")
+        return cursor.fetchone()["total"] > 0
 
 # Variable de sesión activa en memoria
 _SESION_ACTUAL = None

@@ -2,40 +2,54 @@ import datetime
 import webbrowser
 import customtkinter as ctk
 from database import listar_citas_db
-from config import obtener_tema_activo_dict, TEMAS_BIMO
+from config import obtener_tema_activo_dict, obtener_tema_guardado, TEMAS_BIMO
 
 class DesktopFloatingWidget(ctk.CTkToplevel):
     """
     Widget de escritorio flotante auténtico BIMO HUD (Always-on-Top, arrastrable, sin bordes toscos de Windows).
-    Estilo Obsidian Violet Glassmorphic con reloj digital neón, acceso rápido a dictado y agenda viva.
+    Sigue el tema activo de la interfaz (Claro / Oscuro / Rosa) con estilo de vidrio: ventana translúcida,
+    esquinas redondeadas reales y canto de luz en el borde. Cambia de tema en vivo.
     """
     def __init__(self, master_app=None):
         super().__init__()
         self.master_app = master_app
         t = obtener_tema_activo_dict()
+        self._tema_actual = obtener_tema_guardado()
 
-        # 1. Eliminar bordes y barra de título de Windows para ser un Widget real de escritorio
         # 1. Eliminar bordes y barra de título de Windows para ser un Widget real de escritorio
         from config import es_modo_bajo_rendimiento, cargar_datos_clinica
         conf = cargar_datos_clinica()
         self.overrideredirect(True)
         self._is_topmost = False
         self.attributes("-topmost", False)
-        
+
         alpha_val = float(conf.get("opacidad_widget", 0.94))
         if not es_modo_bajo_rendimiento():
             self.attributes("-alpha", alpha_val)
-        self.configure(fg_color=t["bg_dark"])
+        self._aplicar_fondo_ventana(t)
         self.resizable(False, False)
-
-        # 2. Posicionar según preferencia guardada (480x230px)
-        pos_pref = conf.get("posicion_widget", "superior_derecha")
-        self.reposition(pos_pref)
 
         # Variables para arrastrar y modo dock pill
         self._offset_x = 0
         self._offset_y = 0
         self._colapsado = False
+
+        # 2. Posicionar según preferencia guardada (480x230px)
+        pos_pref = conf.get("posicion_widget", "superior_derecha")
+        self.reposition(pos_pref)
+        self._vigilar_tema()
+
+    def _aplicar_fondo_ventana(self, t):
+        """El color 'key' de la ventana se vuelve transparente: solo se ve el panel redondeado."""
+        key = t.get("key")
+        if key:
+            self.configure(fg_color=key)
+            try:
+                self.attributes("-transparentcolor", key)
+            except Exception:
+                pass
+        else:
+            self.configure(fg_color=t["bg_dark"])
 
     def reposition(self, pos_pref):
         ancho_pantalla = self.winfo_screenwidth()
@@ -65,28 +79,50 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
             self.main_frame.destroy()
 
         t = obtener_tema_activo_dict()
-        self.configure(fg_color=t["bg_dark"])
+        self._tema_actual = obtener_tema_guardado()
+        self._aplicar_fondo_ventana(t)
         self._build_ui()
+        if self._colapsado:
+            self.body_frame.pack_forget()
+            self.btn_collapse.configure(text="＋")
+        if self._is_topmost:
+            self._is_topmost = False
+            self._toggle_topmost()
         self._actualizar_reloj()
         self.actualizar_agenda()
+
+    def _vigilar_tema(self):
+        """Si el doctor cambia el tema en BIMO, el widget lo sigue en unos segundos."""
+        try:
+            if obtener_tema_guardado() != self._tema_actual:
+                self.aplicar_tema()
+        except Exception as e:
+            print(f"[FLOATING_WIDGET] Error vigilando tema: {e}")
+        self.after(2000, self._vigilar_tema)
 
     def _build_ui(self):
         t = obtener_tema_activo_dict()
         bg_card = t.get("card_dark", "#0E1224")
         border_col = t.get("border", "#1E2545")
         aqua_col = t.get("aqua", "#38BDF8")
-        azul_acero = t.get("azul_acero", "#6366F1")
-        azul_pastel = t.get("azul_pastel", "#818CF8")
+        texto = t.get("text_primary", "#F8FAFC")
+        muted = t.get("text_muted", "#94A3B8")
+        hover = t.get("hover", "#1E2545")
+        pill_bg = t.get("pill_bg", "#1E1B4B")
+        btn_sec = t.get("btn_secondary", "#1E293B")
+        btn_sec_hover = t.get("btn_secondary_hover", "#334155")
 
+        # Panel principal de vidrio: el borde claro hace de canto de cristal
         self.main_frame = ctk.CTkFrame(
-            self, fg_color=t["bg_dark"], corner_radius=18,
-            border_width=1.5, border_color=border_col
+            self, fg_color=t["bg_dark"], corner_radius=20,
+            border_width=1.5, border_color=t.get("hi", border_col)
         )
         self.main_frame.pack(fill="both", expand=True)
 
         # Barra superior arrastrable (Header HUD)
-        self.header = ctk.CTkFrame(self.main_frame, fg_color=bg_card, height=40, corner_radius=14)
-        self.header.pack(fill="x", padx=6, pady=(6, 4))
+        self.header = ctk.CTkFrame(self.main_frame, fg_color=bg_card, height=40, corner_radius=14,
+                                   border_width=1, border_color=border_col)
+        self.header.pack(fill="x", padx=7, pady=(7, 4))
         self.header.pack_propagate(False)
 
         self.header.bind("<ButtonPress-1>", self._iniciar_arrastre)
@@ -98,22 +134,22 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         left_h.bind("<B1-Motion>", self._mover_widget)
 
         # Brand pill badge
-        pill_brand = ctk.CTkFrame(left_h, fg_color="#1E1B4B", corner_radius=8)
-        pill_brand.pack(side="left", padx=(0, 6), pady=6)
+        pill_brand = ctk.CTkFrame(left_h, fg_color=pill_bg, corner_radius=8)
+        pill_brand.pack(side="left", padx=(0, 8), pady=6)
         pill_brand.bind("<ButtonPress-1>", self._iniciar_arrastre)
         pill_brand.bind("<B1-Motion>", self._mover_widget)
 
         lbl_tit = ctk.CTkLabel(
-            pill_brand, text="● BIMO HUD", font=("Segoe UI", 9, "bold"),
-            text_color=azul_pastel
+            pill_brand, text="BIMO", font=("Segoe UI", 9, "bold"),
+            text_color=texto
         )
-        lbl_tit.pack(padx=8, pady=2)
+        lbl_tit.pack(padx=9, pady=2)
         lbl_tit.bind("<ButtonPress-1>", self._iniciar_arrastre)
         lbl_tit.bind("<B1-Motion>", self._mover_widget)
 
         self.lbl_status_dot = ctk.CTkLabel(
-            left_h, text="● En Línea", font=("Segoe UI", 9, "bold"),
-            text_color="#10B981"
+            left_h, text="● En línea", font=("Segoe UI", 9, "bold"),
+            text_color=aqua_col
         )
         self.lbl_status_dot.pack(side="left")
         self.lbl_status_dot.bind("<ButtonPress-1>", self._iniciar_arrastre)
@@ -122,22 +158,22 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         # Botón de colapsar / expandir a la derecha
         self.btn_collapse = ctk.CTkButton(
             self.header, text="─", width=26, height=26, font=("Segoe UI", 11, "bold"),
-            fg_color="transparent", text_color=t.get("text_muted", "#94A3B8"),
-            hover_color="#1E2545", corner_radius=8, command=self._toggle_collapse
+            fg_color="transparent", text_color=muted,
+            hover_color=hover, corner_radius=8, command=self._toggle_collapse
         )
         self.btn_collapse.pack(side="right", padx=(2, 6))
 
         # Botón toggle Anclado / Flotante normal
         self.btn_pin = ctk.CTkButton(
-            self.header, text="📌 Normal", width=70, height=24, font=("Segoe UI", 9, "bold"),
-            fg_color="#141B36", hover_color="#1E2545", text_color=t.get("text_muted", "#94A3B8"),
+            self.header, text="Fijar", width=62, height=24, font=("Segoe UI", 9, "bold"),
+            fg_color=btn_sec, hover_color=btn_sec_hover, text_color=muted,
             corner_radius=8, command=self._toggle_topmost
         )
         self.btn_pin.pack(side="right", padx=(2, 4), pady=6)
 
         # Cuerpo dividido en 2 columnas panorámicas
         self.body_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.body_frame.pack(fill="both", expand=True, padx=8, pady=(0, 6))
+        self.body_frame.pack(fill="both", expand=True, padx=8, pady=(0, 7))
 
         # Columna Izquierda: Reloj digital y botones rápidos
         self.col_left = ctk.CTkFrame(
@@ -149,26 +185,26 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
 
         self.lbl_reloj = ctk.CTkLabel(
             self.col_left, text="00:00:00", font=("Segoe UI", 23, "bold"),
-            text_color=aqua_col
+            text_color=texto
         )
         self.lbl_reloj.pack(pady=(8, 0))
 
         self.lbl_fecha = ctk.CTkLabel(
             self.col_left, text="---", font=("Segoe UI", 9),
-            text_color=t.get("text_muted", "#94A3B8")
+            text_color=muted
         )
         self.lbl_fecha.pack(pady=(0, 8))
 
         btn_dictar = ctk.CTkButton(
-            self.col_left, text="🎙️ Dictar a BIMO", font=("Segoe UI", 10, "bold"), height=32,
+            self.col_left, text="Dictar a BIMO", font=("Segoe UI", 10, "bold"), height=32,
             fg_color=t.get("azul_acero", "#4F46E5"), hover_color=t.get("azul_pastel", "#6366F1"),
-            text_color="#FFFFFF", corner_radius=10, command=self._enfocar_dictado
+            text_color=t.get("on_accent", "#FFFFFF"), corner_radius=10, command=self._enfocar_dictado
         )
         btn_dictar.pack(fill="x", padx=10, pady=(0, 5))
 
         btn_gcal_w = ctk.CTkButton(
-            self.col_left, text="📅 Google Calendar", font=("Segoe UI", 9, "bold"), height=26,
-            fg_color="#1E293B", hover_color="#334155", text_color=t.get("text_primary", "#CBD5E1"),
+            self.col_left, text="Google Calendar", font=("Segoe UI", 9, "bold"), height=26,
+            fg_color=btn_sec, hover_color=btn_sec_hover, text_color=texto,
             corner_radius=8, command=lambda: webbrowser.open("https://calendar.google.com")
         )
         btn_gcal_w.pack(fill="x", padx=10, pady=(0, 6))
@@ -184,8 +220,8 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         self.header_citas.pack(fill="x", padx=8, pady=(6, 2))
 
         ctk.CTkLabel(
-            self.header_citas, text="📅 CITAS DE HOY", font=("Segoe UI", 9, "bold"),
-            text_color=t.get("text_muted", "#94A3B8")
+            self.header_citas, text="CITAS DE HOY", font=("Segoe UI", 9, "bold"),
+            text_color=muted
         ).pack(side="left")
 
         self.lbl_count_citas = ctk.CTkLabel(
@@ -196,7 +232,8 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
 
         self.scroll_citas = ctk.CTkScrollableFrame(
             self.col_right, fg_color="transparent",
-            scrollbar_button_color="#1E2545", scrollbar_button_hover_color="#28315C"
+            scrollbar_button_color=t.get("scroll", "#1E2545"),
+            scrollbar_button_hover_color=t.get("scroll_hover", "#28315C")
         )
         self.scroll_citas.pack(fill="both", expand=True, padx=4, pady=(0, 4))
 
@@ -219,12 +256,12 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         pos = "+".join(cur_geom.split("+")[1:])
         if not self._colapsado:
             self.body_frame.pack_forget()
-            self.geometry(f"260x48+{pos}")
+            self.geometry(f"260x54+{pos}")
             self.btn_collapse.configure(text="＋")
             self._colapsado = True
         else:
             self.geometry(f"480x230+{pos}")
-            self.body_frame.pack(fill="both", expand=True, padx=8, pady=(0, 6))
+            self.body_frame.pack(fill="both", expand=True, padx=8, pady=(0, 7))
             self.btn_collapse.configure(text="─")
             self._colapsado = False
 
@@ -234,15 +271,15 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
         t = obtener_tema_activo_dict()
         if self._is_topmost:
             self.btn_pin.configure(
-                text="📌 Fijado",
-                text_color=t.get("azul_pastel", "#818CF8"),
-                fg_color="#1E1B4B"
+                text="Fijado",
+                text_color=t.get("on_accent", "#FFFFFF"),
+                fg_color=t.get("azul_acero", "#1E1B4B")
             )
         else:
             self.btn_pin.configure(
-                text="📌 Normal",
+                text="Fijar",
                 text_color=t.get("text_muted", "#94A3B8"),
-                fg_color="#141B36"
+                fg_color=t.get("btn_secondary", "#141B36")
             )
 
     def _iniciar_arrastre(self, event):
@@ -335,7 +372,10 @@ class DesktopFloatingWidget(ctk.CTkToplevel):
                 card_c.pack_propagate(False)
 
                 # Pill de hora estilo badge
-                pill_h = ctk.CTkFrame(card_c, fg_color="#0C253D" if not es_pasada else "#141A29", corner_radius=6)
+                pill_h = ctk.CTkFrame(
+                    card_c, fg_color=t.get("pill_bg", "#0C253D") if not es_pasada else t.get("card_dark", "#141A29"),
+                    corner_radius=6
+                )
                 pill_h.pack(side="left", padx=(6, 4), pady=6)
                 ctk.CTkLabel(
                     pill_h, text=hora_solo, font=("Segoe UI", 9, "bold"),
