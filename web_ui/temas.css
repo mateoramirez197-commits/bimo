@@ -329,116 +329,132 @@
 .on-accent-hover:hover, .on-accent-hover:hover .text-white { color: rgb(var(--on-accent)) !important; }
 
 /* =====================================================================
-   LIQUID GLASS (estilo iOS 26)
-   Paneles muy translúcidos con desenfoque, canto de cristal brillante en
-   esquinas (::before con borde degradado) y fondo con luces que derivan
-   lentamente. Las clases lg-* las asigna index.html; los valores cambian por tema.
+   LIQUID GLASS (estilo iOS)
+   El color lo pone el "fondo de pantalla" (luces grandes que derivan lento);
+   los paneles son vidrio muy translúcido con desenfoque fuerte, brillo superior
+   y canto de luz en las esquinas. Las clases lg-* las asigna index.html.
    ===================================================================== */
 :root, [data-theme="oscuro"] {
-  --lg-page: #050506;
-  --lg-blob-1: rgb(255 255 255 / 0.13);
-  --lg-blob-2: rgb(161 161 170 / 0.16);
-  --lg-blob-3: rgb(255 255 255 / 0.09);
-  --lg-blob-4: rgb(113 113 122 / 0.14);
-  --lg-panel: rgb(30 30 34 / 0.34);
-  --lg-tile: rgb(255 255 255 / 0.04);
-  --lg-control: rgb(255 255 255 / 0.07);
-  --lg-control-hover: rgb(255 255 255 / 0.12);
-  --lg-edge: rgb(255 255 255 / 0.06);
-  --lg-rim-strong: rgb(255 255 255 / 0.55);
-  --lg-rim-soft: rgb(255 255 255 / 0.06);
+  --lg-page: #06070c;
+  --lg-blob-1: rgb(64 102 255 / 0.42);
+  --lg-blob-2: rgb(150 82 255 / 0.36);
+  --lg-blob-3: rgb(255 72 160 / 0.20);
+  --lg-blob-4: rgb(40 160 255 / 0.22);
+  --lg-blob-5: rgb(120 70 220 / 0.25);
+  --lg-panel: rgb(20 22 32 / 0.40);
+  --lg-tile: rgb(255 255 255 / 0.05);
+  --lg-control: rgb(255 255 255 / 0.08);
+  --lg-control-hover: rgb(255 255 255 / 0.15);
+  --lg-edge: rgb(255 255 255 / 0.10);
+  --lg-rim-strong: rgb(255 255 255 / 0.60);
+  --lg-rim-soft: rgb(255 255 255 / 0.07);
   --lg-hi: rgb(255 255 255 / 0.16);
-  --lg-glow: rgb(255 255 255 / 0.05);
-  --lg-shadow: 0 20px 60px rgb(0 0 0 / 0.55);
-  --lg-veil: rgb(0 0 0 / 0.35);
+  --lg-gloss: rgb(255 255 255 / 0.07);
+  --lg-glow: rgb(255 255 255 / 0.04);
+  --lg-shadow: 0 24px 70px rgb(0 0 0 / 0.55);
+  --lg-veil: rgb(4 5 10 / 0.35);
+  --lg-accent-gloss: rgb(255 255 255 / 0.55);
 }
 [data-theme="claro"] {
-  --lg-page: #e9ebef;
-  --lg-blob-1: rgb(255 255 255 / 1);
-  --lg-blob-2: rgb(203 206 214 / 0.95);
-  --lg-blob-3: rgb(255 255 255 / 0.9);
-  --lg-blob-4: rgb(190 194 204 / 0.75);
-  --lg-panel: rgb(255 255 255 / 0.30);
-  --lg-tile: rgb(255 255 255 / 0.34);
-  --lg-control: rgb(255 255 255 / 0.55);
-  --lg-control-hover: rgb(255 255 255 / 0.85);
-  --lg-edge: rgb(15 18 25 / 0.08);
+  --lg-page: #e8edf7;
+  --lg-blob-1: rgb(120 170 255 / 0.62);
+  --lg-blob-2: rgb(196 160 255 / 0.55);
+  --lg-blob-3: rgb(255 190 160 / 0.55);
+  --lg-blob-4: rgb(140 210 255 / 0.45);
+  --lg-blob-5: rgb(255 170 210 / 0.35);
+  --lg-panel: rgb(255 255 255 / 0.26);
+  --lg-tile: rgb(255 255 255 / 0.30);
+  --lg-control: rgb(255 255 255 / 0.48);
+  --lg-control-hover: rgb(255 255 255 / 0.75);
+  --lg-edge: rgb(255 255 255 / 0.55);
   --lg-rim-strong: rgb(255 255 255 / 1);
-  --lg-rim-soft: rgb(255 255 255 / 0.15);
+  --lg-rim-soft: rgb(255 255 255 / 0.22);
   --lg-hi: rgb(255 255 255 / 0.95);
-  --lg-glow: rgb(255 255 255 / 0.35);
-  --lg-shadow: 0 20px 60px rgb(20 22 30 / 0.12);
-  --lg-veil: rgb(233 235 239 / 0.35);
+  --lg-gloss: rgb(255 255 255 / 0.38);
+  --lg-glow: rgb(255 255 255 / 0.30);
+  --lg-shadow: 0 24px 70px rgb(40 55 100 / 0.18);
+  --lg-veil: rgb(232 237 247 / 0.30);
+  --lg-accent-gloss: rgb(255 255 255 / 0.22);
 }
 [data-theme="rosa"] {
-  --lg-page: #fcebf3;
-  --lg-blob-1: rgb(244 114 182 / 0.42);
-  --lg-blob-2: rgb(196 181 253 / 0.45);
-  --lg-blob-3: rgb(253 186 116 / 0.30);
-  --lg-blob-4: rgb(255 255 255 / 0.85);
-  --lg-panel: rgb(255 255 255 / 0.30);
-  --lg-tile: rgb(255 255 255 / 0.34);
-  --lg-control: rgb(255 255 255 / 0.55);
-  --lg-control-hover: rgb(255 255 255 / 0.85);
-  --lg-edge: rgb(190 24 93 / 0.10);
+  --lg-page: #fbe9f2;
+  --lg-blob-1: rgb(255 120 190 / 0.55);
+  --lg-blob-2: rgb(190 160 255 / 0.55);
+  --lg-blob-3: rgb(255 175 140 / 0.48);
+  --lg-blob-4: rgb(255 160 220 / 0.45);
+  --lg-blob-5: rgb(160 190 255 / 0.30);
+  --lg-panel: rgb(255 255 255 / 0.26);
+  --lg-tile: rgb(255 255 255 / 0.30);
+  --lg-control: rgb(255 255 255 / 0.48);
+  --lg-control-hover: rgb(255 255 255 / 0.75);
+  --lg-edge: rgb(255 255 255 / 0.55);
   --lg-rim-strong: rgb(255 255 255 / 1);
-  --lg-rim-soft: rgb(255 255 255 / 0.18);
+  --lg-rim-soft: rgb(255 255 255 / 0.22);
   --lg-hi: rgb(255 255 255 / 0.95);
-  --lg-glow: rgb(255 255 255 / 0.35);
-  --lg-shadow: 0 20px 60px rgb(190 24 93 / 0.14);
-  --lg-veil: rgb(252 235 243 / 0.30);
+  --lg-gloss: rgb(255 255 255 / 0.38);
+  --lg-glow: rgb(255 255 255 / 0.30);
+  --lg-shadow: 0 24px 70px rgb(170 30 100 / 0.16);
+  --lg-veil: rgb(251 233 242 / 0.28);
+  --lg-accent-gloss: rgb(255 255 255 / 0.30);
 }
 
-/* Fondo con luces suaves que derivan muy lento: sin algo detrás, el vidrio no se percibe */
+/* Tipografía: Inter con el espaciado ajustado de iOS */
+#themeBody { font-family: "Inter Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-feature-settings: "cv11", "ss01"; }
+h1, h2, h3, .text-2xl, .text-3xl, .text-4xl { letter-spacing: -0.022em; }
+
+/* Fondo de pantalla: luces grandes de color que derivan muy lento */
 #themeBody { background-color: var(--lg-page) !important; }
 #ambientBackground { overflow: hidden; }
 #ambientGlowLayer {
   display: block;
   position: absolute;
-  inset: -12%;
+  inset: -15%;
   width: auto !important;
   height: auto !important;
   background:
-    radial-gradient(38% 46% at 14% 20%, var(--lg-blob-1) 0%, transparent 70%),
-    radial-gradient(34% 42% at 86% 26%, var(--lg-blob-2) 0%, transparent 70%),
-    radial-gradient(40% 46% at 58% 92%, var(--lg-blob-3) 0%, transparent 70%),
-    radial-gradient(30% 36% at 30% 70%, var(--lg-blob-4) 0%, transparent 70%) !important;
-  animation: lg-deriva 48s ease-in-out infinite alternate;
+    radial-gradient(34% 42% at 12% 16%, var(--lg-blob-1) 0%, transparent 72%),
+    radial-gradient(32% 40% at 88% 22%, var(--lg-blob-2) 0%, transparent 72%),
+    radial-gradient(38% 44% at 62% 92%, var(--lg-blob-3) 0%, transparent 72%),
+    radial-gradient(28% 34% at 28% 74%, var(--lg-blob-4) 0%, transparent 72%),
+    radial-gradient(26% 32% at 55% 40%, var(--lg-blob-5) 0%, transparent 72%) !important;
+  filter: saturate(1.15);
+  animation: lg-deriva 46s ease-in-out infinite alternate;
   will-change: transform;
 }
 @keyframes lg-deriva {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  50%  { transform: translate3d(3%, -2%, 0) scale(1.05); }
-  100% { transform: translate3d(-3%, 2%, 0) scale(1.02); }
+  0%   { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  50%  { transform: translate3d(3%, -2.5%, 0) scale(1.06) rotate(2deg); }
+  100% { transform: translate3d(-3%, 2%, 0) scale(1.03) rotate(-1.5deg); }
 }
 @media (prefers-reduced-motion: reduce) { #ambientGlowLayer { animation: none; } }
 
-/* Capas de vidrio con desenfoque real (solo las grandes, por rendimiento) */
+/* Vidrio con desenfoque real (solo capas grandes, por rendimiento) */
 .lg-panel, .lg-bar {
-  -webkit-backdrop-filter: blur(30px) saturate(190%);
-  backdrop-filter: blur(30px) saturate(190%);
+  -webkit-backdrop-filter: blur(40px) saturate(210%) brightness(1.04);
+  backdrop-filter: blur(40px) saturate(210%) brightness(1.04);
 }
 .lg-tile, .lg-control { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 
 .lg-panel {
   background-color: var(--lg-panel) !important;
+  background-image: linear-gradient(180deg, var(--lg-gloss) 0%, transparent 34%) !important;
   border: 1px solid var(--lg-edge) !important;
   box-shadow:
     inset 0 1px 0 var(--lg-hi),
-    inset 0 0 24px var(--lg-glow),
+    inset 0 0 30px var(--lg-glow),
     var(--lg-shadow) !important;
 }
-/* Canto de cristal: borde de luz que brilla en las esquinas y se desvanece en los lados */
-.lg-panel:not(.absolute):not(.fixed), .lg-tile:not(.absolute):not(.fixed) { position: relative; }
-.lg-panel::before, .lg-tile::before {
+/* Canto de cristal: luz que brilla en las esquinas y se desvanece en los lados */
+.lg-panel:not(.absolute):not(.fixed), .lg-tile:not(.absolute):not(.fixed), aside.lg-bar { position: relative; }
+.lg-panel::before, .lg-tile::before, aside.lg-bar::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   padding: 1.5px;
   background: linear-gradient(135deg,
-    var(--lg-rim-strong) 0%, var(--lg-rim-soft) 22%, transparent 45%,
-    transparent 58%, var(--lg-rim-soft) 78%, var(--lg-rim-strong) 100%);
+    var(--lg-rim-strong) 0%, var(--lg-rim-soft) 20%, transparent 42%,
+    transparent 60%, var(--lg-rim-soft) 80%, var(--lg-rim-strong) 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -449,39 +465,72 @@
 
 .lg-tile {
   background-color: var(--lg-tile) !important;
+  background-image: linear-gradient(180deg, var(--lg-gloss) 0%, transparent 50%);
   border-color: var(--lg-edge) !important;
   box-shadow: inset 0 1px 0 var(--lg-hi) !important;
 }
 .lg-control {
   background-color: var(--lg-control) !important;
   border-color: var(--lg-edge) !important;
-  box-shadow: inset 0 1px 0 var(--lg-hi), 0 1px 2px rgb(0 0 0 / 0.04);
+  box-shadow: inset 0 1px 0 var(--lg-hi), 0 2px 8px rgb(0 0 0 / 0.05);
 }
 .lg-control:hover { background-color: var(--lg-control-hover) !important; }
 .lg-bar {
   background-color: var(--lg-panel) !important;
   border-color: var(--lg-edge) !important;
 }
+/* Menú lateral flotante, como el sidebar de iPad */
+aside.lg-bar {
+  margin: 10px 0 10px 10px;
+  border-radius: 28px;
+  border: 1px solid var(--lg-edge) !important;
+  background-image: linear-gradient(180deg, var(--lg-gloss) 0%, transparent 30%) !important;
+  box-shadow: inset 0 1px 0 var(--lg-hi), var(--lg-shadow);
+  overflow: hidden;
+}
+aside.lg-bar .border-t { border-color: var(--lg-edge) !important; }
+/* Elemento activo del menú: píldora de vidrio */
+.nav-btn.nav-active {
+  background-color: var(--lg-control-hover) !important;
+  box-shadow: inset 0 1px 0 var(--lg-hi), 0 4px 16px rgb(0 0 0 / 0.08);
+}
 .lg-veil {
   background-color: var(--lg-veil) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
 }
 /* Pantalla de bloqueo: fondo propio opaco (no deja ver datos de pacientes detrás) */
 .lg-lock {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background:
-    radial-gradient(40% 50% at 18% 22%, var(--lg-blob-1) 0%, transparent 70%),
-    radial-gradient(36% 46% at 84% 30%, var(--lg-blob-2) 0%, transparent 70%),
-    radial-gradient(42% 48% at 60% 90%, var(--lg-blob-3) 0%, transparent 70%),
+    radial-gradient(36% 46% at 16% 20%, var(--lg-blob-1) 0%, transparent 72%),
+    radial-gradient(34% 44% at 86% 26%, var(--lg-blob-2) 0%, transparent 72%),
+    radial-gradient(40% 46% at 60% 92%, var(--lg-blob-3) 0%, transparent 72%),
+    radial-gradient(28% 34% at 30% 76%, var(--lg-blob-4) 0%, transparent 72%),
     var(--lg-page) !important;
 }
 
-/* Botones de acento con brillo de vidrio */
+/* Botones principales: vidrio sólido con brillo superior */
+/* El brillo va como sombra interior: varios botones usan un degradado de fondo que no se debe tapar */
 .on-accent {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.30), inset 0 -8px 16px rgb(0 0 0 / 0.10), 0 8px 22px rgb(0 0 0 / 0.14) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.40),
+    inset 0 14px 18px -10px var(--lg-accent-gloss),
+    inset 0 -8px 16px rgb(0 0 0 / 0.14),
+    0 10px 26px rgb(0 0 0 / 0.16) !important;
 }
+
+/* Íconos Phosphor: alineados como texto */
+.ph, .ph-light { line-height: 1; }
 
 /* Durante el cambio de tema no se animan colores (ver setTheme) */
 .tema-cambiando, .tema-cambiando *, .tema-cambiando *::before, .tema-cambiando *::after { transition: none !important; }
+
+/* Listas desplegables (<select>): Windows dibuja la lista con su propio fondo; con el fondo de vidrio
+   translúcido el texto de las opciones quedaba invisible hasta pasar el mouse. Colores sólidos del tema. */
+select option, select optgroup {
+  background-color: rgb(var(--n-900)) !important;
+  color: rgb(var(--c-white)) !important;
+}
+select option:checked { background-color: rgb(var(--n-800)) !important; }

@@ -5,7 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BIMO - Asistente Clínico Inteligente</title>
   <!-- Recursos locales (funcionan sin internet). Licencias MIT en web_ui/vendor/*/LICENSE -->
+  <!-- La muela del logo es la de Tabler (igual que el ícono de la app); el resto, Phosphor -->
   <link rel="stylesheet" href="vendor/tabler-icons/tabler-icons.min.css">
+  <link rel="stylesheet" href="vendor/phosphor/regular/style.css">
+  <link rel="stylesheet" href="vendor/phosphor/light/style.css">
+  <style>
+    /* Inter (rsms/inter, OFL): tipografía tipo San Francisco de Apple, local */
+    @font-face { font-family: 'Inter Variable'; font-style: normal; font-display: swap; font-weight: 100 900;
+      src: url('vendor/inter/inter-latin-wght-normal.woff2') format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+    @font-face { font-family: 'Inter Variable'; font-style: normal; font-display: swap; font-weight: 100 900;
+      src: url('vendor/inter/inter-latin-ext-wght-normal.woff2') format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+  </style>
   <link rel="stylesheet" href="temas.css">
   <script>
     // Aplicar el tema guardado antes de pintar para evitar parpadeo
@@ -37,7 +49,12 @@
         emerald: acento, green: acento, lime: acento, amber: acento, yellow: acento, orange: acento
       };
       ['rose', 'red'].forEach(function (k) { colores[k] = rampa(k); });
-      tailwind.config = { theme: { extend: { colors: colores } } };
+      tailwind.config = { theme: { extend: {
+        colors: colores,
+        fontFamily: { sans: ['"Inter Variable"', 'Inter', '"Segoe UI Variable"', '"Segoe UI"', 'system-ui', 'sans-serif'] },
+        // Esquinas más generosas, al estilo iOS
+        borderRadius: { lg: '0.75rem', xl: '1rem', '2xl': '1.35rem', '3xl': '1.9rem' }
+      } } };
     })();
   </script>
   <style>
@@ -158,17 +175,17 @@
     <div class="flex items-center gap-1.5" style="--app-region: no-drag; -webkit-app-region: no-drag; pointer-events: auto;">
       <!-- BOTÓN MINIMIZAR -->
       <button id="btnWinMin" onclick="event.stopPropagation(); minimizarVentana();" title="Minimizar" class="w-8 h-7 rounded-xl bg-slate-900/80 hover:bg-indigo-600/30 text-slate-400 hover:text-indigo-200 border border-slate-800 hover:border-indigo-500/40 flex items-center justify-center transition-all duration-200 cursor-pointer shadow-sm active:scale-95 group lg-control">
-        <i class="ti ti-minus text-[14px] leading-none inline-flex items-center justify-center transition-transform group-hover:scale-110" aria-hidden="true"></i>
+        <i class="ph ph-minus text-[14px] leading-none inline-flex items-center justify-center transition-transform group-hover:scale-110" aria-hidden="true"></i>
       </button>
 
       <!-- BOTÓN MAXIMIZAR / RESTAURAR -->
       <button id="btnWinMax" onclick="event.stopPropagation(); maximizarVentana();" title="Maximizar / Restaurar" class="w-8 h-7 rounded-xl bg-slate-900/80 hover:bg-cyan-600/30 text-slate-400 hover:text-cyan-200 border border-slate-800 hover:border-cyan-500/40 flex items-center justify-center transition-all duration-200 cursor-pointer shadow-sm active:scale-95 group lg-control">
-        <i id="iconMaximizar" class="ti ti-square text-[14px] leading-none inline-flex items-center justify-center transition-transform group-hover:scale-110" aria-hidden="true"></i>
+        <i id="iconMaximizar" class="ph ph-square text-[14px] leading-none inline-flex items-center justify-center transition-transform group-hover:scale-110" aria-hidden="true"></i>
       </button>
 
       <!-- BOTÓN CERRAR -->
       <button id="btnWinClose" onclick="event.stopPropagation(); cerrarVentana();" title="Cerrar BIMO" class="w-8 h-7 rounded-xl bg-slate-900/80 hover:bg-rose-600 text-slate-400 hover:text-white border border-slate-800 hover:border-rose-500 flex items-center justify-center transition-all duration-200 cursor-pointer shadow-sm active:scale-95 group lg-control">
-        <i class="ti ti-x text-[14px] leading-none inline-flex items-center justify-center transition-transform group-hover:scale-110" aria-hidden="true"></i>
+        <i class="ph ph-x text-[14px] leading-none inline-flex items-center justify-center transition-transform group-hover:scale-110" aria-hidden="true"></i>
       </button>
     </div>
   </header>
@@ -223,7 +240,7 @@
           <button onclick="clearPin()" class="h-12 rounded-xl bg-slate-900/40 hover:bg-rose-950/30 border border-slate-800 text-xs font-bold text-rose-400 transition-all active:scale-95 cursor-pointer lg-control">C</button>
           <button onclick="pressPin('0')" class="h-12 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-base font-bold text-white transition-all active:scale-95 cursor-pointer lg-control">0</button>
           <button onclick="backspacePin()" class="h-12 rounded-xl bg-slate-900/40 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-all active:scale-95 cursor-pointer lg-control" title="Borrar">
-            <i class="ti ti-backspace text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph-light ph-backspace text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           </button>
         </div>
 
@@ -293,7 +310,7 @@
       <!-- CABECERA -->
       <div class="flex items-center gap-4 pb-5 border-b border-slate-800/80">
         <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-          <i class="ti ti-shield-check text-[24px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+          <i class="ph-light ph-shield-check text-[24px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
         </div>
         <div>
           <h2 class="text-lg font-bold text-white tracking-wide">Acuerdos y Compromisos de Uso Clínico</h2>
@@ -307,7 +324,7 @@
         <!-- 1. ARQUITECTURA -->
         <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/90 space-y-2 lg-tile">
           <div class="flex items-center gap-2.5 text-indigo-400 font-bold text-xs uppercase tracking-wider">
-            <i class="ti ti-database text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-database text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span>1. Arquitectura de Procesamiento y Privacidad de Datos</span>
           </div>
           <p class="text-slate-400">
@@ -324,7 +341,7 @@
         <!-- 2. RIESGOS Y RESPONSABILIDAD MÉDICA -->
         <div class="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-2">
           <div class="flex items-center gap-2.5 text-amber-400 font-bold text-xs uppercase tracking-wider">
-            <i class="ti ti-alert-triangle text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-warning text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span>2. Límites Asistenciales y Responsabilidad Profesional</span>
           </div>
           <p class="text-slate-300">
@@ -338,7 +355,7 @@
         <!-- 3. LICENCIAMIENTO POR HARDWARE -->
         <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/90 space-y-2 lg-tile">
           <div class="flex items-center gap-2.5 text-emerald-400 font-bold text-xs uppercase tracking-wider">
-            <i class="ti ti-lock text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-lock-simple text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span>3. Seguridad Criptográfica y Licencia Vinculada a Hardware</span>
           </div>
           <p class="text-slate-400">
@@ -358,7 +375,7 @@
         </label>
 
         <button id="btnAceptarTerminos" onclick="confirmarAceptacionTerminos()" disabled class="w-full py-3 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 on-accent">
-          <i class="ti ti-check text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+          <i class="ph ph-check text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           <span>Aceptar y Habilitar BIMO Pro</span>
         </button>
       </div>
@@ -395,7 +412,7 @@
         <button id="nav-dictado" onclick="switchTab('dictado')" title="Dictado Clínico" aria-label="Dictado Clínico" class="nav-btn nav-active group w-full h-10 flex items-center justify-start px-3 rounded-xl bg-indigo-500/10 text-white transition-all duration-300 cursor-pointer">
           <div class="flex items-center">
             <div class="nav-icon-box text-indigo-400 transition-all duration-300 group-hover:scale-110">
-              <i class="ti ti-microphone text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-microphone text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <span class="nav-label ml-3 text-[13px] font-semibold whitespace-nowrap">Dictado</span>
           </div>
@@ -405,7 +422,7 @@
         <button id="nav-agenda" onclick="switchTab('agenda')" title="Agenda & Citas" aria-label="Agenda & Citas" class="nav-btn group w-full h-10 flex items-center justify-start px-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-300 cursor-pointer">
           <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <i class="ti ti-calendar text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-calendar-blank text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <span class="nav-label ml-3 text-[13px] font-semibold whitespace-nowrap">Agenda</span>
           </div>
@@ -415,7 +432,7 @@
         <button id="nav-pacientes" onclick="switchTab('pacientes')" title="Fichas de Pacientes" aria-label="Fichas de Pacientes" class="nav-btn group w-full h-10 flex items-center justify-start px-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-300 cursor-pointer">
           <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <i class="ti ti-users text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-users text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <span class="nav-label ml-3 text-[13px] font-semibold whitespace-nowrap">Pacientes</span>
           </div>
@@ -425,7 +442,7 @@
         <button id="nav-mobile" onclick="switchTab('mobile')" title="Móvil & Código QR" aria-label="Móvil & Código QR" class="nav-btn group w-full h-10 flex items-center justify-start px-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-300 cursor-pointer">
           <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <i class="ti ti-device-mobile text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-device-mobile text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <span class="nav-label ml-3 text-[13px] font-semibold whitespace-nowrap">Celular</span>
           </div>
@@ -435,7 +452,7 @@
         <button id="nav-pdf" onclick="switchTab('pdf')" title="Visor de PDF" aria-label="Visor de PDF" class="nav-btn group w-full h-10 flex items-center justify-start px-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-300 cursor-pointer">
           <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <i class="ti ti-file-text text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-file-text text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <span class="nav-label ml-3 text-[13px] font-semibold whitespace-nowrap">Historias PDF</span>
           </div>
@@ -445,7 +462,7 @@
         <button id="nav-widget" onclick="switchTab('widget')" title="Widget de Escritorio" aria-label="Widget de Escritorio" class="nav-btn group w-full h-10 flex items-center justify-start px-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-300 cursor-pointer">
           <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110">
-              <i class="ti ti-app-window text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-app-window text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <span class="nav-label ml-3 text-[13px] font-semibold whitespace-nowrap">Widget</span>
           </div>
@@ -455,7 +472,7 @@
         <button id="nav-config" onclick="switchTab('config')" title="Configuración & Temas" aria-label="Configuración & Temas" class="nav-btn group w-full h-10 flex items-center justify-start px-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-300 cursor-pointer">
           <div class="flex items-center">
             <div class="nav-icon-box text-slate-400 transition-all duration-300 group-hover:scale-110 shrink-0">
-              <i class="ti ti-settings text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-gear-six text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <span class="nav-label ml-3 text-[13px] font-semibold whitespace-nowrap">Ajustes y temas</span>
           </div>
@@ -475,7 +492,7 @@
         <p id="userRole" class="text-[11px] text-slate-400 font-medium truncate">Odontología</p>
       </div>
       <button onclick="bloquearPantalla()" title="Bloquear / Cerrar Sesión" aria-label="Bloquear / Cerrar Sesión" class="w-9 h-9 shrink-0 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center">
-        <i class="ti ti-lock text-[18px] leading-none" aria-hidden="true"></i>
+        <i class="ph-light ph-lock-simple text-[18px] leading-none" aria-hidden="true"></i>
       </button>
     </div>
   </aside>
@@ -499,9 +516,9 @@
           <!-- BOTÓN MINI CALENDARIO DESPLEGABLE -->
           <div class="relative">
             <button id="btnToggleMiniCal" onclick="toggleMiniCalendar()" class="flex items-center gap-2 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-lg backdrop-blur-md lg-control">
-              <i class="ti ti-calendar text-[16px] leading-none inline-flex items-center justify-center text-indigo-400" aria-hidden="true"></i>
+              <i class="ph ph-calendar-blank text-[16px] leading-none inline-flex items-center justify-center text-indigo-400" aria-hidden="true"></i>
               <span>Mini Calendario</span>
-              <i id="calChevron" class="ti ti-chevron-down text-[14px] leading-none inline-flex items-center justify-center text-slate-400 transition-transform duration-200" aria-hidden="true"></i>
+              <i id="calChevron" class="ph ph-caret-down text-[14px] leading-none inline-flex items-center justify-center text-slate-400 transition-transform duration-200" aria-hidden="true"></i>
             </button>
 
             <!-- EL MINI CALENDARIO FLOTANTE DESPLEGABLE -->
@@ -510,10 +527,10 @@
                 <span id="miniCalTitle" class="text-xs font-bold text-white">Septiembre 2026</span>
                 <div class="flex items-center gap-1">
                   <button onclick="cambiarMesMiniCal(-1)" title="Mes anterior" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
-                    <i class="ti ti-chevron-left text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                    <i class="ph ph-caret-left text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                   </button>
                   <button onclick="cambiarMesMiniCal(1)" title="Mes siguiente" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
-                    <i class="ti ti-chevron-right text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                    <i class="ph ph-caret-right text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                   </button>
                 </div>
               </div>
@@ -527,7 +544,7 @@
                 <span id="miniCalCitasCount" class="text-slate-400">0 citas registradas</span>
                 <button onclick="switchTab('agenda')" class="text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer flex items-center gap-1">
                   <span>Ver Agenda</span>
-                  <i class="ti ti-arrow-right text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph ph-arrow-right text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
@@ -536,7 +553,7 @@
           <!-- Botón Interactivo Escucha Activa ON/OFF -->
           <button id="btnToggleEscuchaActiva" onclick="toggleEscuchaActivaClick()" class="flex items-center gap-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer shadow-sm">
             <span id="badgeEscuchaDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <i class="ti ti-microphone text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-microphone text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span id="lblEscuchaActiva">Escucha Activa: ON</span>
           </button>
 
@@ -574,7 +591,7 @@
                 
                 <!-- Micrófono Minimalista de Línea -->
                 <div id="btnMicIconContainer" class="w-16 h-16 rounded-full bg-white/15 flex items-center justify-center mb-2 backdrop-blur-sm group-hover:scale-105 transition-transform shadow-inner">
-                  <i id="btnMicIcon" class="ti ti-microphone text-[32px] leading-none inline-flex items-center justify-center text-white drop-shadow-sm" aria-hidden="true"></i>
+                  <i id="btnMicIcon" class="ph-light ph-microphone text-[32px] leading-none inline-flex items-center justify-center text-white drop-shadow-sm" aria-hidden="true"></i>
                 </div>
 
                 <span id="btnMainLabel" class="text-sm font-black uppercase tracking-widest text-white drop-shadow-md">Dictar</span>
@@ -590,7 +607,7 @@
           <!-- Acciones Limpias -->
           <div>
             <button onclick="abrirUltimoPDF()" class="w-full h-12 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-700/60 hover:border-indigo-500/40 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer lg-control">
-              <i class="ti ti-eye text-[16px] leading-none inline-flex items-center justify-center text-indigo-400" aria-hidden="true"></i>
+              <i class="ph ph-eye text-[16px] leading-none inline-flex items-center justify-center text-indigo-400" aria-hidden="true"></i>
               <span>Ver Último PDF en Visor</span>
             </button>
           </div>
@@ -611,7 +628,7 @@
                   <span>Ortodoncia: OFF</span>
                 </button>
                 <button onclick="abrirModalCorreccionActual()" class="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm on-accent-hover">
-                  <i class="ti ti-edit text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph ph-note-pencil text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                   <span>Corregir Expediente</span>
                 </button>
                 <span id="expBadgeSinc" class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 font-semibold">
@@ -628,7 +645,7 @@
                 <div class="group/edit cursor-pointer min-w-0 w-full" onclick="abrirModalCorreccionActual()" title="Haz clic para corregir o editar este expediente">
                   <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                     <span>Paciente en Consulta</span>
-                    <i class="ti ti-pencil text-[12px] leading-none inline-flex items-center justify-center text-slate-500 group-hover/edit:text-indigo-400 transition-colors" aria-hidden="true"></i>
+                    <i class="ph ph-pencil-simple text-[12px] leading-none inline-flex items-center justify-center text-slate-500 group-hover/edit:text-indigo-400 transition-colors" aria-hidden="true"></i>
                   </span>
                   <h3 id="cardPacNombre" class="text-2xl font-black text-white tracking-tight leading-tight group-hover/edit:text-indigo-300 transition-colors truncate">Dani Baraona</h3>
                 </div>
@@ -637,7 +654,7 @@
                     CI: No registrada • 25 años
                   </div>
                   <div id="cardPacTel" class="text-xs font-mono font-medium text-emerald-400 bg-emerald-950/30 border border-emerald-500/30 px-3 py-1.5 rounded-xl cursor-pointer hover:border-emerald-500 transition-colors flex items-center gap-1.5" onclick="abrirModalCorreccionActual()" title="Haz clic para editar teléfono">
-                    <i class="ti ti-phone text-[14px] leading-none inline-flex items-center justify-center text-emerald-400" aria-hidden="true"></i>
+                    <i class="ph ph-phone text-[14px] leading-none inline-flex items-center justify-center text-emerald-400" aria-hidden="true"></i>
                     <span id="cardPacTelText">Tel: No registrado</span>
                   </div>
                 </div>
@@ -686,7 +703,7 @@
 
           <div class="pt-6 border-t border-slate-800">
             <button id="btnPrintPdfBtn" onclick="generarHistoriaClinicaOficialPdf()" class="w-full py-4 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-xl shadow-indigo-600/30 hover:shadow-indigo-500/50 cursor-pointer flex items-center justify-center gap-2.5 border border-indigo-400/30 active:scale-[0.99] on-accent">
-              <i class="ti ti-file-text text-[16px] leading-none inline-flex items-center justify-center text-indigo-200" aria-hidden="true"></i>
+              <i class="ph ph-file-text text-[16px] leading-none inline-flex items-center justify-center text-indigo-200" aria-hidden="true"></i>
               <span>Generar y Ver Historia Clínica en Visor</span>
             </button>
           </div>
@@ -706,12 +723,12 @@
         </div>
         <div class="flex flex-wrap items-center gap-2.5">
           <button onclick="abrirModalRecordatoriosWhatsapp()" class="px-3.5 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2 shadow-sm" title="Recordatorios WhatsApp para pacientes de mañana">
-            <i class="ti ti-phone text-[16px] leading-none inline-flex items-center justify-center text-emerald-400" aria-hidden="true"></i>
+            <i class="ph ph-phone text-[16px] leading-none inline-flex items-center justify-center text-emerald-400" aria-hidden="true"></i>
             <span>WhatsApp Mañana</span>
             <span id="badgeWaPendientes" class="hidden px-1.5 py-0.5 bg-emerald-500 text-slate-950 font-mono text-[10px] font-black rounded-full">0</span>
           </button>
           <button onclick="abrirGoogleCalendar()" class="px-4 py-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors flex items-center gap-2 border border-slate-700/60 shadow-sm lg-control" title="Abrir Google Calendar">
-            <i class="ti ti-calendar-event text-[16px] leading-none inline-flex items-center justify-center text-indigo-400" aria-hidden="true"></i>
+            <i class="ph ph-calendar-check text-[16px] leading-none inline-flex items-center justify-center text-indigo-400" aria-hidden="true"></i>
             <span>Google Calendar</span>
           </button>
           <button onclick="abrirModalNuevaCita()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-indigo-600/30 transition-all on-accent">
@@ -731,10 +748,10 @@
             </div>
             <div class="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
               <button onclick="cambiarMesAgenda(-1)" title="Mes anterior" class="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer active:scale-90 transition-all flex items-center justify-center lg-control">
-                <i class="ti ti-chevron-left text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-caret-left text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
               <button onclick="cambiarMesAgenda(1)" title="Mes siguiente" class="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer active:scale-90 transition-all flex items-center justify-center lg-control">
-                <i class="ti ti-chevron-right text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-caret-right text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
             </div>
           </div>
@@ -755,10 +772,10 @@
               </h3>
               <div class="flex items-center gap-1.5">
                 <button onclick="deslizarRailCitas(-1)" title="Deslizar hacia arriba" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control">
-                  <i class="ti ti-chevron-up text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph ph-caret-up text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                 </button>
                 <button onclick="deslizarRailCitas(1)" title="Deslizar hacia abajo" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control">
-                  <i class="ti ti-chevron-down text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph ph-caret-down text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
@@ -797,10 +814,10 @@
         <div class="flex flex-wrap items-center gap-2.5">
           <div class="relative">
             <input id="inputBuscarPaciente" oninput="buscarPacientesEnVivo(this.value)" type="text" placeholder="Buscar nombre o cédula..." class="w-64 sm:w-72 pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 lg-control" />
-            <i class="ti ti-search text-[16px] leading-none inline-flex items-center justify-center text-slate-500 absolute left-3 top-2.5" aria-hidden="true"></i>
+            <i class="ph ph-magnifying-glass text-[16px] leading-none inline-flex items-center justify-center text-slate-500 absolute left-3 top-2.5" aria-hidden="true"></i>
           </div>
           <button onclick="exportarExcel()" class="px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white on-accent rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2" title="Exportar directorio e historias a Excel">
-            <i class="ti ti-file-download text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-file-arrow-down text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span>Exportar a Excel</span>
           </button>
           <button onclick="abrirModalNuevoPaciente()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-indigo-600/30 transition-all on-accent">
@@ -819,10 +836,10 @@
           </div>
           <div class="flex items-center gap-1.5">
             <button onclick="deslizarTablaPacientes(-1)" title="Deslizar hacia arriba" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control">
-              <i class="ti ti-chevron-up text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph ph-caret-up text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </button>
             <button onclick="deslizarTablaPacientes(1)" title="Deslizar hacia abajo" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control">
-              <i class="ti ti-chevron-down text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph ph-caret-down text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </button>
           </div>
         </div>
@@ -933,11 +950,11 @@
         </div>
         <div class="flex items-center gap-3">
           <button onclick="cargarPdfs()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 lg-control" title="Recargar lista">
-            <i class="ti ti-refresh text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-arrows-clockwise text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span>Actualizar</span>
           </button>
           <button onclick="abrirPdfActual()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 on-accent">
-            <i class="ti ti-external-link text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-arrow-square-out text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span>Abrir Último PDF</span>
           </button>
         </div>
@@ -953,10 +970,10 @@
           </div>
           <div class="flex items-center gap-1.5">
             <button onclick="deslizarRailPdfs(-1)" title="Anterior" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control">
-              <i class="ti ti-chevron-left text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph ph-caret-left text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </button>
             <button onclick="deslizarRailPdfs(1)" title="Siguiente" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control">
-              <i class="ti ti-chevron-right text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph ph-caret-right text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </button>
           </div>
         </div>
@@ -978,29 +995,29 @@
             <!-- Paginador -->
             <div class="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800">
               <button onclick="cambiarPaginaPdf(-1)" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95 lg-control" title="Página anterior (←)">
-                <i class="ti ti-chevron-left text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-caret-left text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
               <span id="previewPageIndicator" class="text-[11px] font-bold text-indigo-300 px-2 font-mono">1 / 1</span>
               <button onclick="cambiarPaginaPdf(1)" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95 lg-control" title="Página siguiente (→)">
-                <i class="ti ti-chevron-right text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-caret-right text-[12px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
             </div>
 
             <!-- Botón Ajuste de Visualización (Ancho / Pantalla) -->
             <button id="btnToggleAjustePdf" onclick="alternarAjustePdf()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 lg-control" title="Alternar entre ancho legible y pantalla completa">
-              <i class="ti ti-app-window text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph ph-app-window text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               <span id="btnToggleAjustePdfLabel">Ajustar Pantalla</span>
             </button>
 
             <!-- Botón Editar Consulta / PDF Directo -->
             <button onclick="editarPdfActual()" class="px-3.5 py-1.5 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 rounded-xl text-xs font-bold cursor-pointer transition-all shadow-sm flex items-center gap-1.5 on-accent-hover" title="Editar datos clínicos y corregir este expediente">
-              <i class="ti ti-edit text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph ph-note-pencil text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               <span>Editar Consulta</span>
             </button>
 
             <!-- Botón Abrir Externo -->
             <button onclick="abrirPdfActual()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5 on-accent">
-              <i class="ti ti-external-link text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph ph-arrow-square-out text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               <span>Abrir Externo</span>
             </button>
           </div>
@@ -1011,7 +1028,7 @@
           <img id="previewPdfImg" src="" alt="Vista previa PDF" class="w-full max-w-4xl h-auto object-contain rounded-xl shadow-2xl border border-slate-800 my-auto hidden transition-all" />
           <div id="previewPdfEmpty" class="flex flex-col items-center justify-center text-center p-12 my-auto">
             <div class="w-14 h-14 rounded-2xl bg-slate-800/60 text-slate-400 border border-slate-700/60 flex items-center justify-center mb-3 lg-tile">
-              <i class="ti ti-file-text text-[28px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+              <i class="ph-light ph-file-text text-[28px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             </div>
             <p class="text-xs font-bold text-slate-300">Ningún PDF seleccionado</p>
             <p class="text-[11px] text-slate-500 mt-1 max-w-xs">Haz clic en cualquier historia clínica del riel superior para previsualizar sus páginas de anamnesis y odontograma.</p>
@@ -1042,7 +1059,7 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-4">
                 <div id="widgetStatusIconBox" class="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-500/30">
-                  <i class="ti ti-device-desktop text-[24px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph-light ph-desktop text-[24px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                 </div>
                 <div>
                   <div class="flex items-center gap-2">
@@ -1163,10 +1180,10 @@
             
             <div id="themeCard-claro" onclick="setTheme('claro')" class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-slate-600 cursor-pointer flex items-center justify-between transition-all lg-tile">
               <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl border border-slate-700 overflow-hidden flex" style="background: linear-gradient(135deg, #ffffff 50%, #0a0a0a 50%)"></div>
+                <div class="w-9 h-9 rounded-xl border border-slate-700 overflow-hidden flex" style="background: linear-gradient(135deg, #a8c8ff, #d7c2ff 55%, #ffd2bf)"></div>
                 <div>
                   <div class="text-xs font-bold text-white">Claro (Recomendado)</div>
-                  <div class="text-[11px] text-slate-400">Blanco y negro, sobrio y limpio</div>
+                  <div class="text-[11px] text-slate-400">Vidrio claro sobre azul cielo y lavanda</div>
                 </div>
               </div>
               <span id="check-claro" class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 hidden">Activo</span>
@@ -1174,10 +1191,10 @@
 
             <div id="themeCard-oscuro" onclick="setTheme('oscuro')" class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-slate-600 cursor-pointer flex items-center justify-between transition-all lg-tile">
               <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl border border-slate-700 overflow-hidden flex" style="background: linear-gradient(135deg, #18181b 50%, #fafafa 50%)"></div>
+                <div class="w-9 h-9 rounded-xl border border-slate-700 overflow-hidden flex" style="background: linear-gradient(135deg, #0b1030, #3b2a8a 55%, #7a2a6a)"></div>
                 <div>
                   <div class="text-xs font-bold text-white">Oscuro</div>
-                  <div class="text-[11px] text-slate-400">Negro y grises para poca luz</div>
+                  <div class="text-[11px] text-slate-400">Vidrio oscuro sobre azul noche y violeta</div>
                 </div>
               </div>
               <span id="check-oscuro" class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 hidden">Activo</span>
@@ -1185,10 +1202,10 @@
 
             <div id="themeCard-rosa" onclick="setTheme('rosa')" class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-slate-600 cursor-pointer flex items-center justify-between transition-all lg-tile">
               <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl border border-slate-700 overflow-hidden flex" style="background: linear-gradient(135deg, #fff1f6 50%, #ec4899 50%)"></div>
+                <div class="w-9 h-9 rounded-xl border border-slate-700 overflow-hidden flex" style="background: linear-gradient(135deg, #ff9fcf, #d6c2ff 55%, #ffc0a6)"></div>
                 <div>
                   <div class="text-xs font-bold text-white">Rosa</div>
-                  <div class="text-[11px] text-slate-400">Tonos pastel suaves y cálidos</div>
+                  <div class="text-[11px] text-slate-400">Vidrio sobre rosa, lila y coral</div>
                 </div>
               </div>
               <span id="check-rosa" class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 hidden">Activo</span>
@@ -1231,7 +1248,7 @@
                 Guardar Configuración
               </button>
               <button type="button" onclick="abrirGoogleCalendarUi()" class="px-3.5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold cursor-pointer transition-all border border-slate-700 flex items-center gap-1.5 lg-control" title="Abrir Google Calendar en navegador">
-                <i class="ti ti-calendar text-[16px] leading-none inline-flex items-center justify-center text-amber-400" aria-hidden="true"></i>
+                <i class="ph ph-calendar-blank text-[16px] leading-none inline-flex items-center justify-center text-amber-400" aria-hidden="true"></i>
                 <span>Calendar</span>
               </button>
             </div>
@@ -1275,7 +1292,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-                <i class="ti ti-shield-check text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph-light ph-shield-check text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </div>
               <div>
                 <h3 class="text-sm font-bold text-white flex items-center gap-2">
@@ -1311,7 +1328,7 @@
           <div class="flex items-center justify-between pb-3 border-b border-slate-800">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-                <i class="ti ti-phone text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph-light ph-phone text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </div>
               <div>
                 <h3 class="text-sm font-bold text-white flex items-center gap-2">
@@ -1390,7 +1407,7 @@
           <div class="flex items-center justify-between pb-3 border-b border-slate-800">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30">
-                <i class="ti ti-cloud-upload text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph-light ph-cloud-arrow-up text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </div>
               <div>
                 <h3 class="text-sm font-bold text-white flex items-center gap-2">
@@ -1429,14 +1446,14 @@
                 Guardar Configuración Respaldo
               </button>
               <button type="button" id="btnRespaldarDriveAhora" onclick="ejecutarRespaldoDriveManualUi()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center justify-center gap-1.5 lg-control">
-                <i class="ti ti-upload text-[14px] leading-none inline-flex items-center justify-center text-sky-400" aria-hidden="true"></i>
+                <i class="ph ph-upload-simple text-[14px] leading-none inline-flex items-center justify-center text-sky-400" aria-hidden="true"></i>
                 <span>Respaldar Ahora en Drive</span>
               </button>
             </div>
           </div>
           
           <div id="driveBackupAvisoError" class="hidden mt-3 p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-            <i class="ti ti-alert-triangle text-[16px] leading-none inline-flex items-center justify-center text-rose-400 shrink-0" aria-hidden="true"></i>
+            <i class="ph ph-warning text-[16px] leading-none inline-flex items-center justify-center text-rose-400 shrink-0" aria-hidden="true"></i>
             <span id="driveBackupErrorMsg"></span>
           </div>
         </div>
@@ -1451,7 +1468,7 @@
     <div class="w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl modal-pop lg-panel">
       <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
         <h3 id="modalPacienteTitulo" class="text-base font-black text-white">Nuevo Paciente</h3>
-        <button onclick="cerrarModalPaciente()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
+        <button onclick="cerrarModalPaciente()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
       </div>
       
       <input type="hidden" id="pacienteId">
@@ -1470,11 +1487,11 @@
             <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Edad (Años)</label>
             <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl p-1 focus-within:border-indigo-500 transition-colors">
               <button type="button" onclick="cambiarEdad(-1)" title="Disminuir edad" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-90 flex items-center justify-center transition-all cursor-pointer lg-control">
-                <i class="ti ti-minus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-minus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
               <input id="pacienteEdad" type="number" min="0" max="120" placeholder="25" class="w-full text-center bg-transparent border-0 text-white font-bold text-xs font-mono focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
               <button type="button" onclick="cambiarEdad(1)" title="Aumentar edad" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-90 flex items-center justify-center transition-all cursor-pointer lg-control">
-                <i class="ti ti-plus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-plus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
             </div>
           </div>
@@ -1501,7 +1518,7 @@
 
       <div class="flex items-center justify-between pt-5 mt-4 border-t border-slate-800">
         <button type="button" id="btnEliminarPacienteModal" onclick="eliminarPacienteModalActual()" class="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-semibold cursor-pointer hidden transition-all flex items-center gap-1.5">
-          <i class="ti ti-trash text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+          <i class="ph ph-trash text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           <span>Eliminar Ficha</span>
         </button>
         <div class="flex items-center gap-3 ml-auto">
@@ -1517,7 +1534,7 @@
     <div class="w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl modal-pop lg-panel">
       <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
         <h3 class="text-base font-black text-white">Agendar Nueva Cita</h3>
-        <button onclick="cerrarModalCita()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
+        <button onclick="cerrarModalCita()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
       </div>
 
       <div class="space-y-3 text-xs">
@@ -1558,14 +1575,14 @@
       <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
-            <i class="ti ti-calendar text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph-light ph-calendar-blank text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           </div>
           <div>
             <h3 class="text-base font-black text-white">Reprogramar Cita Médica</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">Modifica la fecha de forma manual o con respecto a otra cita.</p>
           </div>
         </div>
-        <button onclick="cerrarModalReprogramarCita()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
+        <button onclick="cerrarModalReprogramarCita()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
       </div>
 
       <input type="hidden" id="reprogCitaId" value="" />
@@ -1661,14 +1678,14 @@
       <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-            <i class="ti ti-phone text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph-light ph-phone text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           </div>
           <div>
             <h3 class="text-base font-black text-white">Recordatorios de Citas por WhatsApp</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">Notifica a los pacientes de la jornada de mañana para prevenir ausentismo.</p>
           </div>
         </div>
-        <button onclick="cerrarModalRecordatoriosWhatsapp()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
+        <button onclick="cerrarModalRecordatoriosWhatsapp()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
       </div>
 
       <!-- Resumen Estadístico de Mañana -->
@@ -1679,7 +1696,7 @@
         </div>
         <div class="flex items-center gap-2">
           <button type="button" onclick="enviarRecordatoriosLoteWhatsapp(false)" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl text-xs font-bold cursor-pointer shadow-md shadow-emerald-600/30 flex items-center gap-2 on-accent">
-            <i class="ti ti-bolt text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph ph-lightning text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
             <span>Despachar Todos</span>
           </button>
         </div>
@@ -1713,10 +1730,10 @@
         </div>
         <div class="flex items-center gap-2">
           <button onclick="abrirCarpetaPacienteActual()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors flex items-center gap-2 border border-slate-700/50 lg-control" title="Abrir carpeta de archivos en Windows">
-            <i class="ti ti-folder text-[14px] leading-none inline-flex items-center justify-center text-amber-400" aria-hidden="true"></i>
+            <i class="ph ph-folder-simple text-[14px] leading-none inline-flex items-center justify-center text-amber-400" aria-hidden="true"></i>
             <span>Abrir Carpeta</span>
           </button>
-          <button onclick="cerrarModalHistoria()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
+          <button onclick="cerrarModalHistoria()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
         </div>
       </div>
 
@@ -1767,14 +1784,14 @@
       <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-3">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg border border-indigo-500/30">
-            <i class="ti ti-edit text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph-light ph-note-pencil text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           </div>
           <div>
             <h3 class="text-base font-black text-white">Corrección Rápida de Expediente</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">Modifica los datos y regenera el PDF oficial eliminando versiones anteriores.</p>
           </div>
         </div>
-        <button onclick="cerrarModalCorreccion()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
+        <button onclick="cerrarModalCorreccion()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer lg-control"><i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i></button>
       </div>
 
       <!-- Formulario de Edición con Scroll -->
@@ -1804,11 +1821,11 @@
             <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Edad (Años)</label>
             <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl p-1 focus-within:border-indigo-500 transition-colors">
               <button type="button" onclick="cambiarEdadEdicion(-1)" title="Disminuir edad" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-90 flex items-center justify-center transition-all cursor-pointer lg-control">
-                <i class="ti ti-minus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-minus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
               <input id="editConsultaEdad" type="number" min="0" max="120" placeholder="25" class="w-full text-center bg-transparent border-0 text-white font-bold text-xs font-mono focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
               <button type="button" onclick="cambiarEdadEdicion(1)" title="Aumentar edad" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-90 flex items-center justify-center transition-all cursor-pointer lg-control">
-                <i class="ti ti-plus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-plus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
             </div>
           </div>
@@ -1867,7 +1884,7 @@
           Cancelar
         </button>
         <button onclick="guardarCorreccionConsulta()" class="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 on-accent">
-          <i class="ti ti-device-floppy text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+          <i class="ph ph-floppy-disk text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           <span>Guardar y Regenerar PDF Definitivo</span>
         </button>
       </div>
@@ -1880,7 +1897,7 @@
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-2.5">
           <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-            <i class="ti ti-id text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph-light ph-identification-card text-[20px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           </div>
           <div>
             <h3 class="text-sm font-bold text-white tracking-wide">Cédula de Identidad Requerida</h3>
@@ -1888,7 +1905,7 @@
           </div>
         </div>
         <button onclick="cerrarModalCedulaObligatoria()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
-          <i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+          <i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
         </button>
       </div>
 
@@ -1919,7 +1936,7 @@
   <div id="toastNotification" class="fixed bottom-6 right-6 z-50 hidden transition-all duration-300 transform translate-y-4">
     <div id="toastContent" class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl text-xs font-semibold text-white backdrop-blur-xl lg-tile">
       <span id="toastIcon" class="flex items-center justify-center shrink-0">
-        <i class="ti ti-check text-[16px] leading-none inline-flex items-center justify-center text-emerald-400" aria-hidden="true"></i>
+        <i class="ph ph-check text-[16px] leading-none inline-flex items-center justify-center text-emerald-400" aria-hidden="true"></i>
       </span>
       <span id="toastMessage">Operación exitosa</span>
     </div>
@@ -1996,17 +2013,17 @@
       if (msg) msg.innerText = mensaje;
       let toastDuration = 3000;
       if (tipo === 'success') {
-        if (icon) icon.innerHTML = '<i class="ti ti-check text-[16px] leading-none inline-flex items-center justify-center text-emerald-400 shrink-0" aria-hidden="true"></i>';
+        if (icon) icon.innerHTML = '<i class="ph ph-check text-[16px] leading-none inline-flex items-center justify-center text-emerald-400 shrink-0" aria-hidden="true"></i>';
         if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/40 shadow-2xl text-xs font-semibold text-emerald-300 backdrop-blur-xl';
       } else if (tipo === 'warning') {
-        if (icon) icon.innerHTML = '<i class="ti ti-alert-triangle text-[16px] leading-none inline-flex items-center justify-center text-amber-400 shrink-0" aria-hidden="true"></i>';
+        if (icon) icon.innerHTML = '<i class="ph ph-warning text-[16px] leading-none inline-flex items-center justify-center text-amber-400 shrink-0" aria-hidden="true"></i>';
         if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-amber-500/50 shadow-2xl text-xs font-semibold text-amber-300 backdrop-blur-xl';
         toastDuration = 4500;
       } else if (tipo === 'error') {
-        if (icon) icon.innerHTML = '<i class="ti ti-x text-[16px] leading-none inline-flex items-center justify-center text-rose-400 shrink-0" aria-hidden="true"></i>';
+        if (icon) icon.innerHTML = '<i class="ph ph-x text-[16px] leading-none inline-flex items-center justify-center text-rose-400 shrink-0" aria-hidden="true"></i>';
         if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-rose-500/40 shadow-2xl text-xs font-semibold text-rose-300 backdrop-blur-xl';
       } else {
-        if (icon) icon.innerHTML = '<i class="ti ti-info-circle text-[16px] leading-none inline-flex items-center justify-center text-indigo-400 shrink-0" aria-hidden="true"></i>';
+        if (icon) icon.innerHTML = '<i class="ph ph-info text-[16px] leading-none inline-flex items-center justify-center text-indigo-400 shrink-0" aria-hidden="true"></i>';
         if (content) content.className = 'flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-900 border border-indigo-500/40 shadow-2xl text-xs font-semibold text-indigo-300 backdrop-blur-xl';
       }
 
@@ -2206,6 +2223,18 @@
       if (reg) reg.classList.remove('hidden');
       const n = document.getElementById('regNombre');
       if (n) setTimeout(() => n.focus(), 50);
+    }
+
+    // Tema guardado en la configuración: se aplica ya en la pantalla de bloqueo (antes del PIN)
+    async function aplicarTemaGuardado() {
+      try {
+        const api = window.pywebview && window.pywebview.api;
+        if (!api || typeof api.obtener_tema_guardado !== 'function') return;
+        const resp = await api.obtener_tema_guardado();
+        if (resp && resp.tema && resp.tema !== currentThemeKey) setTheme(resp.tema, false);
+      } catch (e) {
+        console.warn('aplicarTemaGuardado error:', e);
+      }
     }
 
     async function verificarCuentaInicial() {
@@ -2467,7 +2496,7 @@
       rosa: 'p-4 rounded-2xl bg-indigo-500/10 border-2 border-indigo-500 cursor-pointer flex items-center justify-between transition-all'
     };
 
-    function setTheme(key) {
+    function setTheme(key, guardar = true) {
       if (THEME_ALIAS[key]) key = THEME_ALIAS[key];
       if (!THEMES[key]) key = 'claro';
       currentThemeKey = key;
@@ -2552,7 +2581,8 @@
         }
       });
 
-      // Auto-guardar tema seleccionado en el backend de BIMO
+      // Auto-guardar tema seleccionado en el backend de BIMO (solo cuando lo elige el doctor)
+      if (!guardar) return;
       try {
         const api = (window.pywebview && window.pywebview.api) || (window.pView && window.pView.app);
         if (api && (typeof api.guardar_configuracion === 'function' || typeof api.guardarConfiguracion === 'function')) {
@@ -2665,11 +2695,11 @@
 
     // SVGs para iconos dinámicos minimalistas de línea
     const ICON_MIC_SVG = `
-      <i id="btnMicIcon" class="ti ti-microphone text-[32px] leading-none inline-flex items-center justify-center text-white drop-shadow-sm" aria-hidden="true"></i>
+      <i id="btnMicIcon" class="ph-light ph-microphone text-[32px] leading-none inline-flex items-center justify-center text-white drop-shadow-sm" aria-hidden="true"></i>
     `;
 
     const ICON_STOP_SVG = `
-      <i id="btnMicIcon" class="ti ti-player-stop text-[32px] leading-none inline-flex items-center justify-center text-white drop-shadow-sm" aria-hidden="true"></i>
+      <i id="btnMicIcon" class="ph-light ph-stop text-[32px] leading-none inline-flex items-center justify-center text-white drop-shadow-sm" aria-hidden="true"></i>
     `;
 
     const ICON_SPINNER_HTML = `
@@ -3168,7 +3198,7 @@
               <td class="py-4 ${saldoColor}">${esc(p.saldo || '$0.00')}</td>
               <td class="py-4 text-right space-x-2" onclick="event.stopPropagation()">
                 <button onclick="editarPaciente(${id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors on-accent-hover">
-                  <i class="ti ti-edit text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph ph-note-pencil text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                   <span>Editar</span>
                 </button>
                 <button onclick="abrirHistoriaClinica(${id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer transition-colors lg-control">Ver Historia</button>
@@ -3324,7 +3354,7 @@
           cont.innerHTML = `
             <div class="text-center py-12 bg-slate-950/40 rounded-2xl border border-slate-800/80 lg-tile">
               <div class="w-12 h-12 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-2">
-                <i class="ti ti-clipboard-text text-[24px] leading-none inline-flex items-center justify-center text-slate-400" aria-hidden="true"></i>
+                <i class="ph-light ph-clipboard-text text-[24px] leading-none inline-flex items-center justify-center text-slate-400" aria-hidden="true"></i>
               </div>
               <p class="text-xs font-bold text-slate-300">Sin consultas registradas aún</p>
               <p class="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">Este paciente no tiene historias previas. Utiliza el dictado por voz para registrar la primera atención odontológica.</p>
@@ -3351,15 +3381,15 @@
                   <div class="flex items-center gap-2">
                     ${rutaPdf ? `
                       <button data-ruta="${esc(rutaPdf)}" onclick="verPdfDesdeHistoria(this.dataset.ruta)" class="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 on-accent-hover">
-                        <i class="ti ti-file-text text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                        <i class="ph ph-file-text text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                         <span>Ver en Visor PDF</span>
                       </button>
                       <button data-ruta="${esc(rutaPdf)}" onclick="abrirPdfExternoDesdeHistoria(this.dataset.ruta)" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs cursor-pointer transition-colors flex items-center justify-center lg-control" title="Abrir en Windows">
-                        <i class="ti ti-external-link text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                        <i class="ph ph-arrow-square-out text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                       </button>
                     ` : `
                       <button onclick="generarPdfDesdeHistorial(${cId}, ${pId})" class="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 shadow-sm on-accent-hover" title="Generar Formulario 033 oficial en PDF">
-                        <i class="ti ti-plus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                        <i class="ph ph-plus text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                         <span>Generar PDF Formulario 033</span>
                       </button>
                     `}
@@ -3753,13 +3783,13 @@
             </div>
             <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
               <button onclick="enviarRecordatorioWhatsappCita(${id})" title="Recordatorio WhatsApp" class="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-400 cursor-pointer">
-                <i class="ti ti-brand-whatsapp text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-whatsapp-logo text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
               <button onclick="abrirModalReprogramarCita(${id})" title="Reprogramar" class="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 cursor-pointer">
-                <i class="ti ti-clock text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-clock text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
               <button onclick="cancelarCitaId(${id})" title="Cancelar" class="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 cursor-pointer">
-                <i class="ti ti-x text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-x text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
             </div>
           </div>`;
@@ -4125,7 +4155,7 @@
         if (citas.length === 0) {
           cont.innerHTML = `
             <div class="text-center py-10 text-slate-500">
-              <i class="ti ti-calendar text-[40px] leading-none inline-flex items-center justify-center mx-auto text-slate-600 mb-2" aria-hidden="true"></i>
+              <i class="ph-light ph-calendar-blank text-[40px] leading-none inline-flex items-center justify-center mx-auto text-slate-600 mb-2" aria-hidden="true"></i>
               <div class="text-xs font-semibold text-slate-400">No hay citas agendadas para el día de mañana.</div>
               <div class="text-[11px] text-slate-500 mt-1">La agenda matutina se encuentra libre o ya fueron gestionadas.</div>
             </div>
@@ -4160,11 +4190,11 @@
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <button onclick="enviarRecordatorioWhatsappCita(${id}, false)" title="Enviar recordatorio (Automático según configuración)" class="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5">
-                  <i class="ti ti-brand-whatsapp text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph ph-whatsapp-logo text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                   <span>${yaEnviado ? 'Reenviar' : 'Enviar'}</span>
                 </button>
                 <button onclick="enviarRecordatorioWhatsappCita(${id}, true)" title="Abrir en WhatsApp Web / Desktop directamente" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl cursor-pointer transition-colors lg-control">
-                  <i class="ti ti-external-link text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                  <i class="ph ph-arrow-square-out text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
@@ -4860,7 +4890,7 @@
             </div>
             <div class="flex items-center gap-1 shrink-0 ml-2">
               <button onclick="event.stopPropagation(); abrirRutaPdf('${encodeURIComponent(p.ruta)}')" class="p-1.5 bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg text-xs cursor-pointer transition-colors on-accent-hover lg-control" title="Abrir Documento">
-                <i class="ti ti-external-link text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+                <i class="ph ph-arrow-square-out text-[14px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
               </button>
             </div>
           </div>
@@ -5382,10 +5412,8 @@
               }
               if (conf.pin_rapido) document.getElementById('confPin').value = conf.pin_rapido;
               if (conf.tema_activo && (THEMES[conf.tema_activo] || THEME_ALIAS[conf.tema_activo])) {
-                const savedTheme = localStorage.getItem('bimo_theme');
-                if (!savedTheme || savedTheme === conf.tema_activo) {
-                  setTheme(conf.tema_activo);
-                }
+                // La configuración guardada manda: la ventana de BIMO no conserva su memoria entre inicios
+                if (conf.tema_activo !== currentThemeKey) setTheme(conf.tema_activo, false);
               }
               if (conf.posicion_widget) {
                 actualizarUiPosicionWidget(conf.posicion_widget);
@@ -5825,8 +5853,8 @@
     function actualizarIconoMaximizar(isMax) {
       const icon = document.getElementById('iconMaximizar');
       if (!icon) return;
-      icon.classList.toggle('ti-copy', isMax);
-      icon.classList.toggle('ti-square', !isMax);
+      icon.classList.toggle('ph-copy', isMax);
+      icon.classList.toggle('ph-square', !isMax);
     }
 
     // Sincronización reactiva inmediata ante Aero Snap o redimensionado nativo
@@ -5852,6 +5880,7 @@
       sincronizarBridgeUniversal();
       sincronizarEstadoVentanaInicial();
       console.log('[BIMO DESKTOP] pywebviewready sincronizado exitosamente.');
+      aplicarTemaGuardado();
       verificarCuentaInicial();
       const login = document.getElementById('loginScreen');
       if (!login || login.classList.contains('hidden')) {
@@ -5894,7 +5923,7 @@
       login.innerHTML = `
         <div class="relative w-full max-w-md p-8 bg-slate-950/95 border border-rose-900/60 rounded-[28px] shadow-[0_25px_70px_rgba(0,0,0,0.95)] backdrop-blur-2xl flex flex-col items-center text-center modal-pop lg-panel">
           <div class="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mb-4 shadow-inner">
-            <i class="ti ti-lock text-[32px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
+            <i class="ph-light ph-lock-simple text-[32px] leading-none inline-flex items-center justify-center" aria-hidden="true"></i>
           </div>
           <h2 class="text-xl font-bold text-white tracking-wide uppercase">Acceso Denegado</h2>
           <p class="text-[11px] font-semibold text-rose-400 tracking-wider uppercase mt-1">Equipo No Autorizado (HWID Lock)</p>
@@ -5917,11 +5946,8 @@
       habilitarScrollHorizontalConRueda('listaPdfsContenedor');
       try {
         const savedTheme = localStorage.getItem('bimo_theme');
-        if (savedTheme && (THEMES[savedTheme] || THEME_ALIAS[savedTheme])) {
-          setTheme(savedTheme);
-        } else {
-          setTheme('claro');
-        }
+        const temaInicial = document.documentElement.getAttribute('data-theme') || savedTheme;
+        setTheme((THEMES[temaInicial] || THEME_ALIAS[temaInicial]) ? temaInicial : 'claro', false);
       } catch (e) {}
 
       // Verificar licencia por hardware y sesión

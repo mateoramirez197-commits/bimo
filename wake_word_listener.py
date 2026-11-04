@@ -513,6 +513,17 @@ def obtener_candidatos_microfono_predeterminado(samplerate_preferido=16000, refr
     return combinaciones
 
 
+# Duración máxima de un segmento mientras se espera "Bimo" (fuera de ventana activa y dictado).
+SEGMENTO_MAX_REPOSO_SEG = 8.0
+# Si un segmento cortado trae "Bimo" + orden, se espera la continuación hasta este tiempo antes de ejecutarla sola.
+ESPERA_ORDEN_PENDIENTE_SEG = 4.0
+
+
+class SegmentoPorTope(np.ndarray):
+    """Audio cortado por duración máxima (no por silencio): la frase pudo quedar a medias."""
+    pass
+
+
 class BackgroundWakeListener:
     """
     Escucha activa continua ultra-reactiva conectada automáticamente al micrófono predeterminado:
@@ -555,6 +566,8 @@ class BackgroundWakeListener:
         self._nivel_actual = 0.0             # Nivel 0-100 para el medidor de Configuración
         self._num_dispositivos_win = None    # Para detectar micrófonos conectados/desconectados en caliente
         self._ultimo_chequeo_hotplug = 0.0
+        self._orden_pendiente = ""           # Inicio de orden tras "Bimo" en un segmento cortado por tope
+        self._orden_pendiente_desde = 0.0
         try:
             from audio_feedback import _asegurar_wav
             _asegurar_wav("bimo_ding.wav")
@@ -599,6 +612,25 @@ class BackgroundWakeListener:
 
     def esta_en_ventana_activa(self) -> bool:
         return time.time() < self.tiempo_ventana_activa
+
+    def _tomar_orden_pendiente(self) -> str:
+        with self._lock:
+            pendiente, self._orden_pendiente = self._orden_pendiente, ""
+            return pendiente
+
+    def _despachar_orden_pendiente_vencida(self):
+        """Si la continuación de una orden cortada no llegó a tiempo, ejecutar lo que ya se tenía."""
+        if not self._orden_pendiente:
+            return
+        esperando_mas = self.hablando or self.en_proceso or not self._cola_audio.empty()
+        if esperando_mas or (time.time() - self._orden_pendiente_desde) < ESPERA_ORDEN_PENDIENTE_SEG:
+            return
+        pendiente = self._tomar_orden_pendiente()
+        if pendiente:
+            self.tiempo_ventana_activa = 0.0
+            print(f"[VOICE LISTENER] Ejecutando orden sin continuación: \"{pendiente}\"")
+            if self.callback_comando:
+                self.callback_comando(pendiente)
 
     def iniciar(self):
         with self._lock:
@@ -659,6 +691,8 @@ class BackgroundWakeListener:
                             channels=1,
                             dtype='int16',
                             blocksize=blocksize,
+                            # Búfer amplio: evita "input overflow" (audio perdido) cuando Whisper ocupa la CPU
+                            latency='high',
                             callback=self._audio_callback,
                             finished_callback=self._on_stream_finished
                         )
@@ -684,6 +718,7 @@ class BackgroundWakeListener:
 
     def detener(self):
         with self._lock:
+            self._orden_pendiente = ""
             self.activo = False
             self.pausado = True
             self._callback_tap_manual = None
@@ -710,6 +745,7 @@ class BackgroundWakeListener:
     def pausar(self):
         """Pausa temporalmente el procesamiento de voz activa manteniendo el stream listo."""
         with self._lock:
+            self._orden_pendiente = ""
             self.pausado = True
             self.pre_roll.clear()
             self.acumulador_voz.clear()
@@ -876,20 +912,33 @@ class BackgroundWakeListener:
                     else:
                         self.silencio_frames = max(0, self.silencio_frames - 1)
 
-                    # Corte de seguridad: si no está en ventana activa y no hay tap manual, límite 25s; si no, 120s
-                    limite_seg = 120.0 if (self.esta_en_ventana_activa() or self._callback_tap_manual is not None) else 25.0
+                    # Corte de seguridad. En reposo (esperando "Bimo") los segmentos son cortos: con ruido de fondo
+                    # parecido a voz (TV, video, conversación) el silencio nunca llega y antes se acumulaban 25 s,
+                    # con lo que "Bimo" se analizaba tarde o enterrado en ruido. En ventana activa o dictado: 120 s.
+                    en_reposo = not (self.esta_en_ventana_activa() or self._callback_tap_manual is not None)
+                    limite_seg = SEGMENTO_MAX_REPOSO_SEG if en_reposo else 120.0
                     if total_samples >= int(self.samplerate * limite_seg):
                         buf = list(self.acumulador_voz)
+                        resto = []
+                        if en_reposo and len(buf) > 4:
+                            # Cortar en el bloque más silencioso del último ~1.5 s (pausa entre palabras)
+                            # y conservar lo que sigue para el próximo segmento: "Bimo" no queda partido.
+                            ventana = min(len(buf) - 2, max(2, int(1.5 * self.samplerate / max(1, len(datos)))))
+                            vols = [float(np.abs(b.astype(np.float32)).mean()) for b in buf[-ventana:]]
+                            corte = len(buf) - ventana + int(np.argmin(vols)) + 1
+                            buf, resto = buf[:corte], buf[corte:]
                         if buf:
                             audio_np = np.concatenate(buf)
+                            if en_reposo:
+                                audio_np = audio_np.view(SegmentoPorTope)
                             dur_seg = len(audio_np) / self.samplerate
-                            print(f"[VAD] segmento {dur_seg:.1f}s piso={self.ambient_floor:.1f} umbral={umbral_silencio:.1f}")
+                            print(f"[VAD] segmento {dur_seg:.1f}s (tope) piso={self.ambient_floor:.1f} umbral={umbral_silencio:.1f}")
                             self._despachar_analisis(audio_np)
-                        self.acumulador_voz = []
-                        self.hablando = False
+                        self.acumulador_voz = list(resto)
+                        self.hablando = bool(resto)
                         self.silencio_frames = 0
-                        self._frames_voz_reales = 0
-                        self._peak_voz = 0.0
+                        self._frames_voz_reales = len(resto)
+                        self._peak_voz = max((float(np.abs(b.astype(np.float32)).mean()) for b in resto), default=0.0)
         except Exception:
             ahora_err = time.time()
             if ahora_err - getattr(self, '_ultimo_error_callback', 0.0) >= 10.0:
@@ -940,6 +989,8 @@ class BackgroundWakeListener:
 
     def _analizar_audio(self, audio_np):
         try:
+            por_tope = isinstance(audio_np, SegmentoPorTope)
+            audio_np = np.asarray(audio_np)
             # 1. Filtro de energía acústica y duración en memoria RAM (hasta 120s)
             duracion_seg = len(audio_np) / self.samplerate
             self._duracion_actual_analisis = duracion_seg
@@ -1025,6 +1076,10 @@ class BackgroundWakeListener:
                     return
                 self.tiempo_ventana_activa = 0.0
                 texto_cmd = extraer_ultima_orden(texto) or texto
+                pendiente = self._tomar_orden_pendiente()
+                if pendiente:
+                    # Continuación de una orden que quedó cortada en el segmento anterior
+                    texto_cmd = f"{pendiente} {texto_cmd}".strip()
                 print(f"[VOICE LISTENER] Comando recibido dentro de ventana activa: \"{texto_cmd}\"")
                 if self.callback_comando:
                     self.callback_comando(texto_cmd)
@@ -1043,9 +1098,17 @@ class BackgroundWakeListener:
             if idx_bimo == -1:
                 return
 
-            # Exigir que 'Bimo' esté al inicio de la frase de invocación (ej. "Bimo...", "Hola Bimo...", "Oye Bimo...")
+            # Exigir que 'Bimo' esté al inicio de la frase de invocación (ej. "Bimo...", "Hola Bimo...", "Oye Bimo...").
+            # En un segmento cortado por tope (ruido de fondo continuo) la frase del doctor puede venir después
+            # de palabras ajenas (TV, video): se acepta en cualquier posición y se descarta lo anterior.
             es_invocacion = False
-            if idx_bimo <= 3:
+            if por_tope:
+                es_invocacion = True
+                m_bimo = _PATRON_VARIANTES_FUERTES.search(texto)
+                if m_bimo and m_bimo.start() > 0:
+                    texto = texto[m_bimo.start():]
+                palabras = palabras[idx_bimo:]
+            elif idx_bimo <= 3:
                 es_invocacion = True
             elif idx_bimo <= 5 and any(w in palabras[:idx_bimo] for w in ['hola', 'ola', 'oye', 'hey', 'ok', 'favor', 'asistente', 'por', 'buenas', 'buenos', 'disculpa']):
                 es_invocacion = True
@@ -1074,6 +1137,15 @@ class BackgroundWakeListener:
                 return
 
             texto_cmd = extraer_ultima_orden(texto) or texto
+            if por_tope:
+                # La orden pudo quedar a medias: esperar la continuación (siguiente segmento) y unirlas
+                with self._lock:
+                    self._orden_pendiente = texto_cmd
+                    self._orden_pendiente_desde = time.time()
+                print(f"[VOICE LISTENER] Orden posiblemente incompleta, esperando continuación: \"{texto_cmd}\"")
+                if self.callback_comando:
+                    self.callback_comando("__BIMO_WAKE_LISTENING__")
+                return
             if self.callback_comando:
                 self.callback_comando(texto_cmd)
 
@@ -1085,7 +1157,14 @@ class BackgroundWakeListener:
     def _watchdog_loop(self):
         """Monitorea la salud del audio para evitar que el sistema se vuelva sordo o pierda el micrófono predeterminado."""
         while self.activo:
-            time.sleep(2.0)
+            for _ in range(4):
+                time.sleep(0.5)
+                if not self.activo:
+                    break
+                try:
+                    self._despachar_orden_pendiente_vencida()
+                except Exception as e_p:
+                    print(f"[VOICE LISTENER WATCHDOG] Error con orden pendiente: {e_p}")
             if not self.activo:
                 break
 

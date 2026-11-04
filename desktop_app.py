@@ -550,6 +550,16 @@ class BimoBridge:
     # ==========================================
     # AUTENTICACIÓN & SESIÓN
     # ==========================================
+    def obtener_tema_guardado(self):
+        """Tema elegido (claro/oscuro/rosa) para pintarlo ya en la pantalla de bloqueo, antes del PIN."""
+        try:
+            from config import obtener_tema_guardado, TEMAS_INTERFAZ
+            tema = obtener_tema_guardado()
+            return {"status": "ok", "tema": tema if tema in TEMAS_INTERFAZ else "claro"}
+        except Exception as e:
+            print(f"[BIMO DESKTOP ERROR] obtener_tema_guardado: {e}")
+            return {"status": "error", "tema": "claro"}
+
     def estado_cuentas(self):
         """Indica si ya existe una cuenta de médico (si no, la interfaz pide crearla)."""
         try:
@@ -3748,6 +3758,14 @@ def iniciar_desktop():
         sys.exit(1)
 
     url_target = f'file:///{ruta_html.replace(os.sep, "/")}'
+    # Fondo de la ventana con el color del tema guardado: evita el destello de otro tema mientras carga.
+    # (No se pasa el tema en la URL: WebView2 trata "?..." de un file:// como parte del nombre y no abre.)
+    fondo_ventana = '#e8edf7'
+    try:
+        from config import obtener_tema_guardado
+        fondo_ventana = {"oscuro": "#06070c", "rosa": "#fbe9f2"}.get(obtener_tema_guardado(), fondo_ventana)
+    except Exception as e_tema:
+        print(f"[BIMO DESKTOP WARN] No se pudo leer el tema guardado: {e_tema}")
     window = webview.create_window(
         title='BIMO - Asistente Clinico Inteligente',
         url=url_target,
@@ -3755,7 +3773,7 @@ def iniciar_desktop():
         width=1340,
         height=880,
         min_size=(1080, 700),
-        background_color='#090614',
+        background_color=fondo_ventana,
         frameless=True,
         shadow=True,
         easy_drag=False
@@ -3812,7 +3830,7 @@ def iniciar_desktop():
                     import System.Drawing as Drawing
 
                     form = window.native
-                    form.BackColor = Drawing.ColorTranslator.FromHtml('#090614')
+                    form.BackColor = Drawing.ColorTranslator.FromHtml(fondo_ventana)
 
                     # Asignar icono oficial si está disponible
                     base_dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
